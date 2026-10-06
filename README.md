@@ -19,6 +19,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 ## What I can do
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
+- Record simulated splits and cash dividends in the same ordered history as trades.
 - Create practice portfolios, record manual simulated buys/sells and fees, and inspect cash, holdings, and realized P&L.
 - Search 50 companies by name or ticker and filter by sector.
 - Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
@@ -74,6 +75,7 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | `GET /api/portfolios` | Shared practice portfolios |
 | `POST /api/portfolios` | Create `{name, mode, initialCash}` |
 | `GET /api/portfolios/{id}` | Cash, holdings, and recorded fills |
+| `POST /api/portfolios/{id}/actions` | Record a simulated split or dividend with a request UUID |
 | `POST /api/portfolios/{id}/trades` | Record `{requestId, ticker, side, quantity, price, fee}` |
 | `GET /api/companies` | Company catalog |
 | `GET /api/universe` | Snapshot date and selection metadata |
@@ -151,7 +153,7 @@ GitHub Actions runs backend/package checks and frontend/browser checks on pushes
 1. Verify live imports and improve accounting-tag coverage.
 2. Add accounts and move notes into private research workspaces.
 3. Improve peer selection and expand sector-specific models.
-4. Add corporate-action handling, portfolio valuation, and trade corrections.
+4. Add verified price adjustments, portfolio valuation, and trade corrections.
 5. Add benchmarks and portfolio risk analysis.
 
 ## How I compare companies
@@ -168,7 +170,7 @@ I evaluate 25 combinations with the same DCF calculator. I vary WACC in one-perc
 
 I use Alpha Vantage’s `TIME_SERIES_DAILY` compact response, which provides up to 100 recent daily observations. I set `ALPHA_VANTAGE_API_KEY` on the backend, keep it out of responses and stored source URLs, and cache successful imports in the database for 24 hours. I space requests 13 seconds apart within one app instance; provider limits and plan restrictions still apply. I show upstream errors without replacing real prices with example numbers. I have not verified coverage for all 50 tickers.
 
-I validate the ticker, dates, OHLC ranges, positive prices, and nonnegative integer volumes. These are raw prices: I do not adjust for splits or dividends, calculate total returns, or claim real-time quotes. I need corporate-action handling before using this series for backtesting or portfolio performance.
+I validate the ticker, dates, OHLC ranges, positive prices, and nonnegative integer volumes. These are raw prices: I do not adjust for splits or dividends, calculate total returns, or claim real-time quotes. I need provider-verified corporate-action adjustments before using this series for backtesting or portfolio performance.
 
 Provider reference: https://www.alphavantage.co/documentation/#daily
 
@@ -178,4 +180,12 @@ I start with a fixed USD cash deposit, record manual simulated fills, and calcul
 
 I use decimal arithmetic, up to six decimals for shares, four for fill prices, and two for fees. I include buy fees in weighted-average cost and deduct sell fees from realized P&L. I round prorated cost to ten decimals and remove the entire remaining basis when a position closes. This is a practice accounting convention, not tax-lot reporting. I reject negative inputs, insufficient cash, overselling, and sell fees above proceeds.
 
-I lock each portfolio row while recording a fill and require a request UUID. Retrying the same fill with the same UUID does not create another trade; reusing it with changed inputs fails. I keep the recorded fills append-only. Corrections, external deposits, dividends, splits, mark-to-market values, and portfolio return calculations are still to come. Everyone who can access this shared app can see portfolios and record trades.
+I lock each portfolio row while recording a fill and require a request UUID. Retrying the same fill with the same UUID does not create another trade; reusing it with changed inputs fails. I keep the recorded fills append-only. Corrections, external deposits, provider-verified corporate actions, mark-to-market values, and portfolio return calculations are still to come. Everyone who can access this shared app can see portfolios and record trades.
+
+## How I record simulated splits and dividends
+
+I replay trades and manual company events in one database sequence, including trades saved before this feature. I record new events at the current time and apply them to the position held then. I do not backdate entitlements or treat these inputs as verified market events.
+
+For a split, I enter integer new-share and old-share terms, such as 2:1 or 1:10. I change the share count while preserving total cost basis, then recalculate average cost. I reject results requiring more than six decimals rather than invent cash in lieu. For a dividend, I enter a USD amount per share, credit current shares times that amount to cash, and show dividend income separately from realized trading P&L. I do not model withholding, reinvestment, return of capital, or ex-date eligibility.
+
+I use the same row lock and request UUID checks for trades and actions. I reject a UUID reused across different event types or terms. These practice events do not adjust the Alpha Vantage price series, so I still need verified adjustments before reporting portfolio returns.

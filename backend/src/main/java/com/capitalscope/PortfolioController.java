@@ -22,6 +22,10 @@ public class PortfolioController {
     public PaperPortfolio.Summary get(@PathVariable String id) { return service.summary(id); }
     @PostMapping("/{id}/trades")
     public PaperPortfolio.Summary trade(@PathVariable String id, @RequestBody PortfolioService.Fill fill) { return service.trade(id, fill); }
+    @PostMapping("/{id}/actions")
+    public PaperPortfolio.Summary action(@PathVariable String id, @RequestBody PortfolioService.Action request) {
+        return service.action(id, request);
+    }
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<Map<String, String>> missing(NoSuchElementException e) { return ResponseEntity.status(404).body(Map.of("error", e.getMessage())); }
     @ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class})

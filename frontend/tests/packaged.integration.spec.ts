@@ -112,3 +112,38 @@ test('I can practice buys and partial sales without spending real money', async 
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('I can record a simulated split and dividend in order with my trades', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  const create = page.locator('.portfolio-create');
+  if (!await create.evaluate(element => (element as HTMLDetailsElement).open)) await create.locator('summary').click();
+  await page.getByRole('textbox', { name: 'Portfolio name', exact: true }).fill('My company event portfolio');
+  await page.getByRole('spinbutton', { name: 'Starting cash (USD)' }).fill('1000');
+  await page.getByRole('button', { name: 'Create portfolio', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$1,000.00');
+  await page.getByRole('spinbutton', { name: 'Shares to trade' }).fill('10');
+  await page.getByRole('spinbutton', { name: 'Manual fill price (USD)' }).fill('20');
+  await page.getByRole('button', { name: 'Record simulated fill', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$800.00');
+  await page.getByRole('combobox', { name: 'Event type' }).selectOption('SPLIT');
+  await page.getByRole('spinbutton', { name: 'New shares in split ratio' }).fill('2');
+  await page.getByRole('button', { name: 'Record simulated event', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Holdings at weighted-average cost' })).toContainText('$200.00');
+  await expect(page.getByRole('table', { name: 'Holdings at weighted-average cost' }).getByRole('cell', { name: '20', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Event type' }).selectOption('DIVIDEND');
+  await page.getByRole('spinbutton', { name: 'Cash dividend per share (USD)' }).fill('0.5');
+  await page.getByRole('button', { name: 'Record simulated event', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$810.00');
+  await expect(page.getByTestId('portfolio-dividends')).toHaveText('$10.00');
+  await page.getByRole('combobox', { name: 'Trade side' }).selectOption('SELL');
+  await page.getByRole('spinbutton', { name: 'Shares to trade' }).fill('5');
+  await page.getByRole('spinbutton', { name: 'Manual fill price (USD)' }).fill('15');
+  await page.getByRole('button', { name: 'Record simulated fill', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$885.00');
+  await expect(page.getByTestId('portfolio-realized')).toHaveText('$25.00');
+  await page.reload();
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$885.00');
+  await expect(page.getByRole('table', { name: 'Recorded simulated company events' }).locator('tbody tr')).toHaveCount(2);
+});

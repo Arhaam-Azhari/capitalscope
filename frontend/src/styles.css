@@ -33,3 +33,6 @@ main{min-width:0}.topbar{height:66px;border-bottom:1px solid var(--line);display
 .portfolio-create form { padding: 16px 0; }
 .portfolio-picker { display: grid; gap: 8px; margin: 20px 0; max-width: 100%; }
 .portfolio-picker select, .model-fields select { padding: 10px; max-width: 100%; border: 1px solid #c4cec5; border-radius: 6px; background: white; }
+
+.portfolio-actions { border-top: 1px solid #d9dfd9; margin-top: 24px; padding-top: 16px; }
+.result-summary { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }

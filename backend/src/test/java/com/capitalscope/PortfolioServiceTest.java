@@ -40,4 +40,17 @@ class PortfolioServiceTest {
             assertEquals(0, new BigDecimal("250").compareTo(service.summary(id).cash()));
         } finally { executor.shutdownNow(); }
     }
+    @Test void iRetryActionsAndRejectRequestIdsReusedAcrossEventTypes() {
+        String id = create(), fillId = UUID.randomUUID().toString();
+        service.trade(id, fill(fillId, "10"));
+        var split = new PortfolioService.Action(UUID.randomUUID().toString(), "DEMO", "SPLIT", new BigDecimal("2"), BigDecimal.ONE);
+        service.action(id, split); var retry = service.action(id, split);
+        assertEquals(2, retry.events().size()); assertEquals(0, new BigDecimal("20").compareTo(retry.positions().get(0).quantity()));
+        assertThrows(IllegalArgumentException.class, () -> service.action(id, new PortfolioService.Action(fillId, "DEMO", "DIVIDEND", BigDecimal.ONE, null)));
+        assertThrows(IllegalArgumentException.class, () -> service.trade(id, fill(split.requestId(), "1")));
+        var dividend = new PortfolioService.Action(UUID.randomUUID().toString(), "DEMO", "DIVIDEND", new BigDecimal("0.5"), null);
+        service.action(id, dividend); var repeated = service.action(id, dividend);
+        assertEquals(3, repeated.events().size()); assertEquals(0, new BigDecimal("910").compareTo(repeated.cash()));
+        assertEquals(0, new BigDecimal("10").compareTo(repeated.dividendIncome()));
+    }
 }
