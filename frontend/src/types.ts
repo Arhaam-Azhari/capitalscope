@@ -20,3 +20,7 @@ export type Valuation = {
 
 export type Scenario = { id: string; ticker: string; name: string; createdAt: string;
   assumptions: Assumptions; result: Valuation; modelVersion: string };
+
+export type PriceHistory = { ticker: string; currency: string; adjusted: boolean; dataMode: 'market' | 'example';
+  source: string; sourceUrl: string | null; retrievedAt: string | null;
+  days: { date: string; open: number; high: number; low: number; close: number; volume: number }[] };

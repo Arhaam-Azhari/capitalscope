@@ -9,10 +9,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@SpringBootTest(properties = "sec.user-agent=")
+@SpringBootTest(properties = {"sec.user-agent=", "prices.api-key="})
 @AutoConfigureMockMvc
 class ApiTest {
     @Autowired MockMvc api;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate database;
+    @Autowired com.fasterxml.jackson.databind.ObjectMapper mapper;
 
     @Test void applicationStartsAndServesTheUniverse() throws Exception {
         api.perform(get("/api/companies")).andExpect(status().isOk())
@@ -70,5 +72,21 @@ class ApiTest {
                 .andExpect(status().isBadRequest());
         api.perform(post("/api/companies/DEMO/scenarios").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\" \",\"assumptions\":{}}"))
             .andExpect(status().isBadRequest());
+    }
+    @Test void iReuseStoredPricesButDoNotHideExpiredImports() throws Exception {
+        var example = PriceClient.example();
+        var cached = new PriceHistory("NVDA", "USD", false, "market", "Test fixture", null,
+            java.time.Instant.now(), example.days());
+        database.update("INSERT INTO daily_prices(ticker, fetched_at, payload) VALUES (?, ?, ?)",
+            "NVDA", cached.retrievedAt().toString(), mapper.writeValueAsString(cached));
+        try {
+            api.perform(get("/api/companies/NVDA/prices")).andExpect(status().isOk())
+                .andExpect(jsonPath("$.ticker").value("NVDA")).andExpect(jsonPath("$.dataMode").value("market"));
+            var expired = new PriceHistory("NVDA", "USD", false, "market", "Test fixture", null,
+                java.time.Instant.now().minus(java.time.Duration.ofHours(25)), example.days());
+            database.update("UPDATE daily_prices SET payload = ? WHERE ticker = ?", mapper.writeValueAsString(expired), "NVDA");
+            api.perform(get("/api/companies/NVDA/prices")).andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value(org.hamcrest.Matchers.containsString("ALPHA_VANTAGE_API_KEY")));
+        } finally { database.update("DELETE FROM daily_prices WHERE ticker = ?", "NVDA"); }
     }
 }

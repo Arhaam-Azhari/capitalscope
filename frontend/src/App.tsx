@@ -4,10 +4,11 @@ import type { Company, FinancialReport } from './types';
 import FinancialOverview from './FinancialOverview';
 import ValuationPanel from './ValuationPanel';
 import CompanyComparison from './CompanyComparison';
+import PricePanel from './PricePanel';
 import ResearchNotes from './ResearchNotes';
 
 const demo: Company = { ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Industrials' };
-const tabs = ['Financials', 'Valuation', 'Research notes', 'Compare companies'] as const;
+const tabs = ['Financials', 'Valuation', 'Research notes', 'Compare companies', 'Prices'] as const;
 type Section = typeof tabs[number];
 
 export default function App() {
@@ -80,6 +81,7 @@ export default function App() {
         </>}
         {section === 'Valuation' && <ValuationPanel key={selected} company={company} />}
         {section === 'Compare companies' && <CompanyComparison companies={companies} />}
+        {section === 'Prices' && <PricePanel key={selected} company={company} />}
         {section === 'Research notes' && <ResearchNotes key={selected} company={company} />}
         <footer className="workspace-footer"><span>CapitalScope</span><span>Company research & valuation · {isExample ? 'Example workspace' : company.ticker}</span></footer>
       </div>

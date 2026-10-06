@@ -7,7 +7,7 @@ export default defineConfig({
   use: { baseURL: 'http://127.0.0.1:8097', screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   webServer: {
     command: 'java -jar ../backend/target/capitalscope-0.1.0.jar',
-    env: { PORT: '8097', SEC_USER_AGENT: '', DATABASE_URL: 'jdbc:h2:mem:integration' },
+    env: { PORT: '8097', SEC_USER_AGENT: '', ALPHA_VANTAGE_API_KEY: '', DATABASE_URL: 'jdbc:h2:mem:integration' },
     url: 'http://127.0.0.1:8097/api/universe',
     reuseExistingServer: false
   }
