@@ -28,6 +28,16 @@ public class ResearchController {
                 "Missing metrics remain empty. Filing dates are shown for each value."));
     }
 
+    @GetMapping(value = "/companies/{ticker}/financials/export.csv")
+    public ResponseEntity<String> exportFinancials(@PathVariable String ticker) { return export(financials(ticker)); }
+    @GetMapping(value = "/examples/financials/export.csv")
+    public ResponseEntity<String> exportExample() { return export(ExampleReport.create()); }
+    private ResponseEntity<String> export(FinancialReport report) {
+        return ResponseEntity.ok().header("Content-Disposition", "attachment; filename=financial-facts.csv")
+            .contentType(org.springframework.http.MediaType.parseMediaType("text/csv;charset=UTF-8"))
+            .body(CsvExport.financials(report));
+    }
+
     @GetMapping("/examples/financials")
     public FinancialReport example() { return ExampleReport.create(); }
 

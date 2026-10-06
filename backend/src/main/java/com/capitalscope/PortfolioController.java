@@ -26,6 +26,13 @@ public class PortfolioController {
     public PaperPortfolio.Summary action(@PathVariable String id, @RequestBody PortfolioService.Action request) {
         return service.action(id, request);
     }
+    @GetMapping(value = "/{id}/export.csv")
+    public ResponseEntity<String> export(@PathVariable String id) {
+        var summary = service.summary(id);
+        return ResponseEntity.ok().header("Content-Disposition", "attachment; filename=portfolio-events.csv")
+            .contentType(org.springframework.http.MediaType.parseMediaType("text/csv;charset=UTF-8"))
+            .body(CsvExport.portfolio(summary));
+    }
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<Map<String, String>> missing(NoSuchElementException e) { return ResponseEntity.status(404).body(Map.of("error", e.getMessage())); }
     @ExceptionHandler({IllegalArgumentException.class, HttpMessageNotReadableException.class})

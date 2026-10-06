@@ -36,3 +36,6 @@ main{min-width:0}.topbar{height:66px;border-bottom:1px solid var(--line);display
 
 .portfolio-actions { border-top: 1px solid #d9dfd9; margin-top: 24px; padding-top: 16px; }
 .result-summary { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+.export-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.export-link { display: inline-block; text-decoration: none; white-space: normal; }
