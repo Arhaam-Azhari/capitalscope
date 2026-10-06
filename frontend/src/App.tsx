@@ -3,10 +3,11 @@ import { request } from './api';
 import type { Company, FinancialReport } from './types';
 import FinancialOverview from './FinancialOverview';
 import ValuationPanel from './ValuationPanel';
+import CompanyComparison from './CompanyComparison';
 import ResearchNotes from './ResearchNotes';
 
 const demo: Company = { ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Industrials' };
-const tabs = ['Financials', 'Valuation', 'Research notes'] as const;
+const tabs = ['Financials', 'Valuation', 'Research notes', 'Compare companies'] as const;
 type Section = typeof tabs[number];
 
 export default function App() {
@@ -78,6 +79,7 @@ export default function App() {
           {report && !loading && <FinancialOverview key={selected} report={report} />}
         </>}
         {section === 'Valuation' && <ValuationPanel key={selected} company={company} />}
+        {section === 'Compare companies' && <CompanyComparison companies={companies} />}
         {section === 'Research notes' && <ResearchNotes key={selected} company={company} />}
         <footer className="workspace-footer"><span>CapitalScope</span><span>Company research & valuation · {isExample ? 'Example workspace' : company.ticker}</span></footer>
       </div>

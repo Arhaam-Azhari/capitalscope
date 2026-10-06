@@ -168,3 +168,24 @@ test('desktop example screenshot', async ({ page }) => {
   await expect(page.locator('.metric-card')).toHaveCount(5);
   await page.screenshot({ path: 'test-results/research-dashboard.png', fullPage: true });
 });
+
+test('I preserve negative margins, suppress mismatched periods, and keep partial failures visible', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/companies/AAPL/financials', route => route.fulfill({ json: {
+    ...example, company: catalog.find(c => c.ticker === 'AAPL'), dataMode: 'sec',
+    metrics: example.metrics.map(m => ({ ...m, annualValues: m.annualValues.map(p => ({ ...p,
+      value: m.name === 'Net income' ? -128000000 : p.value,
+      periodStart: m.name === 'Capital expenditure' ? '2025-02-01' : p.periodStart,
+      filed: '2026-02-01', sourceUrl: 'https://www.sec.gov/Archives/example/'
+    })) }))
+  } }));
+  await page.route('**/api/companies/MSFT/financials', route => route.fulfill({ status: 503, json: { error: 'Import unavailable' } }));
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  await expect(page.getByRole('alert')).toContainText('MSFT: Import unavailable');
+  await expect(page.getByRole('row', { name: /Net income margin/ })).toContainText('-10.0%');
+  await expect(page.getByRole('row', { name: /^Cash after capex / }).first()).toContainText('—');
+  await expect(page.getByRole('link', { name: 'SEC filing ↗' }).first()).toHaveAttribute('href', 'https://www.sec.gov/Archives/example/');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

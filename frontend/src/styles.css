@@ -17,3 +17,10 @@ main{min-width:0}.topbar{height:66px;border-bottom:1px solid var(--line);display
 .scenario-list li { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 14px 0; border-bottom: 1px solid #d9dfd9; }
 .scenario-list li div { display: grid; gap: 5px; flex: 1; min-width: 160px; overflow-wrap: anywhere; }
 .scenario-list button { padding: 8px; border: 1px solid #c4cec5; border-radius: 6px; background: #fff; overflow-wrap: anywhere; max-width: 100%; }
+
+.comparison-controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 20px 0; }
+.comparison-controls label { display: grid; gap: 6px; max-width: 100%; }
+.comparison-controls select { padding: 10px; max-width: 100%; border: 1px solid #c4cec5; border-radius: 6px; background: white; }
+.comparison-evidence { display: grid; gap: 5px; font-weight: normal; color: #67746b; font-size: 11px; margin-top: 8px; white-space: normal; }
+.comparison-table td, .comparison-table th { min-width: 150px; vertical-align: top; }
+.section-tabs { flex-wrap: wrap; }

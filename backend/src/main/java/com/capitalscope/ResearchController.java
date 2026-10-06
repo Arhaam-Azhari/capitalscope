@@ -31,6 +31,9 @@ public class ResearchController {
     @GetMapping("/examples/financials")
     public FinancialReport example() { return ExampleReport.create(); }
 
+    @GetMapping("/examples/comparisons")
+    public List<FinancialReport> examplePeers() { return ExampleReport.peers(); }
+
     @GetMapping("/universe")
     public Map<String, Object> universe() {
         return Map.of("asOf", CompanyCatalog.UNIVERSE_AS_OF, "count", CompanyCatalog.COMPANIES.size(),

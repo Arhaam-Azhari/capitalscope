@@ -22,6 +22,8 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
 - Inspect charts, exact values, filing dates, source links, and accounting tags.
 - Enter assumptions in a DCF model and inspect projections, estimated value, and terminal contribution.
+- Compare two to four companies with matching-period margins, revenue growth, cash after capex, and filing evidence.
+- Explore a separate fictional peer set without configuring SEC access.
 - Save, reload, and delete named valuation scenarios for each company.
 - Save research notes separately for each company in the current browser.
 
@@ -67,6 +69,7 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | `GET /api/companies` | Company catalog |
 | `GET /api/universe` | Snapshot date and selection metadata |
 | `GET /api/companies/{ticker}/financials` | Sourced annual SEC facts |
+| `GET /api/examples/comparisons` | Three fictional peer reports for exploring comparisons |
 | `GET /api/examples/financials` | Explicitly labeled invented example |
 | `POST /api/valuations/dcf` | Generic FCFF calculator |
 | `GET /api/companies/{ticker}/scenarios` | Saved versions for a company (`DEMO` is separate) |
@@ -137,6 +140,12 @@ GitHub Actions runs backend/package checks and frontend/browser checks on pushes
 
 1. Verify live imports and improve accounting-tag coverage.
 2. Add accounts and move notes into private research workspaces.
-3. Add peer comparisons and sensitivity tables.
+3. Add valuation sensitivity tables and improve peer selection.
 4. Integrate historical prices and simulated portfolios.
 5. Add benchmarks and portfolio risk analysis.
+
+## How I compare companies
+
+I show each company’s latest annual revenue period and match income, operating cash flow, and capex to the same start and end dates. I leave missing or mismatched values blank. Revenue growth uses the preceding annual period 300–400 days earlier and needs positive prior revenue. Margins need positive current revenue. I retain negative income and cash-after-capex values.
+
+I show both periods for growth and the underlying filing links for derived measures. Companies can have different fiscal calendars, business models, and accounting treatments; I use this table for research, not a stock ranking. Reported operating cash flow minus capex is not automatically FCFF. I keep the invented comparison peers separate from real companies.

@@ -21,6 +21,23 @@ public final class ExampleReport {
                 "They do not represent a listed company and have no SEC filing sources."));
     }
 
+    public static List<FinancialReport> peers() {
+        // I made fictional peers so I can explore comparisons without live imports.
+        return List.of(create(), peer("DEMO-B", "Example Components", 920, 1050, 126, 150, 52),
+            peer("DEMO-C", "Example Equipment", 1500, 1620, 97, 190, 90));
+    }
+
+    private static FinancialReport peer(String ticker, String name, long priorRevenue, long revenue,
+                                        long income, long cashFlow, long capex) {
+        return new FinancialReport(new CompanyCatalog.Company(ticker, name, "Industrials"), null, null,
+            Instant.now(), "Invented example figures", "example", List.of(
+                metric("Revenue", priorRevenue, priorRevenue, priorRevenue, priorRevenue, revenue),
+                metric("Net income", income, income, income, income, income),
+                metric("Operating cash flow", cashFlow, cashFlow, cashFlow, cashFlow, cashFlow),
+                metric("Capital expenditure", capex, capex, capex, capex, capex)),
+            List.of("I use invented values for this fictional peer; it has no filing sources."));
+    }
+
     private static FinancialFacts.Metric metric(String name, long... values) {
         boolean instant = name.equals("Cash and equivalents");
         var points = IntStream.range(0, values.length).mapToObj(i -> {
