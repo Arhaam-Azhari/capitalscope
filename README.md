@@ -19,6 +19,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 ## What I can do
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
+- Create practice portfolios, record manual simulated buys/sells and fees, and inspect cash, holdings, and realized P&L.
 - Search 50 companies by name or ticker and filter by sector.
 - Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
 - Inspect charts, exact values, filing dates, source links, and accounting tags.
@@ -70,6 +71,10 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | --- | --- |
 | `GET /api/companies/{ticker}/prices` | Cached daily raw prices from Alpha Vantage |
 | `GET /api/examples/prices` | Invented price series for the fictional company |
+| `GET /api/portfolios` | Shared practice portfolios |
+| `POST /api/portfolios` | Create `{name, mode, initialCash}` |
+| `GET /api/portfolios/{id}` | Cash, holdings, and recorded fills |
+| `POST /api/portfolios/{id}/trades` | Record `{requestId, ticker, side, quantity, price, fee}` |
 | `GET /api/companies` | Company catalog |
 | `GET /api/universe` | Snapshot date and selection metadata |
 | `GET /api/companies/{ticker}/financials` | Sourced annual SEC facts |
@@ -111,7 +116,7 @@ Research notes are browser-local plain text, without cloud sync. Clearing browse
 
 Docker Compose uses PostgreSQL 17 with a named volume. Local Java runs use a file-backed H2 database at `./data/capitalscope`, relative to the working directory. I use Flyway migrations for both. To connect Java directly to PostgreSQL, set `DATABASE_URL` to a JDBC URL, `DATABASE_USER`, and `DATABASE_PASSWORD`. Keep backups of the database before removing volumes or changing storage.
 
-This is a single shared research workspace without accounts. Saved scenarios are visible to everyone who can reach the app. Compose binds the app to localhost. User accounts, private workspaces, stock prices, and portfolios are still to come.
+This is a single shared research workspace without accounts. Saved scenarios are visible to everyone who can reach the app. Compose binds the app to localhost. I still need user accounts and private workspaces. Daily price history and simulated portfolios are available; portfolio returns and corporate-action handling are not.
 
 SEC API reference: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
 
@@ -146,7 +151,7 @@ GitHub Actions runs backend/package checks and frontend/browser checks on pushes
 1. Verify live imports and improve accounting-tag coverage.
 2. Add accounts and move notes into private research workspaces.
 3. Improve peer selection and expand sector-specific models.
-4. Integrate historical prices and simulated portfolios.
+4. Add corporate-action handling, portfolio valuation, and trade corrections.
 5. Add benchmarks and portfolio risk analysis.
 
 ## How I compare companies
@@ -166,3 +171,11 @@ I use Alpha Vantage’s `TIME_SERIES_DAILY` compact response, which provides up 
 I validate the ticker, dates, OHLC ranges, positive prices, and nonnegative integer volumes. These are raw prices: I do not adjust for splits or dividends, calculate total returns, or claim real-time quotes. I need corporate-action handling before using this series for backtesting or portfolio performance.
 
 Provider reference: https://www.alphavantage.co/documentation/#daily
+
+## How I track practice portfolios
+
+I start with a fixed USD cash deposit, record manual simulated fills, and calculate positions from the stored trade history. My example portfolios only accept the fictional DEMO instrument; my catalog portfolios use real ticker names but still contain simulated trades. I do not connect a broker or infer a fill from a daily close.
+
+I use decimal arithmetic, up to six decimals for shares, four for fill prices, and two for fees. I include buy fees in weighted-average cost and deduct sell fees from realized P&L. I round prorated cost to ten decimals and remove the entire remaining basis when a position closes. This is a practice accounting convention, not tax-lot reporting. I reject negative inputs, insufficient cash, overselling, and sell fees above proceeds.
+
+I lock each portfolio row while recording a fill and require a request UUID. Retrying the same fill with the same UUID does not create another trade; reusing it with changed inputs fails. I keep the recorded fills append-only. Corrections, external deposits, dividends, splits, mark-to-market values, and portfolio return calculations are still to come. Everyone who can access this shared app can see portfolios and record trades.

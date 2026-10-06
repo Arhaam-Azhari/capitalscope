@@ -80,3 +80,35 @@ test('I can inspect example prices and see a clear error for unconfigured market
   await expect(page.getByRole('alert')).toContainText('ALPHA_VANTAGE_API_KEY');
   await expect(page.getByRole('table')).toHaveCount(0);
 });
+
+test('I can practice buys and partial sales without spending real money', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Portfolio name', exact: true }).fill('My browser portfolio');
+  await page.getByRole('spinbutton', { name: 'Starting cash (USD)' }).fill('1000');
+  await page.getByRole('button', { name: 'Create portfolio', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$1,000.00');
+  await page.getByRole('spinbutton', { name: 'Shares to trade' }).fill('10');
+  await page.getByRole('spinbutton', { name: 'Manual fill price (USD)' }).fill('20');
+  await page.getByRole('spinbutton', { name: 'Trade fee (USD)' }).fill('1');
+  await page.getByRole('button', { name: 'Record simulated fill', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$799.00');
+  await page.getByRole('combobox', { name: 'Trade side' }).selectOption('SELL');
+  await page.getByRole('spinbutton', { name: 'Shares to trade' }).fill('4');
+  await page.getByRole('spinbutton', { name: 'Manual fill price (USD)' }).fill('30');
+  await page.getByRole('spinbutton', { name: 'Trade fee (USD)' }).fill('1');
+  await page.getByRole('button', { name: 'Record simulated fill', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$918.00');
+  await expect(page.getByTestId('portfolio-realized')).toHaveText('$38.60');
+  await page.getByRole('spinbutton', { name: 'Shares to trade' }).fill('100');
+  await page.getByRole('spinbutton', { name: 'Manual fill price (USD)' }).fill('30');
+  await page.getByRole('button', { name: 'Record simulated fill', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('exceeds the shares held');
+  await expect(page.getByRole('table', { name: 'Recorded simulated fills, oldest first' }).locator('tbody tr')).toHaveCount(2);
+  await page.reload();
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$918.00');
+  await expect(page.getByRole('table', { name: 'Holdings at weighted-average cost' })).toContainText('$120.60');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

@@ -23,8 +23,14 @@ class PersistenceTest {
         Instant fetched = Instant.parse("2026-10-01T12:00:00Z");
         store.saveSnapshot("https://example.test/facts", new SecClient.Snapshot(mapper.readTree("{\"old\":true}"), fetched));
         store.saveSnapshot("https://example.test/facts", new SecClient.Snapshot(mapper.readTree("{\"value\":42}"), fetched));
+        var portfolios = new PortfolioService(new JdbcTemplate(first));
+        var portfolio = portfolios.create(new PortfolioService.NewPortfolio("My reopened portfolio", "example", new java.math.BigDecimal("1000")));
+        portfolios.trade(portfolio.portfolio().id(), new PortfolioService.Fill(java.util.UUID.randomUUID().toString(), "DEMO", "BUY", java.math.BigDecimal.ONE, new java.math.BigDecimal("20"), java.math.BigDecimal.ZERO));
         new JdbcTemplate(first).execute("SHUTDOWN");
         var reopened = new ResearchStore(new JdbcTemplate(new DriverManagerDataSource(url, "sa", "")), mapper);
+        var reopenedPortfolio = new PortfolioService(new JdbcTemplate(new DriverManagerDataSource(url, "sa", ""))).summary(portfolio.portfolio().id());
+        assertEquals(1, reopenedPortfolio.trades().size());
+        assertEquals(0, new java.math.BigDecimal("980").compareTo(reopenedPortfolio.cash()));
         var saved = reopened.scenarios("AAPL").get(0);
         assertEquals(scenario.id(), saved.id());
         assertEquals(assumptions, saved.assumptions());

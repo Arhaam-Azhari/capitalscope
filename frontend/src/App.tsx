@@ -5,10 +5,11 @@ import FinancialOverview from './FinancialOverview';
 import ValuationPanel from './ValuationPanel';
 import CompanyComparison from './CompanyComparison';
 import PricePanel from './PricePanel';
+import PortfolioPanel from './PortfolioPanel';
 import ResearchNotes from './ResearchNotes';
 
 const demo: Company = { ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Industrials' };
-const tabs = ['Financials', 'Valuation', 'Research notes', 'Compare companies', 'Prices'] as const;
+const tabs = ['Financials', 'Valuation', 'Research notes', 'Compare companies', 'Prices', 'Portfolios'] as const;
 type Section = typeof tabs[number];
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
   const [reportAttempt, setReportAttempt] = useState(0);
   const company = companies.find(c => c.ticker === selected) || demo;
   const isExample = selected === 'DEMO';
+  const globalSection = section === 'Portfolios' || section === 'Compare companies';
   const sectors = useMemo(() => [...new Set(companies.map(c => c.sector))].sort(), [companies]);
   const filtered = useMemo(() => companies.filter(c =>
     (sector === 'All sectors' || c.sector === sector) && `${c.name} ${c.ticker}`.toLowerCase().includes(query.toLowerCase().trim())
@@ -71,8 +73,8 @@ export default function App() {
     <main>
       <header className="topbar"><div><span className="status-dot" />Company research</div><span className="topbar-right">Financials / Assumptions / Evidence</span></header>
       <div className="main-content">
-        <div className="page-intro"><div><span className="eyebrow">RESEARCH / {isExample ? 'EXAMPLE' : company.ticker}</span><h1>{company.name}</h1><p className="muted">Understand the business. Inspect the figures. Record your reasoning.</p></div><div className="company-badge">{isExample ? 'EX' : company.ticker.slice(0, 2)}<span>{company.sector}</span></div></div>
-        <div className={`data-banner ${isExample ? 'example' : 'live'}`}><div><span className="status-dot" /><strong>{isExample ? 'Example data · invented figures' : 'SEC financial data'}</strong><p>{isExample ? 'This workspace shows a fictional company. Select a listed company to request its real filings.' : 'Annual reported facts, with filing sources. The catalog ranking is a fixed snapshot.'}</p></div>{!isExample && report?.retrievedAt && <span className="retrieved">Retrieved<br />{new Date(report.retrievedAt).toLocaleString()}</span>}</div>
+        <div className="page-intro"><div><span className="eyebrow">RESEARCH / {isExample ? 'EXAMPLE' : company.ticker}</span><h1>{globalSection ? section === 'Portfolios' ? 'Practice portfolios' : 'Company comparisons' : company.name}</h1><p className="muted">Understand the business. Inspect the figures. Record your reasoning.</p></div><div className="company-badge">{isExample ? 'EX' : company.ticker.slice(0, 2)}<span>{company.sector}</span></div></div>
+        <div className={`data-banner ${isExample ? 'example' : 'live'}`}><div><span className="status-dot" /><strong>{section === 'Portfolios' ? 'Simulated portfolio workspace' : section === 'Compare companies' ? 'Comparison workspace · sources shown below' : section === 'Prices' ? isExample ? 'Example prices · invented figures' : 'Daily market prices' : isExample ? 'Example data · invented figures' : 'SEC financial data'}</strong><p>{section === 'Portfolios' ? 'Manual simulated trades in a shared practice workspace. No broker orders or real money.' : section === 'Compare companies' ? 'Choose fictional peers or real company filings in the comparison controls.' : section === 'Prices' ? 'Daily raw price history, with source and data mode shown below.' : isExample ? 'This workspace shows a fictional company. Select a listed company to request its real filings.' : 'Annual reported facts, with filing sources. The catalog ranking is a fixed snapshot.'}</p></div>{section === 'Financials' && !isExample && report?.retrievedAt && <span className="retrieved">Retrieved<br />{new Date(report.retrievedAt).toLocaleString()}</span>}</div>
         <nav className="section-tabs" aria-label="Research sections">{tabs.map(t => <button key={t} onClick={() => setSection(t)} aria-current={section === t ? 'page' : undefined} className={section === t ? 'active' : ''}>{t}</button>)}</nav>
         {section === 'Financials' && <>
           {loading && <div className="panel loading-state" role="status"><span className="loader" />{isExample ? 'Opening example workspace…' : `Retrieving ${company.ticker} financials…`}</div>}
@@ -82,6 +84,7 @@ export default function App() {
         {section === 'Valuation' && <ValuationPanel key={selected} company={company} />}
         {section === 'Compare companies' && <CompanyComparison companies={companies} />}
         {section === 'Prices' && <PricePanel key={selected} company={company} />}
+        {section === 'Portfolios' && <PortfolioPanel companies={companies} />}
         {section === 'Research notes' && <ResearchNotes key={selected} company={company} />}
         <footer className="workspace-footer"><span>CapitalScope</span><span>Company research & valuation · {isExample ? 'Example workspace' : company.ticker}</span></footer>
       </div>
