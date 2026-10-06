@@ -18,6 +18,7 @@ const example = {
 async function installApi(page: Page) {
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/scenarios')) return route.fulfill({ json: [] });
     if (path === '/api/companies') return route.fulfill({ json: catalog });
     if (path === '/api/universe') return route.fulfill({ json: { asOf: '2026-10-06', count: 50, dynamic: false } });
     if (path === '/api/examples/financials') return route.fulfill({ json: example });

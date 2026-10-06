@@ -8,7 +8,7 @@ cleanup() {
   rm -rf "$smoke_dir"
 }
 trap cleanup EXIT
-PORT=8096 SEC_USER_AGENT='' java -jar "$project_dir/backend/target/capitalscope-0.1.0.jar" >"$smoke_dir/server.log" 2>&1 &
+PORT=8096 SEC_USER_AGENT='' DATABASE_URL='jdbc:h2:mem:smoke' java -jar "$project_dir/backend/target/capitalscope-0.1.0.jar" >"$smoke_dir/server.log" 2>&1 &
 server_pid=$!
 ready=false
 for attempt in {1..30}; do

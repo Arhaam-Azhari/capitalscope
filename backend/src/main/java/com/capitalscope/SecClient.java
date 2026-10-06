@@ -11,20 +11,19 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 
 @Service
 public class SecClient {
     public record Snapshot(JsonNode data, Instant fetchedAt) {}
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL).build();
-    private final Map<String, Snapshot> cache = new HashMap<>();
+    private final ResearchStore store;
     private final ObjectMapper mapper;
     private final String userAgent;
     private long nextRequestAt;
 
-    public SecClient(ObjectMapper mapper, @Value("${sec.user-agent:}") String userAgent) {
+    public SecClient(ResearchStore store, ObjectMapper mapper, @Value("${sec.user-agent:}") String userAgent) {
+        this.store = store;
         this.mapper = mapper;
         this.userAgent = userAgent;
     }
@@ -45,7 +44,7 @@ public class SecClient {
     private synchronized Snapshot fetch(String url) {
         if (userAgent.isBlank())
             throw new IllegalStateException("Set SEC_USER_AGENT to an app name and contact email before fetching SEC data.");
-        Snapshot existing = cache.get(url);
+        Snapshot existing = store.snapshot(url);
         if (existing != null && existing.fetchedAt().plus(Duration.ofHours(6)).isAfter(Instant.now()))
             return existing;
         try {
@@ -60,7 +59,7 @@ public class SecClient {
                 throw new IllegalStateException("SEC returned HTTP " + response.statusCode() + ". Try again later.");
             JsonNode data = mapper.readTree(response.body());
             Snapshot snapshot = new Snapshot(data, Instant.now());
-            cache.put(url, snapshot);
+            store.saveSnapshot(url, snapshot);
             return snapshot;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

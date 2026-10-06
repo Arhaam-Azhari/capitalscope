@@ -17,3 +17,6 @@ export type Valuation = {
   terminalValue: number; presentValueOfTerminalValue: number;
   enterpriseValue: number; equityValue: number; valuePerShare: number; terminalValueShare: number;
 };
+
+export type Scenario = { id: string; ticker: string; name: string; createdAt: string;
+  assumptions: Assumptions; result: Valuation; modelVersion: string };
