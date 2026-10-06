@@ -26,6 +26,7 @@ export type PriceHistory = { ticker: string; currency: string; adjusted: boolean
   days: { date: string; open: number; high: number; low: number; close: number; volume: number }[] };
 
 export type Portfolio = { id: string; name: string; mode: 'example' | 'market'; initialCash: number; createdAt: string };
-export type PortfolioSummary = { portfolio: Portfolio; cash: number; realizedPnl: number;
+export type PortfolioSummary = { portfolio: Portfolio; cash: number; realizedPnl: number; dividendIncome: number;
+  events: { requestId: string; kind: 'TRADE' | 'SPLIT' | 'DIVIDEND'; ticker: string; value: number | null; denominator: number | null; recordedAt: string }[];
   positions: { ticker: string; quantity: number; costBasis: number; averageCost: number }[];
   trades: { requestId: string; ticker: string; side: string; quantity: number; price: number; fee: number; recordedAt: string }[] };

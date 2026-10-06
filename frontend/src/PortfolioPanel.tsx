@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import PortfolioActions from './PortfolioActions';
 import { money, request } from './api';
 import type { Company, Portfolio, PortfolioSummary } from './types';
 
@@ -31,7 +32,7 @@ export default function PortfolioPanel({ companies }: { companies: Company[] }) 
     event.preventDefault(); setBusy(true); setError('');
     try {
       const data = await request<PortfolioSummary>('/api/portfolios', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, mode, initialCash: Number(cash) }) });
+        body: JSON.stringify({ name, mode, initialCash: cash }) });
       setPortfolios(current => [data.portfolio, ...current]); setSelected(data.portfolio.id); setName('');
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not create the portfolio.'); }
     finally { setBusy(false); }
@@ -39,7 +40,7 @@ export default function PortfolioPanel({ companies }: { companies: Company[] }) 
   async function trade(event: FormEvent) {
     event.preventDefault(); if (!summary) return;
     const fill = { ticker: summary.portfolio.mode === 'example' ? 'DEMO' : ticker, side,
-      quantity: Number(quantity), price: Number(price), fee: Number(fee) };
+      quantity, price, fee };
     const signature = JSON.stringify([selected, fill]);
     if (pending.current?.signature !== signature) pending.current = { signature, id: crypto.randomUUID() };
     setBusy(true); setError('');
@@ -63,9 +64,9 @@ export default function PortfolioPanel({ companies }: { companies: Company[] }) 
     {loading ? <p role="status">Loading portfolios…</p> : portfolios.length > 0 && <label className="portfolio-picker">Open portfolio<select disabled={busy} value={selected} onChange={e => { setSelected(e.target.value); setError(''); pending.current = null; }}>{portfolios.map(item => <option key={item.id} value={item.id}>{item.name} · {item.mode === 'example' ? 'fictional' : 'catalog'}</option>)}</select></label>}
     {summary && <>
       <h3>{summary.portfolio.name}</h3>
-      <div className="result-summary"><div><span>Available cash</span><strong data-testid="portfolio-cash">{money(summary.cash, false)}</strong></div><div><span>Realized P&amp;L</span><strong data-testid="portfolio-realized">{money(summary.realizedPnl, false)}</strong></div><div><span>Starting cash</span><strong>{money(summary.portfolio.initialCash, false)}</strong></div></div>
+      <div className="result-summary"><div><span>Available cash</span><strong data-testid="portfolio-cash">{money(summary.cash, false)}</strong></div><div><span>Realized P&amp;L</span><strong data-testid="portfolio-realized">{money(summary.realizedPnl, false)}</strong></div><div><span>Cash dividends received</span><strong data-testid="portfolio-dividends">{money(summary.dividendIncome, false)}</strong></div><div><span>Starting cash</span><strong>{money(summary.portfolio.initialCash, false)}</strong></div></div>
       <div className="table-scroll"><table><caption>Holdings at weighted-average cost</caption><thead><tr><th>Ticker</th><th>Shares</th><th>Cost basis</th><th>Average cost / share</th></tr></thead><tbody>{summary.positions.map(position => <tr key={position.ticker}><th scope="row">{position.ticker}</th><td>{position.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{money(position.costBasis, false)}</td><td>{money(position.averageCost, false)}</td></tr>)}{!summary.positions.length && <tr><td colSpan={4}>No open positions.</td></tr>}</tbody></table></div>
-      <p className="muted small">Cost basis includes buy fees. Realized P&amp;L deducts sell fees using weighted-average cost. This is a practice convention, not a tax-lot calculation. Holdings are not marked to market; splits, dividends, and unrealized returns are not modeled.</p>
+      <p className="muted small">Cost basis includes buy fees. Realized P&amp;L deducts sell fees using weighted-average cost. This is a practice convention, not a tax-lot calculation. Holdings are not marked to market; manual splits and cash dividends are tracked separately, while unrealized returns are not modeled.</p>
       <form onSubmit={trade}><h3>Record a simulated fill</h3><div className="model-fields">
         {summary.portfolio.mode === 'market' ? <label>Trade company<select disabled={busy} value={ticker} onChange={e => setTicker(e.target.value)}>{companies.map(c => <option key={c.ticker} value={c.ticker}>{c.name} ({c.ticker})</option>)}</select></label> : <p className="notice example">This portfolio only holds the fictional DEMO company.</p>}
         <label>Trade side<select disabled={busy} value={side} onChange={e => setSide(e.target.value)}><option>BUY</option><option>SELL</option></select></label>
@@ -73,6 +74,7 @@ export default function PortfolioPanel({ companies }: { companies: Company[] }) 
         <label>Manual fill price (USD)<input disabled={busy} type="number" required min="0.0001" max="1000000000" step="0.0001" value={price} onChange={e => setPrice(e.target.value)} /></label>
         <label>Trade fee (USD)<input disabled={busy} type="number" required min="0" max="1000000000" step="0.01" value={fee} onChange={e => setFee(e.target.value)} /></label>
       </div><button className="primary" type="submit" disabled={busy}>{busy ? 'Recording…' : 'Record simulated fill'}</button></form>
+      <PortfolioActions key={summary.portfolio.id} summary={summary} busy={busy} setBusy={setBusy} onSaved={setSummary} />
       <div className="table-scroll"><table><caption>Recorded simulated fills, oldest first</caption><thead><tr><th>Recorded</th><th>Ticker</th><th>Side</th><th>Shares</th><th>Manual price</th><th>Fee</th></tr></thead><tbody>{summary.trades.map(fill => <tr key={fill.requestId}><td>{new Date(fill.recordedAt).toLocaleString()}</td><td>{fill.ticker}</td><td>{fill.side}</td><td>{fill.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{money(fill.price, false)}</td><td>{money(fill.fee, false)}</td></tr>)}</tbody></table></div>
     </>}
   </section>;
