@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
 
 // I run these against the packaged Spring app without intercepting its API requests.
@@ -146,4 +147,31 @@ test('I can record a simulated split and dividend in order with my trades', asyn
   await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
   await expect(page.getByTestId('portfolio-cash')).toHaveText('$885.00');
   await expect(page.getByRole('table', { name: 'Recorded simulated company events' }).locator('tbody tr')).toHaveCount(2);
+});
+
+
+test('I can download research and event CSV files with clear provenance', async ({ page }) => {
+  await page.goto('/');
+  const financialDownload = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download financial CSV', exact: true }).click();
+  const financial = await financialDownload;
+  expect(financial.suggestedFilename()).toBe('financial-facts.csv');
+  const facts = await readFile((await financial.path())!, 'utf8');
+  expect(facts).toContain('"DEMO","Example Manufacturing","example"');
+  expect(facts).toContain('1280000000');
+  const created = await page.request.post('/api/portfolios', { data: { name: '=My export', mode: 'example', initialCash: '1000' } });
+  const id = (await created.json()).portfolio.id;
+  const trade = await page.request.post(`/api/portfolios/${id}/trades`, { data: {
+    requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'BUY', quantity: '1.500001', price: '100.1234', fee: '0.01'
+  } });
+  expect(trade.ok()).toBe(true);
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  const eventDownload = page.waitForEvent('download');
+  await page.getByRole('link', { name: 'Download event CSV', exact: true }).click();
+  const events = await eventDownload;
+  expect(events.suggestedFilename()).toBe('portfolio-events.csv');
+  const history = await readFile((await events.path())!, 'utf8');
+  expect(history).toContain('"\'=My export"');
+  expect(history).toContain(',true,0,');
+  expect(history).toContain('1.500001,100.1234,0.01');
 });

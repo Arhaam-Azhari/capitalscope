@@ -23,6 +23,7 @@ export default function FinancialOverview({ report }: { report: FinancialReport 
   const [metricName, setMetricName] = useState('Revenue');
   const metric = report.metrics.find(m => m.name === metricName) || report.metrics[0];
   return <>
+    <div className="export-actions"><a className="secondary export-link" href={report.dataMode === 'example' ? '/api/examples/financials/export.csv' : `/api/companies/${report.company.ticker}/financials/export.csv`}>Download financial CSV</a><span className="muted small">Includes source links, dates, tags, and data mode.</span></div>
     <div className="metric-grid">{report.metrics.map(m => {
       const latest = m.annualValues[0];
       return <button key={m.name} className={`metric-card ${m.name === metricName ? 'active' : ''}`} onClick={() => setMetricName(m.name)} aria-pressed={m.name === metricName}>

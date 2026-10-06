@@ -21,6 +21,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
 - Record simulated splits and cash dividends in the same ordered history as trades.
 - Create practice portfolios, record manual simulated buys/sells and fees, and inspect cash, holdings, and realized P&L.
+- Download financial facts and ordered portfolio events as CSV files.
 - Search 50 companies by name or ticker and filter by sector.
 - Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
 - Inspect charts, exact values, filing dates, source links, and accounting tags.
@@ -72,6 +73,9 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | --- | --- |
 | `GET /api/companies/{ticker}/prices` | Cached daily raw prices from Alpha Vantage |
 | `GET /api/examples/prices` | Invented price series for the fictional company |
+| `GET /api/portfolios/{id}/export.csv` | Ordered simulated events, starting cash, exact decimal inputs |
+| `GET /api/companies/{ticker}/financials/export.csv` | Annual facts with units, tags, dates, and sources |
+| `GET /api/examples/financials/export.csv` | Clearly marked fictional facts |
 | `GET /api/portfolios` | Shared practice portfolios |
 | `POST /api/portfolios` | Create `{name, mode, initialCash}` |
 | `GET /api/portfolios/{id}` | Cash, holdings, and recorded fills |
@@ -189,3 +193,9 @@ I replay trades and manual company events in one database sequence, including tr
 For a split, I enter integer new-share and old-share terms, such as 2:1 or 1:10. I change the share count while preserving total cost basis, then recalculate average cost. I reject results requiring more than six decimals rather than invent cash in lieu. For a dividend, I enter a USD amount per share, credit current shares times that amount to cash, and show dividend income separately from realized trading P&L. I do not model withholding, reinvestment, return of capital, or ex-date eligibility.
 
 I use the same row lock and request UUID checks for trades and actions. I reject a UUID reused across different event types or terms. These practice events do not adjust the Alpha Vantage price series, so I still need verified adjustments before reporting portfolio returns.
+
+## How I export my research
+
+I can download annual facts with their original decimal values, units, period dates, filing evidence, accounting tags, data mode, and retrieval timestamp. I keep missing metrics as blank rows rather than writing zeros. I also export portfolio events in recorded order, starting with the initial cash deposit, and mark every row as simulated. I include manual fill prices, fees, split ratios, and dividends so I can inspect the history in a spreadsheet.
+
+I export UTF-8 CSV, escape commas, quotes, and line breaks, and protect user-entered text that could be interpreted as a spreadsheet formula. I preserve decimal numbers in the CSV text; spreadsheet applications may reformat numbers or dates when opening the file. I do not provide an import endpoint or infer verified market events from these exports.
