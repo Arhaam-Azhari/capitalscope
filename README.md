@@ -2,6 +2,8 @@
 
 I'm building a workspace for company research, valuation, and practice portfolios. This milestone adds a React dashboard to the Java API: I can browse companies, inspect annual figures, adjust valuation assumptions, and keep research notes.
 
+![Company research workspace with explicitly labeled example figures](docs/research-dashboard.png)
+
 ## Run the app
 
 With Docker installed:
