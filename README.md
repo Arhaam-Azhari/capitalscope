@@ -18,6 +18,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 
 ## What I can do
 
+- Inspect daily price history with source, retrieval date, and raw-price caveats.
 - Search 50 companies by name or ticker and filter by sector.
 - Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
 - Inspect charts, exact values, filing dates, source links, and accounting tags.
@@ -67,6 +68,8 @@ java -jar backend/target/capitalscope-0.1.0.jar
 
 | Endpoint | Purpose |
 | --- | --- |
+| `GET /api/companies/{ticker}/prices` | Cached daily raw prices from Alpha Vantage |
+| `GET /api/examples/prices` | Invented price series for the fictional company |
 | `GET /api/companies` | Company catalog |
 | `GET /api/universe` | Snapshot date and selection metadata |
 | `GET /api/companies/{ticker}/financials` | Sourced annual SEC facts |
@@ -155,3 +158,11 @@ I show both periods for growth and the underlying filing links for derived measu
 ## How I check valuation sensitivity
 
 I evaluate 25 combinations with the same DCF calculator. I vary WACC in one-percentage-point steps and terminal growth in half-percentage-point steps around my base case. I hold the other inputs fixed and mark the center result. I leave invalid cells unavailable, including nonpositive discount rates and terminal growth at or above WACC. I clear the table when I change model inputs.
+
+## How I import prices
+
+I use Alpha Vantage’s `TIME_SERIES_DAILY` compact response, which provides up to 100 recent daily observations. I set `ALPHA_VANTAGE_API_KEY` on the backend, keep it out of responses and stored source URLs, and cache successful imports in the database for 24 hours. I space requests 13 seconds apart within one app instance; provider limits and plan restrictions still apply. I show upstream errors without replacing real prices with example numbers. I have not verified coverage for all 50 tickers.
+
+I validate the ticker, dates, OHLC ranges, positive prices, and nonnegative integer volumes. These are raw prices: I do not adjust for splits or dividends, calculate total returns, or claim real-time quotes. I need corporate-action handling before using this series for backtesting or portfolio performance.
+
+Provider reference: https://www.alphavantage.co/documentation/#daily

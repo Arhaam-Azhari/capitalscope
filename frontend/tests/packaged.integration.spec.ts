@@ -69,3 +69,14 @@ test('I can inspect fictional peer ratios without confusing them with SEC data',
   await expect(page.locator('.comparison-table')).toHaveCount(0);
   await expect(page.getByRole('alert')).toContainText('SEC_USER_AGENT');
 });
+
+test('I can inspect example prices and see a clear error for unconfigured market imports', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Daily raw prices, newest first' }).locator('tbody tr')).toHaveCount(50);
+  await expect(page.getByText('These prices are invented', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('ALPHA_VANTAGE_API_KEY');
+  await expect(page.getByRole('table')).toHaveCount(0);
+});
