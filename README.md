@@ -21,6 +21,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - Search 50 companies by name or ticker and filter by sector.
 - Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
 - Inspect charts, exact values, filing dates, source links, and accounting tags.
+- Inspect a 5 × 5 sensitivity table across discount rates and terminal growth assumptions.
 - Enter assumptions in a DCF model and inspect projections, estimated value, and terminal contribution.
 - Compare two to four companies with matching-period margins, revenue growth, cash after capex, and filing evidence.
 - Explore a separate fictional peer set without configuring SEC access.
@@ -71,6 +72,7 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | `GET /api/companies/{ticker}/financials` | Sourced annual SEC facts |
 | `GET /api/examples/comparisons` | Three fictional peer reports for exploring comparisons |
 | `GET /api/examples/financials` | Explicitly labeled invented example |
+| `POST /api/valuations/dcf/sensitivity` | Same assumptions; 25 model evaluations with invalid cells marked |
 | `POST /api/valuations/dcf` | Generic FCFF calculator |
 | `GET /api/companies/{ticker}/scenarios` | Saved versions for a company (`DEMO` is separate) |
 | `POST /api/companies/{ticker}/scenarios` | Save `{name, assumptions}`; results calculated on the server |
@@ -140,7 +142,7 @@ GitHub Actions runs backend/package checks and frontend/browser checks on pushes
 
 1. Verify live imports and improve accounting-tag coverage.
 2. Add accounts and move notes into private research workspaces.
-3. Add valuation sensitivity tables and improve peer selection.
+3. Improve peer selection and expand sector-specific models.
 4. Integrate historical prices and simulated portfolios.
 5. Add benchmarks and portfolio risk analysis.
 
@@ -149,3 +151,7 @@ GitHub Actions runs backend/package checks and frontend/browser checks on pushes
 I show each company’s latest annual revenue period and match income, operating cash flow, and capex to the same start and end dates. I leave missing or mismatched values blank. Revenue growth uses the preceding annual period 300–400 days earlier and needs positive prior revenue. Margins need positive current revenue. I retain negative income and cash-after-capex values.
 
 I show both periods for growth and the underlying filing links for derived measures. Companies can have different fiscal calendars, business models, and accounting treatments; I use this table for research, not a stock ranking. Reported operating cash flow minus capex is not automatically FCFF. I keep the invented comparison peers separate from real companies.
+
+## How I check valuation sensitivity
+
+I evaluate 25 combinations with the same DCF calculator. I vary WACC in one-percentage-point steps and terminal growth in half-percentage-point steps around my base case. I hold the other inputs fixed and mark the center result. I leave invalid cells unavailable, including nonpositive discount rates and terminal growth at or above WACC. I clear the table when I change model inputs.

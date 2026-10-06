@@ -21,7 +21,11 @@ test('dashboard sends percentage inputs to the real Java calculator', async ({ p
   ]) await page.getByRole('spinbutton', { name: label, exact: false }).fill(value);
   await page.getByRole('button', { name: 'Calculate valuation' }).click();
   await expect(page.locator('.result-heading')).toContainText('$90.00');
-  await expect(page.locator('.valuation-result tbody tr')).toHaveCount(5);
+  await expect(page.locator('.valuation-result > .table-scroll tbody tr')).toHaveCount(5);
+  await expect(page.locator('.sensitivity-table .base-case')).toContainText('$90.00');
+  await expect(page.locator('.sensitivity-table td')).toHaveCount(25);
+  await page.getByRole('spinbutton', { name: 'Annual growth', exact: false }).fill('1');
+  await expect(page.locator('.sensitivity-table')).toHaveCount(0);
 });
 
 test('unconfigured live SEC access reports a failure rather than serving example data', async ({ page }) => {

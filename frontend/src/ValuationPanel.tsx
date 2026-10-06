@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import SensitivityTable from './SensitivityTable';
 import SavedScenarios from './SavedScenarios';
 import { money, request } from './api';
 import type { Assumptions, Company, Scenario, Valuation } from './types';
@@ -81,6 +82,7 @@ export default function ValuationPanel({ company }: { company: Company }) {
         <div className="result-summary"><div><span>Enterprise value</span><strong>{money(result.enterpriseValue)}</strong></div><div><span>Equity value</span><strong>{money(result.equityValue)}</strong></div><div><span>Terminal contribution</span><strong>{(result.terminalValueShare * 100).toFixed(1)}%</strong></div></div>
         {result.terminalValueShare > .75 && <p className="notice warning">More than 75% of this estimate comes from terminal value. Small changes in long-term assumptions can materially change the result.</p>}
         <div className="table-scroll"><table><caption>Forecast cash flow and present value</caption><thead><tr><th>Year</th><th>Unlevered cash flow</th><th>Present value</th></tr></thead><tbody>{result.projections.map(p => <tr key={p.year}><th scope="row">{p.year}</th><td>{money(p.freeCashFlow)}</td><td>{money(p.presentValue)}</td></tr>)}</tbody></table></div>
+        <SensitivityTable assumptions={assumptions} />
         <p className="muted small">A model estimate is not a market quote. This version does not adjust for dilution, excess assets, or all non-debt claims.</p>
       </div>}
       <SavedScenarios ticker={company.ticker} assumptions={result ? assumptions : null} onLoad={load} />
