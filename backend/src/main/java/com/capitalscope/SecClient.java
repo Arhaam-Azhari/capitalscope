@@ -16,10 +16,10 @@ import java.util.Map;
 
 @Service
 public class SecClient {
-    private record Cached(JsonNode data, Instant fetchedAt) {}
+    public record Snapshot(JsonNode data, Instant fetchedAt) {}
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10))
         .followRedirects(HttpClient.Redirect.NORMAL).build();
-    private final Map<String, Cached> cache = new HashMap<>();
+    private final Map<String, Snapshot> cache = new HashMap<>();
     private final ObjectMapper mapper;
     private final String userAgent;
     private long nextRequestAt;
@@ -30,7 +30,7 @@ public class SecClient {
     }
 
     public String resolveCik(String ticker) {
-        JsonNode tickers = fetch("https://www.sec.gov/files/company_tickers.json");
+        JsonNode tickers = fetch("https://www.sec.gov/files/company_tickers.json").data();
         for (JsonNode company : tickers) {
             if (company.path("ticker").asText().equalsIgnoreCase(ticker))
                 return String.format("%010d", company.path("cik_str").asLong());
@@ -38,16 +38,16 @@ public class SecClient {
         throw new IllegalStateException("The SEC ticker mapping does not contain this company.");
     }
 
-    public JsonNode companyFacts(String cik) {
+    public Snapshot companyFacts(String cik) {
         return fetch("https://data.sec.gov/api/xbrl/companyfacts/CIK" + cik + ".json");
     }
 
-    private synchronized JsonNode fetch(String url) {
+    private synchronized Snapshot fetch(String url) {
         if (userAgent.isBlank())
             throw new IllegalStateException("Set SEC_USER_AGENT to an app name and contact email before fetching SEC data.");
-        Cached existing = cache.get(url);
+        Snapshot existing = cache.get(url);
         if (existing != null && existing.fetchedAt().plus(Duration.ofHours(6)).isAfter(Instant.now()))
-            return existing.data();
+            return existing;
         try {
             // I keep requests one second apart, including requests for different companies.
             long wait = nextRequestAt - System.currentTimeMillis();
@@ -59,8 +59,9 @@ public class SecClient {
             if (response.statusCode() != 200)
                 throw new IllegalStateException("SEC returned HTTP " + response.statusCode() + ". Try again later.");
             JsonNode data = mapper.readTree(response.body());
-            cache.put(url, new Cached(data, Instant.now()));
-            return data;
+            Snapshot snapshot = new Snapshot(data, Instant.now());
+            cache.put(url, snapshot);
+            return snapshot;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("SEC request interrupted.", e);
