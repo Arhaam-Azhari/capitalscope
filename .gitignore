@@ -5,6 +5,10 @@ target/
 .env
 .env.*
 !.env.example
-node_modules/
+node_modules
 dist/
 *.log
+*.tsbuildinfo
+test-results/
+playwright-report/
+backend/src/main/resources/static/

@@ -1,0 +1,7 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      SEC_USER_AGENT: ${SEC_USER_AGENT:-}

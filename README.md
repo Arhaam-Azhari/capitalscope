@@ -1,60 +1,99 @@
 # CapitalScope
 
-I'm building a workspace for company research, valuation, and practice portfolios. I started with the research API and a discounted cash flow calculator. The project is in its first backend milestone; the dashboard and portfolio tools are still to come.
+I'm building a workspace for company research, valuation, and practice portfolios. This milestone adds a React dashboard to the Java API: I can browse companies, inspect annual figures, adjust valuation assumptions, and keep research notes.
 
-## What works in this milestone
+## Run the app
 
-- A catalog of 50 U.S. public companies across several sectors.
-- An SEC client that resolves ticker symbols to CIKs and retrieves company facts.
-- Annual revenue, net income, operating cash flow, capital expenditure, and cash figures when supported standard tags exist.
-- Source links, filing dates, and accounting tags attached to each reported value.
-- A DCF endpoint with explicit assumptions, yearly projections, and terminal-value contribution.
+With Docker installed:
 
-I selected the top 50 American companies from the CompaniesMarketCap ranking observed on October 6, 2026, using one ticker per company. This is a fixed snapshot; it does not update itself when market caps change.
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8080. The app starts in a clearly labeled example workspace with invented figures. The company catalog and calculator work without API keys.
+
+For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an app name and a real contact email, and restart. I don't include contact information or credentials in the repository. Upstream failures are reported rather than replaced with example numbers.
+
+## What I can do
+
+- Search 50 companies by name or ticker and filter by sector.
+- Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
+- Inspect charts, exact values, filing dates, source links, and accounting tags.
+- Enter assumptions in a DCF model and inspect projections, estimated value, and terminal contribution.
+- Save research notes separately for each company in the current browser.
+
+I selected the top 50 American companies from the CompaniesMarketCap ranking observed on October 6, 2026, using one ticker per company. This is a fixed snapshot, not a live ranking. [Company universe](docs/company-universe.md).
 
 Catalog source: https://companiesmarketcap.com/usa/largest-companies-in-the-usa-by-market-cap/
 
-The catalog is a starting universe, not a claim that all 50 companies have been verified against the live SEC API. Missing data stays missing rather than becoming zero.
+I haven't verified live data coverage for all 50 companies. Recently listed companies may have no annual 10-K facts, and some issuers use unsupported tags. Missing data stays missing.
 
-## Run the backend
+## Development setup
 
-I use Java 17 and Maven 3.9 or newer.
+I use Java 17, Maven 3.9+, and Node.js 22.
+
+Terminal 1:
 
 ```bash
-export SEC_USER_AGENT='CapitalScope your-contact-email@example.com'
+export SEC_USER_AGENT='CapitalScope your-real-contact-address'
 cd backend
 mvn spring-boot:run
 ```
 
-Replace the example email with a real contact address. The SEC requests an identifying User-Agent for automated access. The company catalog and valuation endpoint work without this setting; the financial-data endpoint needs it.
+Terminal 2:
 
 ```bash
-curl http://localhost:8080/api/companies
-curl http://localhost:8080/api/companies/AAPL/financials
+cd frontend
+npm ci
+npm run dev
+```
+
+Open the Vite URL printed in the terminal. Vite proxies `/api` to port 8080. Set `CAPITALSCOPE_API_TARGET` in a frontend `.env` file to use another backend.
+
+To build one runnable jar containing both the dashboard and backend:
+
+```bash
+bash scripts/build.sh
+java -jar backend/target/capitalscope-0.1.0.jar
+```
+
+## API
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/companies` | Company catalog |
+| `GET /api/universe` | Snapshot date and selection metadata |
+| `GET /api/companies/{ticker}/financials` | Sourced annual SEC facts |
+| `GET /api/examples/financials` | Explicitly labeled invented example |
+| `POST /api/valuations/dcf` | Generic FCFF calculator |
+
+Example valuation request:
+
+```bash
 curl -X POST http://localhost:8080/api/valuations/dcf \
   -H 'Content-Type: application/json' \
   -d '{"baseFreeCashFlow":100000000,"growthRate":0.05,"discountRate":0.10,"terminalGrowthRate":0.02,"years":5,"netDebt":200000000,"sharesOutstanding":50000000}'
 ```
 
-Those valuation inputs are invented examples, not Apple's figures. Rates use decimals: `0.10` means 10%. Cash flow, net debt, and share count use full units, not millions.
+These inputs are invented. API rates use decimals (`0.10` means 10%); the interface accepts percentages (`10` means 10%). Money and shares use full units, not millions.
 
-## How I treat the valuation
+## Model assumptions
 
-The model discounts **unlevered free cash flow to the firm** using a discount rate representing WACC. It subtracts net debt from enterprise value to calculate equity value, then divides by shares outstanding. Negative net debt represents net cash.
+I discount **unlevered free cash flow to the firm** using WACC, subtract net debt, and divide equity value by shares outstanding. Negative net debt represents net cash. Reported operating cash flow minus capex isn't automatically unlevered cash flow; model inputs stay separate from the financial report.
 
-The SEC cash-flow figures are research inputs. I don't automatically treat operating cash flow minus capex as unlevered free cash flow; that needs further adjustments. For now, I enter the valuation inputs separately.
+This version uses positive starting cash flow, constant growth, and a Gordon-growth terminal value. It doesn't adjust for changing share counts, excess assets, every non-debt claim, or loss-making businesses. Negative equity estimates remain negative. Results disappear when inputs change.
 
-Banks, insurers, and diversified financial groups need sector-specific valuation methods. Their inclusion in the research catalog does not make this general FCFF model suitable for them. Newly listed companies may also have no annual 10-K facts yet.
+The interface disables the general model for banks, broker-dealers, Berkshire Hathaway, and UnitedHealth in the catalog. These businesses need specialized methods. The generic API itself is not tied to a company ticker.
 
-This first model supports positive starting cash flow, a constant forecast growth rate, and a Gordon-growth terminal value. It does not yet cover loss-making companies, changing share counts, excess assets, or every claim on equity. A negative equity estimate is returned rather than silently clamped to zero.
+## Data and storage
 
-## Data handling
+SEC responses are cached in memory for six hours. Outbound requests are spaced at least one second apart. Reports show both retrieval and response timestamps. Shared rate limiting is needed before running multiple backend instances.
 
-I cache SEC responses in memory for six hours and space outbound requests at least one second apart. The cache resets when the app restarts. This limiter applies to one running backend; shared rate limiting will be needed before running multiple instances.
+I select annual USD facts from supported standard US-GAAP tags, prefer the first supported tag, fill missing periods from alternatives, and keep the latest-filed value per period within a tag. Restatements may change earlier years; cash balances can include comparative dates. This is **not point-in-time data for backtesting**. Fiscal calendars differ across companies.
 
-I keep annual duration facts and choose the latest-filed value for each period within the preferred supported tag. Earlier years may therefore contain restatements. This is **not** point-in-time data for backtesting. Cash balance dates can also include comparative dates from annual filings. Different fiscal calendars need attention when comparing companies.
+Source links lead to each filing's SEC archive directory. The fictional example company is separate from the real catalog and has no filing sources.
 
-Custom XBRL tags and non-USD values aren't supported yet. Each missing metric returns an empty list. I haven't added persistent storage, accounts, stock-price data, or a frontend yet.
+Research notes are browser-local plain text, without cloud sync. Clearing browser storage removes them. Save failures are shown. Accounts, database persistence, stock prices, and portfolios are still to come.
 
 SEC API reference: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
 
@@ -65,18 +104,29 @@ cd backend
 mvn verify
 ```
 
-For just the valuation regression checks, Java is enough:
+```bash
+cd frontend
+npm ci
+npx playwright install chromium
+npm run build
+npm run test:e2e
+```
 
 ```bash
 bash scripts/check-valuation.sh
+bash scripts/build.sh
+bash scripts/smoke-test.sh
+npm run test:integration --prefix frontend
 ```
 
-The valuation checks cover a constant-cash-flow perpetuity, net debt and net cash, discount-rate changes, invalid rates, invalid shares, and numeric overflow. The Maven suite also checks annual fact selection using synthetic data. Tests never call the live SEC API.
+I check valuation math against a constant-cash-flow perpetuity, annual selection against synthetic filings, and HTTP behavior in a Spring application context. Browser tests use stubbed APIs to check search, sources, stale requests, missing data, percentage conversion, notes, and mobile layout. Separate integration tests run against the packaged Spring app without intercepting API requests. They do not establish live SEC coverage. The packaged-app check starts the jar and verifies dashboard assets and APIs together.
+
+GitHub Actions runs backend/package checks and frontend/browser checks on pushes and pull requests. Docker packaging is provided but has not yet been tested in CI.
 
 ## Next steps
 
-1. Run the complete backend suite and verify real filings for the initial company universe.
-2. Store imports and source metadata in PostgreSQL.
-3. Build the company research and comparison screens.
-4. Save valuation assumptions and investment notes.
-5. Add historical prices, simulated holdings, benchmarks, and risk analysis.
+1. Verify live imports and improve accounting-tag coverage.
+2. Store imports, valuation versions, and notes in PostgreSQL.
+3. Add peer comparisons and sensitivity tables.
+4. Integrate historical prices and simulated portfolios.
+5. Add benchmarks and portfolio risk analysis.
