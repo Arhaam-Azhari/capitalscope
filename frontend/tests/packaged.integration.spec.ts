@@ -31,3 +31,24 @@ test('unconfigured live SEC access reports a failure rather than serving example
   await expect(page.getByRole('alert')).toContainText('Live SEC access has not been configured');
   await expect(page.locator('.metric-card')).toHaveCount(0);
 });
+
+
+test('saved scenarios survive reload and can be loaded and deleted', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save scenario', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Calculate valuation' }).click();
+  await expect(page.locator('.result-heading')).toBeVisible();
+  const estimate = await page.locator('.result-heading strong').textContent();
+  await page.getByRole('textbox', { name: 'Scenario name' }).fill('My saved base case');
+  await page.getByRole('button', { name: 'Save scenario', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Load My saved base case', exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('button', { name: 'Load My saved base case', exact: true }).click();
+  await expect(page.locator('.result-heading strong')).toHaveText(estimate!);
+  await page.getByRole('spinbutton', { name: 'Annual growth', exact: false }).fill('7');
+  await expect(page.getByRole('button', { name: 'Save scenario', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Delete My saved base case', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Load My saved base case', exact: true })).toHaveCount(0);
+});

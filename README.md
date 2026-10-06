@@ -1,12 +1,12 @@
 # CapitalScope
 
-I'm building a workspace for company research, valuation, and practice portfolios. This milestone adds a React dashboard to the Java API: I can browse companies, inspect annual figures, adjust valuation assumptions, and keep research notes.
+I'm building a workspace for company research, valuation, and practice portfolios. I can browse companies, inspect annual figures, save valuation scenarios, and keep research notes. SEC imports and valuation versions now live in a database.
 
 ![Company research workspace with explicitly labeled example figures](docs/research-dashboard.png)
 
 ## Run the app
 
-With Docker installed:
+With Docker installed, copy `.env.example` to `.env` and set `DATABASE_PASSWORD` to a password for the local database:
 
 ```bash
 docker compose up --build
@@ -22,6 +22,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
 - Inspect charts, exact values, filing dates, source links, and accounting tags.
 - Enter assumptions in a DCF model and inspect projections, estimated value, and terminal contribution.
+- Save, reload, and delete named valuation scenarios for each company.
 - Save research notes separately for each company in the current browser.
 
 I selected the top 50 American companies from the CompaniesMarketCap ranking observed on October 6, 2026, using one ticker per company. This is a fixed snapshot, not a live ranking. [Company universe](docs/company-universe.md).
@@ -68,6 +69,9 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | `GET /api/companies/{ticker}/financials` | Sourced annual SEC facts |
 | `GET /api/examples/financials` | Explicitly labeled invented example |
 | `POST /api/valuations/dcf` | Generic FCFF calculator |
+| `GET /api/companies/{ticker}/scenarios` | Saved versions for a company (`DEMO` is separate) |
+| `POST /api/companies/{ticker}/scenarios` | Save `{name, assumptions}`; results calculated on the server |
+| `DELETE /api/companies/{ticker}/scenarios/{id}` | Delete one saved version |
 
 Example valuation request:
 
@@ -89,13 +93,17 @@ The interface disables the general model for banks, broker-dealers, Berkshire Ha
 
 ## Data and storage
 
-SEC responses are cached in memory for six hours. Outbound requests are spaced at least one second apart. Reports show both retrieval and response timestamps. Shared rate limiting is needed before running multiple backend instances.
+Successful SEC responses are stored in the database and reused for six hours, including after a restart. Expired entries are refreshed; an upstream failure does not silently serve stale figures. Outbound requests are spaced at least one second apart. Reports show both retrieval and response timestamps. Shared rate limiting is needed before running multiple backend instances.
 
 I select annual USD facts from supported standard US-GAAP tags, prefer the first supported tag, fill missing periods from alternatives, and keep the latest-filed value per period within a tag. Restatements may change earlier years; cash balances can include comparative dates. This is **not point-in-time data for backtesting**. Fiscal calendars differ across companies.
 
 Source links lead to each filing's SEC archive directory. The fictional example company is separate from the real catalog and has no filing sources.
 
-Research notes are browser-local plain text, without cloud sync. Clearing browser storage removes them. Save failures are shown. Accounts, database persistence, stock prices, and portfolios are still to come.
+Research notes are browser-local plain text, without cloud sync. Clearing browser storage removes them. Save failures are shown. Valuation scenarios are stored in the app database with their inputs, calculated outputs, creation date, and model version. Saving again creates another version; editing inputs clears the displayed result until I recalculate.
+
+Docker Compose uses PostgreSQL 17 with a named volume. Local Java runs use a file-backed H2 database at `./data/capitalscope`, relative to the working directory. I use Flyway migrations for both. To connect Java directly to PostgreSQL, set `DATABASE_URL` to a JDBC URL, `DATABASE_USER`, and `DATABASE_PASSWORD`. Keep backups of the database before removing volumes or changing storage.
+
+This is a single shared research workspace without accounts. Saved scenarios are visible to everyone who can reach the app. Compose binds the app to localhost. User accounts, private workspaces, stock prices, and portfolios are still to come.
 
 SEC API reference: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
 
@@ -121,14 +129,14 @@ bash scripts/smoke-test.sh
 npm run test:integration --prefix frontend
 ```
 
-I check valuation math against a constant-cash-flow perpetuity, annual selection against synthetic filings, and HTTP behavior in a Spring application context. Browser tests use stubbed APIs to check search, sources, stale requests, missing data, percentage conversion, notes, and mobile layout. Separate integration tests run against the packaged Spring app without intercepting API requests. They do not establish live SEC coverage. The packaged-app check starts the jar and verifies dashboard assets and APIs together.
+I check valuation math against a constant-cash-flow perpetuity, annual selection against synthetic filings, and HTTP behavior in a Spring application context. Browser tests use stubbed APIs to check search, sources, stale requests, missing data, percentage conversion, notes, and mobile layout. Persistence checks reopen a file database and verify stored snapshots, timestamps, assumptions, and outputs. CI runs the API checks against PostgreSQL. Separate integration tests run against the packaged Spring app without intercepting API requests. They do not establish live SEC coverage. The packaged-app check starts the jar and verifies dashboard assets and APIs together.
 
 GitHub Actions runs backend/package checks and frontend/browser checks on pushes and pull requests. Docker packaging is provided but has not yet been tested in CI.
 
 ## Next steps
 
 1. Verify live imports and improve accounting-tag coverage.
-2. Store imports, valuation versions, and notes in PostgreSQL.
+2. Add accounts and move notes into private research workspaces.
 3. Add peer comparisons and sensitivity tables.
 4. Integrate historical prices and simulated portfolios.
 5. Add benchmarks and portfolio risk analysis.

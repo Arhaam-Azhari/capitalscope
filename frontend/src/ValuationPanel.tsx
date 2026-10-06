@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import SavedScenarios from './SavedScenarios';
 import { money, request } from './api';
-import type { Assumptions, Company, Valuation } from './types';
+import type { Assumptions, Company, Scenario, Valuation } from './types';
 
 type FormValues = Record<keyof Assumptions, string>;
 const fields: { key: keyof Assumptions; label: string; hint: string; min?: number; max?: number; step: string }[] = [
@@ -31,11 +32,20 @@ export default function ValuationPanel({ company }: { company: Company }) {
     setValues(current => ({ ...current, [key]: value }));
   }
 
+  const assumptions = Object.fromEntries(fields.map(({ key }) => [key,
+    Number(values[key]) / (rateKeys.has(key) ? 100 : 1)
+  ])) as Assumptions;
+
+  function load(scenario: Scenario) {
+    active.current?.abort(); setBusy(false); setError('');
+    setValues(Object.fromEntries(fields.map(({ key }) => [key,
+      String(scenario.assumptions[key] * (rateKeys.has(key) ? 100 : 1))
+    ])) as FormValues);
+    setResult(scenario.result);
+  }
+
   async function calculate(event: FormEvent) {
     event.preventDefault();
-    const assumptions = Object.fromEntries(fields.map(({ key }) => [key,
-      Number(values[key]) / (rateKeys.has(key) ? 100 : 1)
-    ])) as Assumptions;
     if (assumptions.terminalGrowthRate >= assumptions.discountRate) {
       setError('Terminal growth must be below the discount rate.'); return;
     }
@@ -73,6 +83,7 @@ export default function ValuationPanel({ company }: { company: Company }) {
         <div className="table-scroll"><table><caption>Forecast cash flow and present value</caption><thead><tr><th>Year</th><th>Unlevered cash flow</th><th>Present value</th></tr></thead><tbody>{result.projections.map(p => <tr key={p.year}><th scope="row">{p.year}</th><td>{money(p.freeCashFlow)}</td><td>{money(p.presentValue)}</td></tr>)}</tbody></table></div>
         <p className="muted small">A model estimate is not a market quote. This version does not adjust for dilution, excess assets, or all non-debt claims.</p>
       </div>}
+      <SavedScenarios ticker={company.ticker} assumptions={result ? assumptions : null} onLoad={load} />
     </>}
   </section>;
 }

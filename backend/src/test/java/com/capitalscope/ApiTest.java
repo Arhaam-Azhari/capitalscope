@@ -51,4 +51,24 @@ class ApiTest {
             .andExpect(status().isBadRequest()).andExpect(jsonPath("$.error").value(
                 "Provide valid JSON with numeric valuation inputs."));
     }
+    @Test void savedScenariosKeepVersionsAndValidateCompanyAndInputs() throws Exception {
+        String payload = """
+            {"name":"My test case","assumptions":{"baseFreeCashFlow":100,"growthRate":0,
+             "discountRate":0.1,"terminalGrowthRate":0,"years":5,"netDebt":100,"sharesOutstanding":10}}
+            """;
+        String body = api.perform(post("/api/companies/aapl/scenarios").contentType(MediaType.APPLICATION_JSON).content(payload))
+            .andExpect(status().isCreated()).andExpect(jsonPath("$.ticker").value("AAPL"))
+            .andExpect(jsonPath("$.result.valuePerShare").value(org.hamcrest.Matchers.closeTo(90.0, 1e-8)))
+            .andReturn().getResponse().getContentAsString();
+        String id = new com.fasterxml.jackson.databind.ObjectMapper().readTree(body).path("id").asText();
+        api.perform(get("/api/companies/AAPL/scenarios")).andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].name").value("My test case"));
+        api.perform(delete("/api/companies/MSFT/scenarios/" + id)).andExpect(status().isNotFound());
+        api.perform(delete("/api/companies/AAPL/scenarios/" + id)).andExpect(status().isNoContent());
+        for (String ticker : new String[]{"UNKNOWN", "JPM"})
+            api.perform(post("/api/companies/" + ticker + "/scenarios").contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isBadRequest());
+        api.perform(post("/api/companies/DEMO/scenarios").contentType(MediaType.APPLICATION_JSON).content("{\"name\":\" \",\"assumptions\":{}}"))
+            .andExpect(status().isBadRequest());
+    }
 }

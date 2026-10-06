@@ -2,6 +2,27 @@ services:
   app:
     build: .
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       SEC_USER_AGENT: ${SEC_USER_AGENT:-}
+      DATABASE_URL: jdbc:postgresql://db:5432/capitalscope
+      DATABASE_USER: capitalscope
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
+    depends_on:
+      db:
+        condition: service_healthy
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: capitalscope
+      POSTGRES_USER: capitalscope
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?Set DATABASE_PASSWORD in .env}
+    volumes:
+      - research-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U capitalscope -d capitalscope"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  research-data:
