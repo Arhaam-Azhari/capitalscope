@@ -52,3 +52,16 @@ test('saved scenarios survive reload and can be loaded and deleted', async ({ pa
   await page.getByRole('button', { name: 'Delete My saved base case', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Load My saved base case', exact: true })).toHaveCount(0);
 });
+
+test('I can inspect fictional peer ratios without confusing them with SEC data', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await expect(page.locator('.comparison-table')).toBeVisible();
+  await expect(page.getByRole('row', { name: /Annual revenue growth/ })).toContainText('10.3%');
+  await expect(page.getByRole('row', { name: /Net income margin/ })).toContainText('11.3%');
+  await expect(page.getByRole('row', { name: /^Cash after capex / }).first()).toContainText('$125M');
+  await expect(page.getByRole('link', { name: 'SEC filing ↗' })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  await expect(page.locator('.comparison-table')).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('SEC_USER_AGENT');
+});
