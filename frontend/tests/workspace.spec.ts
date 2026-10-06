@@ -30,6 +30,7 @@ async function installApi(page: Page) {
         ...p, filed: '2026-02-01', tag: 'TestTag', sourceUrl: 'https://www.sec.gov/Archives/edgar/data/1/000000000126000001/'
       })) }))
     } });
+    if (path === '/api/valuations/dcf/sensitivity') return route.fulfill({ json: { terminalGrowthRates: [0.02], rows: [{ discountRate: 0.1, cells: [{ terminalGrowthRate: 0.02, valuePerShare: 22, error: null, baseCase: true }] }] } });
     if (path === '/api/valuations/dcf') return route.fulfill({ json: {
       projections: [{ year: 1, freeCashFlow: 105000000, presentValue: 95454545 }],
       terminalValue: 1600000000, presentValueOfTerminalValue: 990000000,

@@ -45,6 +45,11 @@ public class ResearchController {
         return DcfCalculator.calculate(assumptions);
     }
 
+    @PostMapping("/valuations/dcf/sensitivity")
+    public DcfSensitivity.Grid sensitivity(@RequestBody DcfCalculator.Assumptions assumptions) {
+        return DcfSensitivity.calculate(assumptions);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> invalid(IllegalArgumentException e) {
         return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
