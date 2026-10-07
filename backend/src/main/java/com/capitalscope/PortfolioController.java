@@ -12,7 +12,8 @@ import java.util.NoSuchElementException;
 @RequestMapping("/api/portfolios")
 public class PortfolioController {
     private final PortfolioService service;
-    public PortfolioController(PortfolioService service) { this.service = service; }
+    private final PriceClient prices;
+    public PortfolioController(PortfolioService service, PriceClient prices) { this.service = service; this.prices = prices; }
     @GetMapping
     public List<PaperPortfolio.Portfolio> list() { return service.list(); }
     @PostMapping
@@ -20,6 +21,10 @@ public class PortfolioController {
     public PaperPortfolio.Summary create(@RequestBody PortfolioService.NewPortfolio request) { return service.create(request); }
     @GetMapping("/{id}")
     public PaperPortfolio.Summary get(@PathVariable String id) { return service.summary(id); }
+    @GetMapping("/{id}/valuation")
+    public PortfolioValuation.Result valuation(@PathVariable String id) {
+        return PortfolioValuation.calculate(service.summary(id), java.time.Instant.now(), prices::storedHistory);
+    }
     @PostMapping("/{id}/trades")
     public PaperPortfolio.Summary trade(@PathVariable String id, @RequestBody PortfolioService.Fill fill) { return service.trade(id, fill); }
     @PostMapping("/{id}/actions")

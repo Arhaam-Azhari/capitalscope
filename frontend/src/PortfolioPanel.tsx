@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import PortfolioValuation from './PortfolioValuation';
 import PortfolioActions from './PortfolioActions';
 import { money, request } from './api';
 import type { Company, Portfolio, PortfolioSummary } from './types';
@@ -66,7 +67,8 @@ export default function PortfolioPanel({ companies }: { companies: Company[] }) 
       <div className="panel-title"><h3>{summary.portfolio.name}</h3><a className="secondary export-link" href={`/api/portfolios/${summary.portfolio.id}/export.csv`}>Download event CSV</a></div>
       <div className="result-summary"><div><span>Available cash</span><strong data-testid="portfolio-cash">{money(summary.cash, false)}</strong></div><div><span>Realized P&amp;L</span><strong data-testid="portfolio-realized">{money(summary.realizedPnl, false)}</strong></div><div><span>Cash dividends received</span><strong data-testid="portfolio-dividends">{money(summary.dividendIncome, false)}</strong></div><div><span>Starting cash</span><strong>{money(summary.portfolio.initialCash, false)}</strong></div></div>
       <div className="table-scroll"><table><caption>Holdings at weighted-average cost</caption><thead><tr><th>Ticker</th><th>Shares</th><th>Cost basis</th><th>Average cost / share</th></tr></thead><tbody>{summary.positions.map(position => <tr key={position.ticker}><th scope="row">{position.ticker}</th><td>{position.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{money(position.costBasis, false)}</td><td>{money(position.averageCost, false)}</td></tr>)}{!summary.positions.length && <tr><td colSpan={4}>No open positions.</td></tr>}</tbody></table></div>
-      <p className="muted small">Cost basis includes buy fees. Realized P&amp;L deducts sell fees using weighted-average cost. This is a practice convention, not a tax-lot calculation. Holdings are not marked to market; manual splits and cash dividends are tracked separately, while unrealized returns are not modeled.</p>
+      <p className="muted small">Cost basis includes buy fees. Realized P&amp;L deducts sell fees using weighted-average cost. This is a practice convention, not a tax-lot calculation. The valuation below uses stored daily closes separately from the trade ledger.</p>
+      <PortfolioValuation summary={summary} />
       <form onSubmit={trade}><h3>Record a simulated fill</h3><div className="model-fields">
         {summary.portfolio.mode === 'market' ? <label>Trade company<select disabled={busy} value={ticker} onChange={e => setTicker(e.target.value)}>{companies.map(c => <option key={c.ticker} value={c.ticker}>{c.name} ({c.ticker})</option>)}</select></label> : <p className="notice example">This portfolio only holds the fictional DEMO company.</p>}
         <label>Trade side<select disabled={busy} value={side} onChange={e => setSide(e.target.value)}><option>BUY</option><option>SELL</option></select></label>

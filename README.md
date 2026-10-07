@@ -21,6 +21,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 ## What I can do
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
+- Value current holdings using stored daily closes, with dated price evidence, partial coverage, and unrealized P&L.
 - Record simulated splits and cash dividends in the same ordered history as trades.
 - Create practice portfolios, record manual simulated buys/sells and fees, and inspect cash, holdings, and realized P&L.
 - Download financial facts and ordered portfolio events as CSV files.
@@ -75,6 +76,7 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | --- | --- |
 | `GET /api/companies/{ticker}/prices` | Cached daily raw prices from Alpha Vantage |
 | `GET /api/examples/prices` | Invented price series for the fictional company |
+| `GET /api/portfolios/{id}/valuation` | Current holdings at stored closes; partial coverage with missing totals |
 | `GET /api/portfolios/{id}/export.csv` | Ordered simulated events, starting cash, exact decimal inputs |
 | `GET /api/companies/{ticker}/financials/export.csv` | Annual facts with units, tags, dates, and sources |
 | `GET /api/examples/financials/export.csv` | Clearly marked fictional facts |
@@ -124,7 +126,7 @@ Research notes are browser-local plain text, without cloud sync. Clearing browse
 
 Docker Compose uses PostgreSQL 17 with a named volume. Local Java runs use a file-backed H2 database at `./data/capitalscope`, relative to the working directory. I use Flyway migrations for both. To connect Java directly to PostgreSQL, set `DATABASE_URL` to a JDBC URL, `DATABASE_USER`, and `DATABASE_PASSWORD`. Keep backups of the database before removing volumes or changing storage.
 
-This is a single shared research workspace without accounts. Saved scenarios are visible to everyone who can reach the app. Compose binds the app to localhost. I still need user accounts and private workspaces. Daily price history and simulated portfolios are available; portfolio returns and corporate-action handling are not.
+This is a single shared research workspace without accounts. Saved scenarios are visible to everyone who can reach the app. Compose binds the app to localhost. I still need user accounts and private workspaces. Daily price history and simulated portfolios are available; performance returns and provider-verified corporate actions are not. I can value current holdings from stored daily closes and record manual practice events.
 
 SEC API reference: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
 
@@ -159,7 +161,7 @@ GitHub Actions runs backend/package checks and frontend/browser checks on pushes
 1. Verify live imports and improve accounting-tag coverage.
 2. Add accounts and move notes into private research workspaces.
 3. Improve peer selection and expand sector-specific models.
-4. Add verified price adjustments, portfolio valuation, and trade corrections.
+4. Add verified price adjustments and trade corrections.
 5. Add benchmarks and portfolio risk analysis.
 
 ## How I compare companies
@@ -186,7 +188,7 @@ I start with a fixed USD cash deposit, record manual simulated fills, and calcul
 
 I use decimal arithmetic, up to six decimals for shares, four for fill prices, and two for fees. I include buy fees in weighted-average cost and deduct sell fees from realized P&L. I round prorated cost to ten decimals and remove the entire remaining basis when a position closes. This is a practice accounting convention, not tax-lot reporting. I reject negative inputs, insufficient cash, overselling, and sell fees above proceeds.
 
-I lock each portfolio row while recording a fill and require a request UUID. Retrying the same fill with the same UUID does not create another trade; reusing it with changed inputs fails. I keep the recorded fills append-only. Corrections, external deposits, provider-verified corporate actions, mark-to-market values, and portfolio return calculations are still to come. Everyone who can access this shared app can see portfolios and record trades.
+I lock each portfolio row while recording a fill and require a request UUID. Retrying the same fill with the same UUID does not create another trade; reusing it with changed inputs fails. I keep the recorded fills append-only. Corrections, external deposits, provider-verified corporate actions and portfolio return calculations are still to come. Everyone who can access this shared app can see portfolios and record trades.
 
 ## How I record simulated splits and dividends
 
@@ -201,3 +203,11 @@ I use the same row lock and request UUID checks for trades and actions. I reject
 I can download annual facts with their original decimal values, units, period dates, filing evidence, accounting tags, data mode, and retrieval timestamp. I keep missing metrics as blank rows rather than writing zeros. I also export portfolio events in recorded order, starting with the initial cash deposit, and mark every row as simulated. I include manual fill prices, fees, split ratios, and dividends so I can inspect the history in a spreadsheet.
 
 I export UTF-8 CSV, escape commas, quotes, and line breaks, and protect user-entered text that could be interpreted as a spreadsheet formula. I preserve decimal numbers in the CSV text; spreadsheet applications may reformat numbers or dates when opening the file. I do not provide an import endpoint or infer verified market events from these exports.
+
+## How I value recorded holdings
+
+I multiply current shares by each ticker's latest stored raw USD close on or before the evaluation date. I keep exact decimal arithmetic for the calculation and show the date, age in calendar days, source, and import time for each usable quote. I can import a company snapshot in Prices and recheck it here; opening a portfolio does not call the external provider. I can still inspect an older stored snapshot after its 24-hour import cache expires, with its age shown explicitly.
+
+I separate the priced holdings subtotal from cash plus all holdings. If any open holding lacks a usable quote, I withhold the complete portfolio value and aggregate unrealized P&L. I compare priced holdings with their remaining fee-inclusive cost basis; cash already includes recorded sales, fees, and dividends. I never substitute fictional closes for market portfolios. My example portfolio uses only invented DEMO closes.
+
+I block a holding's mark when a recorded split is newer than its price date. I still need to verify that manually recorded events match the provider's share basis; this date check alone cannot establish that. I show an estimate of current recorded holdings at dated closes, not a synchronized live value, historical account value, or performance return. I do not include estimated selling costs or annualized returns.

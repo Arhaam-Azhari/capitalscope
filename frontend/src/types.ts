@@ -30,3 +30,9 @@ export type PortfolioSummary = { portfolio: Portfolio; cash: number; realizedPnl
   events: { requestId: string; kind: 'TRADE' | 'SPLIT' | 'DIVIDEND'; ticker: string; value: number | null; denominator: number | null; recordedAt: string }[];
   positions: { ticker: string; quantity: number; costBasis: number; averageCost: number }[];
   trades: { requestId: string; ticker: string; side: string; quantity: number; price: number; fee: number; recordedAt: string }[] };
+
+export type PortfolioMarks = { portfolioId: string; dataMode: 'example' | 'market'; evaluatedAt: string; cash: number;
+  pricedPositions: number; totalPositions: number; complete: boolean; pricedHoldingsValue: number;
+  totalValue: number | null; unrealizedPnl: number | null; holdings: { ticker: string; quantity: number; costBasis: number;
+    close: number | null; priceDate: string | null; priceAgeDays: number | null; source: string | null; sourceUrl: string | null;
+    retrievedAt: string | null; value: number | null; unrealizedPnl: number | null; error: string | null }[] };
