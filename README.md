@@ -21,6 +21,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 ## What I can do
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
+- Inspect cash, company, and sector weights, largest exposures, and the combined top three holdings.
 - Keep a saved company watchlist with theses, risks, research status, and review dates.
 - Value current holdings using stored daily closes, with dated price evidence, partial coverage, and unrealized P&L.
 - Record simulated splits and cash dividends in the same ordered history as trades.
@@ -221,3 +222,9 @@ I block a holding's mark when a recorded split is newer than its price date. I s
 I save one watchlist entry per catalog ticker, plus a clearly fictional DEMO entry. I can record my thesis, risks, research status, and next review date, then open that company's financials, valuation, or prices. I filter active research, reviews due on or before my browser's local date, or all entries including archived research. These dates are a research checklist; I do not send notifications or place trades.
 
 I persist the shortlist in the shared database, separately from my browser-local research notes. I require the version and unique entry ID I opened when saving or deleting an entry, and return a conflict if another session changed it. I use a new entry ID when a removed company is added again, so an old editor cannot overwrite the replacement. I keep the draft after a failed save and explicitly reload to replace it with saved research. I still need accounts and private lists before using this as a personal multi-user research service.
+
+## How I inspect portfolio concentration
+
+I calculate company and sector weights from the same dated holdings valuations, using cash plus all holdings as the denominator. I rank companies and sectors by snapshot value, show my cash weight, and add the three largest company weights together. I show cash in both breakdowns but keep it outside the company and sector rankings. I use the catalog's fixed sector labels, with a separate fictional sector for DEMO.
+
+I withhold every weight and largest-exposure summary if any holding lacks a usable close or total portfolio value is zero. I also withhold a sector's value if any of its holdings is unpriced. I retain available company values for inspection without treating their subset as the whole portfolio. I keep quote evidence in the valuation table, round displayed percentages, and do not claim that this concentration view measures volatility, correlation, or investment suitability.
