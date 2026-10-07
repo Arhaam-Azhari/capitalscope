@@ -21,7 +21,7 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [sector, setSector] = useState('All sectors');
   const catalogSummary = useRef<HTMLElement>(null);
-  const [catalogOpen, setCatalogOpen] = useState(false);
+  const catalogDetails = useRef<HTMLDetailsElement>(null);
   const [section, setSection] = useState<Section>('Financials');
   const [report, setReport] = useState<FinancialReport | null>(null);
   const [reportError, setReportError] = useState('');
@@ -57,17 +57,18 @@ export default function App() {
     return () => controller.abort();
   }, [selected, reportAttempt]);
 
-  function choose(ticker: string) { setSelected(ticker); setSection('Financials'); setCatalogOpen(false); catalogSummary.current?.focus(); }
+  function closeCatalog() { if (catalogDetails.current) catalogDetails.current.open = false; }
+  function choose(ticker: string) { setSelected(ticker); setSection('Financials'); closeCatalog(); catalogSummary.current?.focus(); }
 
   return <div className="workspace">
     <header className="masthead">
       <a className="brand" href="#"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>CapitalScope<small>COMPANY INTELLIGENCE</small></span></a>
-      <nav className="section-tabs" aria-label="Research sections">{tabs.map(t => <button key={t} onClick={() => { setSection(t); setCatalogOpen(false); }} aria-current={section === t ? 'page' : undefined} className={section === t ? 'active' : ''}>{t}</button>)}</nav>
+      <nav className="section-tabs" aria-label="Research sections">{tabs.map(t => <button key={t} onClick={() => { setSection(t); closeCatalog(); }} aria-current={section === t ? 'page' : undefined} className={section === t ? 'active' : ''}>{t}</button>)}</nav>
       <span className="workspace-tag">RESEARCH / 01</span>
     </header>
     <main>
       <div className="context-bar">
-        <details className="company-browser" open={catalogOpen} onToggle={event => setCatalogOpen(event.currentTarget.open)} onKeyDown={event => { if (event.key === 'Escape') { setCatalogOpen(false); catalogSummary.current?.focus(); } }}>
+        <details className="company-browser" ref={catalogDetails} onKeyDown={event => { if (event.key === 'Escape') { closeCatalog(); catalogSummary.current?.focus(); } }}>
           <summary ref={catalogSummary}><span className="picker-icon" aria-hidden="true">⌕</span><strong>Browse companies</strong><span className="picker-current">{isExample ? 'DEMO' : company.ticker}</span><span aria-hidden="true">⌄</span></summary>
           <div className="catalog-popover" aria-label="Company catalog">
       <div className="catalog-heading"><span className="eyebrow">COMPANY UNIVERSE</span><span className="catalog-count">{companies.length || '—'}</span></div>

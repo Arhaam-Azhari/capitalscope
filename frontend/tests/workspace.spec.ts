@@ -62,7 +62,6 @@ test('catalog search, sector filter, and source-linked financials', async ({ pag
   await expect(page.getByRole('heading', { name: 'Apple', exact: true })).toBeVisible();
   await expect(page.locator('.data-banner')).toContainText('SEC financial data');
   await expect(page.getByRole('link', { name: 'SEC filing ↗' }).first()).toHaveAttribute('href', /sec\.gov\/Archives/);
-  await openCatalog(page);
   await page.getByRole('button', { name: /^Net income/ }).click();
   await expect(page.getByRole('heading', { name: 'Net income', exact: true })).toBeVisible();
 });
