@@ -31,6 +31,7 @@ test('dashboard sends percentage inputs to the real Java calculator', async ({ p
 
 test('unconfigured live SEC access reports a failure rather than serving example data', async ({ page }) => {
   await page.goto('/');
+  await page.locator('.company-browser > summary').click();
   await page.getByRole('button', { name: /^Apple/ }).click();
   await expect(page.getByRole('heading', { name: 'Apple', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('Live SEC access has not been configured');
@@ -76,6 +77,7 @@ test('I can inspect example prices and see a clear error for unconfigured market
   await page.getByRole('button', { name: 'Prices', exact: true }).click();
   await expect(page.getByRole('table', { name: 'Daily raw prices, newest first' }).locator('tbody tr')).toHaveCount(50);
   await expect(page.getByText('These prices are invented', { exact: false })).toBeVisible();
+  await page.locator('.company-browser > summary').click();
   await page.getByRole('button', { name: /^Apple/ }).click();
   await page.getByRole('button', { name: 'Prices', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('ALPHA_VANTAGE_API_KEY');

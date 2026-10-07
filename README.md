@@ -2,7 +2,9 @@
 
 I'm building a workspace for company research, valuation, and practice portfolios. I can browse companies, inspect annual figures, save valuation scenarios, and keep research notes. SEC imports and valuation versions now live in a database.
 
-![Company research workspace with explicitly labeled example figures](docs/research-dashboard.png)
+I gave this workspace a midnight-blue and violet design, with top navigation and a searchable company picker. I can read the annual chart beside its source table on desktop; the layout stacks on smaller screens.
+
+![My company research workspace with explicitly labeled example figures](docs/research-dashboard.png)
 
 ## Run the app
 

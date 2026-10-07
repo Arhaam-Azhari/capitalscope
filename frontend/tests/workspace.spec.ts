@@ -15,6 +15,11 @@ const example = {
   }))
 };
 
+async function openCatalog(page: Page) {
+  const picker = page.locator('.company-browser');
+  if (!await picker.evaluate(element => (element as HTMLDetailsElement).open)) await picker.locator('summary').click();
+}
+
 async function installApi(page: Page) {
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
@@ -39,6 +44,7 @@ async function installApi(page: Page) {
     return route.fulfill({ status: 404, json: { error: 'Unknown test route' } });
   });
   await page.goto('/');
+  await openCatalog(page);
   await expect(page.getByRole('button', { name: /^NVIDIA/ })).toBeVisible();
 }
 
@@ -48,12 +54,15 @@ test('catalog search, sector filter, and source-linked financials', async ({ pag
   await page.getByRole('combobox', { name: 'Filter by sector' }).selectOption('Energy');
   await expect(page.locator('.company-option')).toHaveCount(2);
   await page.getByRole('combobox', { name: 'Filter by sector' }).selectOption('All sectors');
+  await openCatalog(page);
   await page.getByRole('textbox', { name: 'Search companies' }).fill('aapl');
   await expect(page.locator('.company-option')).toHaveCount(1);
+  await openCatalog(page);
   await page.getByRole('button', { name: /^Apple/ }).click();
   await expect(page.getByRole('heading', { name: 'Apple', exact: true })).toBeVisible();
   await expect(page.locator('.data-banner')).toContainText('SEC financial data');
   await expect(page.getByRole('link', { name: 'SEC filing ↗' }).first()).toHaveAttribute('href', /sec\.gov\/Archives/);
+  await openCatalog(page);
   await page.getByRole('button', { name: /^Net income/ }).click();
   await expect(page.getByRole('heading', { name: 'Net income', exact: true })).toBeVisible();
 });
@@ -70,6 +79,7 @@ test('SEC failure clears prior data and never silently falls back', async ({ pag
   await installApi(page);
   await expect(page.locator('.metric-card')).toHaveCount(5);
   await page.route('**/api/companies/AAPL/financials', route => route.fulfill({ status: 503, json: { error: 'SEC returned HTTP 403. Try again later.' } }));
+  await openCatalog(page);
   await page.getByRole('button', { name: /^Apple/ }).click();
   await expect(page.getByRole('alert')).toContainText('SEC returned HTTP 403');
   await expect(page.locator('.metric-card')).toHaveCount(0);
@@ -83,9 +93,11 @@ test('changing companies cannot render a late response for the prior selection',
   await page.route('**/api/companies/AAPL/financials', async route => {
     await new Promise(resolve => setTimeout(resolve, 400));
     try { await route.fulfill({ json: { ...example, company: catalog.find(c => c.ticker === 'AAPL'), dataMode: 'sec' } }); }
-    catch { /* The browser may already have canceled the request. */ }
+    catch { /* I allow the browser to cancel the old request. */ }
   });
+  await openCatalog(page);
   await page.getByRole('button', { name: /^Apple/ }).click();
+  await openCatalog(page);
   await page.getByRole('button', { name: /^Microsoft/ }).click();
   await expect(page.getByRole('heading', { name: 'Microsoft', exact: true })).toBeVisible();
   await expect(page.locator('.metric-card')).toHaveCount(5);
@@ -110,7 +122,9 @@ test('valuation converts percentages and clears outdated results when assumption
 
 test('specialized financial companies do not receive generic FCFF valuations', async ({ page }) => {
   await installApi(page);
+  await openCatalog(page);
   await page.getByRole('textbox', { name: 'Search companies' }).fill('JPM');
+  await openCatalog(page);
   await page.getByRole('button', { name: /^JPMorgan Chase/ }).click();
   await page.getByRole('button', { name: 'Valuation', exact: true }).click();
   await expect(page.getByRole('note')).toContainText('sector-specific valuation');
@@ -126,7 +140,9 @@ test('notes persist through reload and stay separate for each company', async ({
   await page.reload();
   await page.getByRole('button', { name: 'Research notes', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /Your notes/ })).toHaveValue('My thesis depends on margin expansion.');
+  await openCatalog(page);
   await page.getByRole('textbox', { name: 'Search companies' }).fill('Apple');
+  await openCatalog(page);
   await page.getByRole('button', { name: /^Apple/ }).click();
   await page.getByRole('button', { name: 'Research notes', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /Your notes/ })).toHaveValue('');
@@ -157,7 +173,9 @@ test('empty metrics display missing data rather than fabricated zeroes', async (
     ...example, company: catalog.find(c => c.ticker === 'SPCX'), dataMode: 'sec',
     metrics: example.metrics.map(m => ({ ...m, annualValues: [] }))
   } }));
+  await openCatalog(page);
   await page.getByRole('textbox', { name: 'Search companies' }).fill('SPCX');
+  await openCatalog(page);
   await page.getByRole('button', { name: /^SpaceX/ }).click();
   await expect(page.getByRole('cell', { name: /Missing data is not zero/ })).toBeVisible();
   await expect(page.locator('.metric-card').first()).toContainText('—');
@@ -167,6 +185,7 @@ test('desktop example screenshot', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await installApi(page);
   await expect(page.locator('.metric-card')).toHaveCount(5);
+  await page.locator('.company-browser > summary').click();
   await page.screenshot({ path: 'test-results/research-dashboard.png', fullPage: true });
 });
 
@@ -189,4 +208,25 @@ test('I preserve negative margins, suppress mismatched periods, and keep partial
   await expect(page.getByRole('link', { name: 'SEC filing ↗' }).first()).toHaveAttribute('href', 'https://www.sec.gov/Archives/example/');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('I can open the company picker with my keyboard and navigate without a sidebar', async ({ page }) => {
+  await installApi(page);
+  const picker = page.locator('.company-browser');
+  await picker.locator('summary').click();
+  await expect(picker).not.toHaveAttribute('open', '');
+  await picker.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('textbox', { name: 'Search companies' })).toBeVisible();
+  await page.getByRole('textbox', { name: 'Search companies' }).fill('Apple');
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await expect(picker).not.toHaveAttribute('open', '');
+  await expect(picker.locator('summary')).toBeFocused();
+  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: 'Search companies' }).focus();
+  await page.keyboard.press('Escape');
+  await expect(picker).not.toHaveAttribute('open', '');
+  await expect(picker.locator('summary')).toBeFocused();
+  await expect(page.locator('.masthead .section-tabs')).toBeVisible();
+  await expect(page.locator('.sidebar')).toHaveCount(0);
 });
