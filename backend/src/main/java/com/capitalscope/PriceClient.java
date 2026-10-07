@@ -28,12 +28,16 @@ public class PriceClient {
                        @Value("${prices.api-key:}") String key) {
         this.jdbc = jdbc; this.mapper = mapper; this.key = key; this.transaction = new TransactionTemplate(manager);
     }
-    public synchronized PriceHistory history(String ticker) {
-        String canonical = CompanyCatalog.find(ticker).ticker();
-        var cached = jdbc.query("SELECT payload FROM daily_prices WHERE ticker = ?", (rs, i) -> {
+    public PriceHistory storedHistory(String ticker) {
+        return jdbc.query("SELECT payload FROM daily_prices WHERE ticker = ?", (rs, i) -> {
             try { return mapper.readValue(rs.getString(1), PriceHistory.class); }
             catch (Exception e) { throw new IllegalStateException("Could not read stored prices."); }
-        }, canonical).stream().findFirst().orElse(null);
+        }, CompanyCatalog.find(ticker).ticker()).stream().findFirst().orElse(null);
+    }
+
+    public synchronized PriceHistory history(String ticker) {
+        String canonical = CompanyCatalog.find(ticker).ticker();
+        var cached = storedHistory(canonical);
         if (cached != null && cached.retrievedAt().plus(Duration.ofHours(24)).isAfter(Instant.now())) return cached;
         if (key.isBlank()) throw new IllegalStateException("Set ALPHA_VANTAGE_API_KEY before importing market prices.");
         try {

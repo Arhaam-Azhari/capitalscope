@@ -177,3 +177,33 @@ test('I can download research and event CSV files with clear provenance', async 
   expect(history).toContain(',true,0,');
   expect(history).toContain('1.500001,100.1234,0.01');
 });
+
+test('I value example holdings and leave missing market prices unavailable', async ({ page }) => {
+  const created = await page.request.post('/api/portfolios', { data: { name: 'My priced example', mode: 'example', initialCash: '1000' } });
+  const id = (await created.json()).portfolio.id;
+  await page.request.post(`/api/portfolios/${id}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'BUY', quantity: '10', price: '20', fee: '1' } });
+  const values = await page.request.get(`/api/portfolios/${id}/valuation`);
+  const marks = await values.json();
+  expect(values.ok()).toBe(true); expect(marks.complete).toBe(true);
+  expect(marks.cash).toBe(799); expect(marks.pricedHoldingsValue).toBe(216);
+  expect(marks.totalValue).toBe(1015); expect(marks.unrealizedPnl).toBe(15);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Open portfolio' }).selectOption(id);
+  await expect(page.getByTestId('portfolio-total-value')).toHaveText('$1,015.00');
+  await expect(page.locator('.portfolio-marks')).toContainText('invented example prices');
+  await expect(page.getByRole('table', { name: 'Current holdings valued at stored daily closes' })).toContainText('2026-09-19');
+  const market = await page.request.post('/api/portfolios', { data: { name: 'My unpriced market', mode: 'market', initialCash: '1000' } });
+  const marketId = (await market.json()).portfolio.id;
+  await page.request.post(`/api/portfolios/${marketId}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'AAPL', side: 'BUY', quantity: '2', price: '100', fee: '0' } });
+  await page.reload();
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Open portfolio' }).selectOption(marketId);
+  await expect(page.getByTestId('portfolio-total-value')).toHaveText('Unavailable');
+  await expect(page.getByTestId('portfolio-unrealized')).toHaveText('Unavailable');
+  await expect(page.locator('.portfolio-marks')).toContainText('No stored prices');
+  await page.getByRole('button', { name: 'Recheck stored prices' }).click();
+  await expect(page.locator('.portfolio-marks')).toContainText('0 of 1 open holdings priced');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
