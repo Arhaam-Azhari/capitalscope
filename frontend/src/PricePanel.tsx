@@ -25,7 +25,7 @@ export default function PricePanel({ company }: { company: Company }) {
       <p className="muted small">{history.source} · {history.days.length} observations{history.retrievedAt && ` · Retrieved ${new Date(history.retrievedAt).toLocaleString()}`}{history.sourceUrl && <> · <a href={history.sourceUrl} target="_blank" rel="noreferrer">Provider documentation ↗</a></>}</p>
       {days.length > 0 && <div className="trend"><svg viewBox="0 0 520 220" role="img" aria-label="Daily closing price trend; exact prices are in the table below">
         <text x="45" y="25">{money(high, false)}</text><text x="45" y="195">{money(low, false)}</text>
-        <polyline fill="none" stroke="#287f66" strokeWidth="3" points={days.map((d, i) => `${x(i)},${y(d.close)}`).join(' ')} />
+        <polyline fill="none" stroke="var(--accent)" strokeWidth="3" points={days.map((d, i) => `${x(i)},${y(d.close)}`).join(' ')} />
         <text x="45" y="215">{days[0].date}</text><text x="485" y="215" textAnchor="end">{days[days.length - 1].date}</text>
       </svg><p className="muted small">Vertical axis spans the observed close-price range; it does not start at zero.</p></div>}
       <div className="table-scroll"><table><caption>Daily raw prices, newest first</caption><thead><tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead><tbody>{history.days.map(d => <tr key={d.date}><th scope="row">{d.date}</th><td>{money(d.open, false)}</td><td>{money(d.high, false)}</td><td>{money(d.low, false)}</td><td>{money(d.close, false)}</td><td>{d.volume.toLocaleString()}</td></tr>)}</tbody></table></div>
