@@ -207,3 +207,58 @@ test('I value example holdings and leave missing market prices unavailable', asy
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('I keep a research shortlist across reloads and open its company analysis', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Watchlist company' }).selectOption('DEMO');
+  await page.getByRole('textbox', { name: 'My investment thesis' }).fill('My thesis depends on margin expansion.');
+  await page.getByRole('textbox', { name: 'Risks and evidence to check' }).fill('I need to check capital spending.');
+  await page.getByLabel('Next review date').fill('2026-01-01');
+  await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Saved to the shared watchlist');
+  await page.reload();
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'My investment thesis' })).toHaveValue('My thesis depends on margin expansion.');
+  await page.getByRole('combobox', { name: 'Show entries' }).selectOption('due');
+  await expect(page.locator('.watchlist-cards')).toContainText('2026-01-01 · due');
+  await page.getByRole('combobox', { name: 'Research status' }).selectOption('archived');
+  await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+  await expect(page.locator('.watchlist-cards')).not.toContainText('Example Manufacturing');
+  await page.getByRole('combobox', { name: 'Show entries' }).selectOption('all');
+  await expect(page.locator('.watchlist-cards')).toContainText('archived');
+  await page.getByRole('button', { name: 'Valuation for DEMO', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Calculate valuation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Show entries' }).selectOption('all');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Remove DEMO from watchlist', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Removed from the shared watchlist');
+  await expect(page.locator('.watchlist-cards')).not.toContainText('Example Manufacturing');
+});
+
+test('I keep my unsaved thesis when another session changes the watchlist', async ({ page }) => {
+  await page.request.put('/api/watchlist/DEMO', { data: { status: 'watching', thesis: 'My original thesis', risks: '', reviewDate: null, version: 0 } });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'My investment thesis' })).toHaveValue('My original thesis');
+  await page.getByRole('textbox', { name: 'My investment thesis' }).fill('My unsaved draft');
+  const entryId = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === 'DEMO').entryId;
+  const changed = await page.request.put('/api/watchlist/DEMO', { data: { status: 'researching', thesis: 'My other session changed this', risks: '', reviewDate: null, version: 1, entryId } });
+  expect(changed.ok()).toBe(true);
+  await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('another session');
+  await expect(page.getByRole('textbox', { name: 'My investment thesis' })).toHaveValue('My unsaved draft');
+  await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'My investment thesis' })).toHaveValue('My other session changed this');
+  await page.getByRole('button', { name: 'Remove DEMO from watchlist', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Removed');
+  await page.route('**/api/watchlist', route => route.fulfill({ status: 503, json: { error: 'My test storage is unavailable' } }));
+  await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('storage is unavailable');
+  await expect(page.getByRole('button', { name: 'Save watchlist entry', exact: true })).toBeDisabled();
+  await page.unroute('**/api/watchlist');
+  await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Save watchlist entry', exact: true })).toBeEnabled();
+});
