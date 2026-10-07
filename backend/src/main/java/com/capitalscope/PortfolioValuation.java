@@ -12,7 +12,7 @@ public final class PortfolioValuation {
                        Instant retrievedAt, BigDecimal value, BigDecimal unrealizedPnl, String error) {}
     public record Result(String portfolioId, String dataMode, Instant evaluatedAt, BigDecimal cash,
                          int pricedPositions, int totalPositions, boolean complete, BigDecimal pricedHoldingsValue,
-                         BigDecimal totalValue, BigDecimal unrealizedPnl, List<Mark> holdings) {}
+                         BigDecimal totalValue, BigDecimal unrealizedPnl, List<Mark> holdings, PortfolioAllocation.Result allocation) {}
     private PortfolioValuation() {}
 
     public static Result calculate(PaperPortfolio.Summary summary, Instant now, Function<String, PriceHistory> storedPrices) {
@@ -50,6 +50,6 @@ public final class PortfolioValuation {
         boolean complete = priced == marks.size();
         // I withhold portfolio-wide totals when any open holding lacks a usable close.
         return new Result(summary.portfolio().id(), summary.portfolio().mode(), now, summary.cash(), priced, marks.size(), complete,
-            pricedValue, complete ? summary.cash().add(pricedValue) : null, complete ? pnl : null, List.copyOf(marks));
+            pricedValue, complete ? summary.cash().add(pricedValue) : null, complete ? pnl : null, List.copyOf(marks), PortfolioAllocation.calculate(summary.cash(), marks, complete));
     }
 }

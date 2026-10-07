@@ -262,3 +262,29 @@ test('I keep my unsaved thesis when another session changes the watchlist', asyn
   await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Save watchlist entry', exact: true })).toBeEnabled();
 });
+
+test('I inspect cash and company concentration without normalizing missing prices', async ({ page }) => {
+  const created = await page.request.post('/api/portfolios', { data: { name: 'My allocation example', mode: 'example', initialCash: '1000' } });
+  const id = (await created.json()).portfolio.id;
+  await page.request.post(`/api/portfolios/${id}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'BUY', quantity: '10', price: '20', fee: '1' } });
+  const allocation = (await (await page.request.get(`/api/portfolios/${id}/valuation`)).json()).allocation;
+  expect(allocation.available).toBe(true); expect(allocation.cashWeight).toBeCloseTo(799 / 1015, 9);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Open portfolio' }).selectOption(id);
+  await expect(page.getByTestId('allocation-cash-weight')).toHaveText('78.7%');
+  await expect(page.getByTestId('allocation-largest-company')).toHaveText('DEMO · 21.3%');
+  await expect(page.getByTestId('allocation-largest-sector')).toHaveText('Fictional Industrials · 21.3%');
+  const market = await page.request.post('/api/portfolios', { data: { name: 'My incomplete allocation', mode: 'market', initialCash: '1000' } });
+  const marketId = (await market.json()).portfolio.id;
+  await page.request.post(`/api/portfolios/${marketId}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'AAPL', side: 'BUY', quantity: '1', price: '100', fee: '0' } });
+  await page.reload();
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Open portfolio' }).selectOption(marketId);
+  await expect(page.getByTestId('allocation-cash-weight')).toHaveText('Unavailable');
+  await expect(page.getByTestId('allocation-largest-company')).toHaveText('Unavailable');
+  await expect(page.getByRole('table', { name: 'Sector allocation including cash' })).toContainText('Technology');
+  await expect(page.locator('.allocation-meter')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

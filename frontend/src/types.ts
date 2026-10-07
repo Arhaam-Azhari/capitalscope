@@ -33,8 +33,13 @@ export type PortfolioSummary = { portfolio: Portfolio; cash: number; realizedPnl
 
 export type PortfolioMarks = { portfolioId: string; dataMode: 'example' | 'market'; evaluatedAt: string; cash: number;
   pricedPositions: number; totalPositions: number; complete: boolean; pricedHoldingsValue: number;
-  totalValue: number | null; unrealizedPnl: number | null; holdings: { ticker: string; quantity: number; costBasis: number;
+  totalValue: number | null; unrealizedPnl: number | null; allocation: PortfolioAllocation; holdings: { ticker: string; quantity: number; costBasis: number;
     close: number | null; priceDate: string | null; priceAgeDays: number | null; source: string | null; sourceUrl: string | null;
     retrievedAt: string | null; value: number | null; unrealizedPnl: number | null; error: string | null }[] };
 
 export type WatchlistEntry = { entryId: string; ticker: string; status: 'watching' | 'researching' | 'archived'; thesis: string; risks: string; reviewDate: string | null; version: number; createdAt: string; updatedAt: string };
+
+export type Exposure = { label: string; value: number | null; weight: number | null };
+export type PortfolioAllocation = { available: boolean; unavailableReason: string | null; cashWeight: number | null;
+  largestHolding: Exposure | null; largestSector: Exposure | null; topThreeHoldingsWeight: number | null;
+  companies: Exposure[]; sectors: Exposure[] };
