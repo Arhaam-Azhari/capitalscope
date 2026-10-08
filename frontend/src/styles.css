@@ -18,3 +18,7 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .scenario-pick{display:flex;align-items:center;gap:8px;font-size:11px;max-width:200px;overflow-wrap:anywhere}.scenario-pick input{accent-color:var(--accent);width:16px;height:16px;flex-shrink:0}.scenario-comparison{border-top:1px solid var(--line);margin-top:24px;padding-top:22px}.scenario-comparison h3{margin:8px 0 0}.comparison-baseline{display:grid;gap:8px;max-width:480px;font-size:12px}.scenario-comparison-table thead th{min-width:190px;max-width:300px;white-space:normal;overflow-wrap:anywhere}.scenario-comparison-table .assumption-changed{background:#29233f;color:#e0d8ff}.scenario-comparison-table td .comparison-evidence{font-family:Arial,sans-serif;font-size:9px;color:#c5bcf1}
 
 .comparison-baseline{min-width:0}.comparison-baseline select{width:100%;min-width:0}
+
+.portfolio-stress { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
+.stress-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 1rem; margin-bottom: 1rem; }
+.stress-inputs label { display: grid; gap: .5rem; }

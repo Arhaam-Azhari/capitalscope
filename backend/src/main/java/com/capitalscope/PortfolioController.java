@@ -25,6 +25,10 @@ public class PortfolioController {
     public PortfolioValuation.Result valuation(@PathVariable String id) {
         return PortfolioValuation.calculate(service.summary(id), java.time.Instant.now(), prices::storedHistory);
     }
+    @PostMapping("/{id}/stress")
+    public PortfolioStress.Result stress(@PathVariable String id, @RequestBody PortfolioStress.Assumptions request) {
+        return PortfolioStress.calculate(valuation(id), request);
+    }
     @PostMapping("/{id}/trades")
     public PaperPortfolio.Summary trade(@PathVariable String id, @RequestBody PortfolioService.Fill fill) { return service.trade(id, fill); }
     @PostMapping("/{id}/actions")
