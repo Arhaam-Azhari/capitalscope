@@ -39,4 +39,45 @@ public final class CsvExport {
         }
         return csv.toString();
     }
+    public static String stress(PortfolioStressStore.Scenario scenario) {
+        var result = scenario.result();
+        StringBuilder csv = new StringBuilder(row("scenario_id", "portfolio_id", "scenario_name", "saved_at", "model_version", "data_mode",
+            "evaluated_at", "currency", "hypothetical", "simulated_holdings", "complete", "priced_positions", "total_positions",
+            "record_type", "ticker", "sector", "metric", "unit", "value", "shares", "raw_close", "price_date", "price_age_days",
+            "source", "source_url", "retrieved_at", "price_error"));
+        csv.append(stressRow(scenario, "ASSUMPTION", null, null, "default_price_change", "decimal_rate", result.assumptions().defaultShock()));
+        // I keep the original overrides, even if the portfolio's sectors have since changed.
+        new java.util.TreeMap<>(result.assumptions().sectorShocks()).forEach((sector, shock) ->
+            csv.append(stressRow(scenario, "ASSUMPTION", null, sector, "sector_price_change", "decimal_rate", shock)));
+        csv.append(stressRow(scenario, "PORTFOLIO", null, null, "cash_held_fixed", "USD", result.baseline().cash()));
+        csv.append(stressRow(scenario, "PORTFOLIO", null, null, "baseline_priced_holdings_subtotal", "USD", result.baseline().pricedHoldingsValue()));
+        csv.append(stressRow(scenario, "PORTFOLIO", null, null, "stressed_priced_holdings_subtotal", "USD", result.stressedPricedHoldingsValue()));
+        csv.append(stressRow(scenario, "PORTFOLIO", null, null, "baseline_total_value", "USD", result.baseline().totalValue()));
+        csv.append(stressRow(scenario, "PORTFOLIO", null, null, "stressed_total_value", "USD", result.stressedTotalValue()));
+        csv.append(stressRow(scenario, "PORTFOLIO", null, null, "value_change", "USD", result.change()));
+        csv.append(stressRow(scenario, "PORTFOLIO", null, null, "relative_value_change", "decimal_rate", result.relativeChange()));
+        for (var holding : result.holdings()) {
+            csv.append(stressRow(scenario, "HOLDING", holding, holding.sector(), "applied_price_change", "decimal_rate", holding.shock()));
+            csv.append(stressRow(scenario, "HOLDING", holding, holding.sector(), "remaining_cost_basis", "USD", holding.baseline().costBasis()));
+            csv.append(stressRow(scenario, "HOLDING", holding, holding.sector(), "baseline_value", "USD", holding.baseline().value()));
+            csv.append(stressRow(scenario, "HOLDING", holding, holding.sector(), "stressed_value", "USD", holding.stressedValue()));
+            csv.append(stressRow(scenario, "HOLDING", holding, holding.sector(), "value_change", "USD", holding.change()));
+        }
+        csv.append(stressRow(scenario, "METHOD", null, null, "interpretation", "text",
+            "I apply each user-entered price change once to saved holding values and keep cash and shares fixed. Rates are decimal fractions; -0.20 means -20%. This is a saved hypothetical snapshot, not a forecast or historical event replay. I exclude trading costs, taxes, liquidity, correlations, and currency changes. Blank values are unavailable, not zero; priced subtotals exclude unpriced holdings."));
+        return csv.toString();
+    }
+    private static String stressRow(PortfolioStressStore.Scenario scenario, String kind, PortfolioStress.Holding holding,
+                                    String sector, String metric, String unit, Object value) {
+        var baseline = scenario.result().baseline();
+        var mark = holding == null ? null : holding.baseline();
+        // I export frozen evidence without reading current holdings or requesting new quotes.
+        return row(scenario.id(), scenario.portfolioId(), scenario.name(), scenario.createdAt(), scenario.modelVersion(), baseline.dataMode(),
+            baseline.evaluatedAt(), "USD", true, true, baseline.complete(), baseline.pricedPositions(), baseline.totalPositions(), kind,
+            mark == null ? null : mark.ticker(), sector, metric, unit, value,
+            mark == null ? null : mark.quantity(), mark == null ? null : mark.close(), mark == null ? null : mark.priceDate(),
+            mark == null ? null : mark.priceAgeDays(), mark == null ? null : mark.source(), mark == null ? null : mark.sourceUrl(),
+            mark == null ? null : mark.retrievedAt(), mark == null ? null : mark.error());
+    }
+
 }

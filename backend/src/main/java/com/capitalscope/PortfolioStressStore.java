@@ -26,6 +26,12 @@ public class PortfolioStressStore {
             (rs, row) -> new Scenario(rs.getString("id"), portfolioId, rs.getString("name"), Instant.parse(rs.getString("created_at")),
                 rs.getString("model_version"), read(rs.getString("result"))), portfolioId);
     }
+    public Scenario find(String portfolioId, String id) {
+        return jdbc.query("SELECT * FROM portfolio_stress_scenarios WHERE portfolio_id = ? AND id = ?",
+            (rs, row) -> new Scenario(rs.getString("id"), portfolioId, rs.getString("name"), Instant.parse(rs.getString("created_at")),
+                rs.getString("model_version"), read(rs.getString("result"))), portfolioId, id).stream().findFirst()
+            .orElseThrow(() -> new NoSuchElementException("This saved stress scenario was not found in this portfolio."));
+    }
     @Transactional
     public Scenario save(String portfolioId, SaveRequest request) {
         if (request.name() == null || request.name().isBlank() || request.name().strip().length() > 80)
