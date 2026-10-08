@@ -23,6 +23,8 @@ async function openCatalog(page: Page) {
 async function installApi(page: Page) {
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/scenarios/price-context')) return route.fulfill({ json: { ticker: path.split('/')[3], dataMode: path.includes('/DEMO/') ? 'example' : 'market',
+      evaluatedAt: '2026-10-08T00:00:00Z', shareBasisConfirmed: false, quote: null, quoteError: 'No stored close in this fixture.', scenarios: [] } });
     if (path.endsWith('/scenarios')) return route.fulfill({ json: [] });
     if (path === '/api/companies') return route.fulfill({ json: catalog });
     if (path === '/api/universe') return route.fulfill({ json: { asOf: '2026-10-06', count: 50, dynamic: false } });
@@ -242,6 +244,7 @@ test('I compare saved cases, switch baselines, and export my assumptions without
   ].map(item => ({ id: item.id, name: item.name, ticker: 'DEMO', createdAt: '2026-10-07T00:00:00Z', modelVersion: 'fcff-v1',
     assumptions: { ...assumptions, growthRate: item.growth }, result: { projections: [], enterpriseValue: 1200000000, equityValue: 1000000000, valuePerShare: item.value, terminalValueShare: .7, terminalValue: 1000000000, presentValueOfTerminalValue: 840000000 } }));
   await page.route(/\/api\/companies\/DEMO\/scenarios(?:\/[^/]+)?$/,  route => {
+    if (new URL(route.request().url()).pathname.endsWith('/price-context')) return route.fallback();
     if (route.request().method() === 'DELETE') { cases = cases.filter(item => !route.request().url().endsWith(`/${item.id}`)); return route.fulfill({ status: 204 }); }
     return route.fulfill({ json: cases });
   });
