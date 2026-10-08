@@ -47,11 +47,18 @@ class PortfolioStressScenarioTest {
             .andExpect(status().isCreated()).andExpect(jsonPath("$.result.baseline.cash").value(998))
             .andExpect(jsonPath("$.result.stressedTotalValue").value(998)).andReturn().getResponse().getContentAsString();
         assertNotEquals(savedId, mapper.readTree(second).get("id").asText());
+        mvc.perform(get(path + "/" + savedId + "/export.csv")).andExpect(status().isOk())
+            .andExpect(header().string("Content-Disposition", "attachment; filename=portfolio-stress-scenario.csv"))
+            .andExpect(content().contentTypeCompatibleWith("text/csv"))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("\"stressed_total_value\",\"USD\",971.8")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("\"2026-09-19\"")));
         String other = portfolio("example");
         mvc.perform(delete("/api/portfolios/" + other + "/stress-scenarios/" + savedId)).andExpect(status().isNotFound());
+        mvc.perform(get("/api/portfolios/" + other + "/stress-scenarios/" + savedId + "/export.csv")).andExpect(status().isNotFound());
         assertEquals(2, store.list(id).size());
         mvc.perform(delete(path + "/" + savedId)).andExpect(status().isNoContent());
         mvc.perform(delete(path + "/" + savedId)).andExpect(status().isNotFound());
+        mvc.perform(get(path + "/" + savedId + "/export.csv")).andExpect(status().isNotFound());
         assertEquals(1, store.list(id).size());
     }
     @Test void iPreserveIncompleteCoverageAndRejectInvalidInputsOrUnknownPortfolios() throws Exception {

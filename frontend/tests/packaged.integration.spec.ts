@@ -387,3 +387,32 @@ test('I preserve a saved stress snapshot while rerunning its assumptions on chan
   await expect(page.getByTestId('saved-stress-total')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Review My downside snapshot', exact: true })).toHaveCount(0);
 });
+
+test('I download a saved stress report without replacing its original baseline', async ({ page }) => {
+  const created = await page.request.post('/api/portfolios', { data: { name: 'My report portfolio', mode: 'example', initialCash: '1000' } });
+  const id = (await created.json()).portfolio.id;
+  await page.request.post(`/api/portfolios/${id}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'BUY', quantity: '10', price: '20', fee: '1' } });
+  const saved = await page.request.post(`/api/portfolios/${id}/stress-scenarios`, { data: { name: '=My, "stress"\nreport', assumptions: { defaultShock: '-0.2', sectorShocks: {} } } });
+  expect(saved.ok()).toBe(true);
+  await page.request.post(`/api/portfolios/${id}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'SELL', quantity: '10', price: '20', fee: '1' } });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Open portfolio' }).selectOption(id);
+  await expect(page.getByTestId('portfolio-cash')).toHaveText('$998.00');
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('link', { name: /Download CSV for/ }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('portfolio-stress-scenario.csv');
+  const content = await readFile((await download.path())!, 'utf8');
+  expect(content).toContain('"\'=My, ""stress""\nreport"');
+  expect(content).toContain('"default_price_change","decimal_rate",-0.2');
+  expect(content).toContain('"stressed_total_value","USD",971.8');
+  expect(content).toContain('"cash_held_fixed","USD",799');
+  expect(content).toContain('"2026-09-19"');
+  expect(content).toContain('"hypothetical","simulated_holdings"');
+  expect(content).toContain('Blank values are unavailable, not zero');
+  await download.saveAs('test-results/saved-stress-report.csv');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.locator('.saved-stress').screenshot({ path: 'test-results/stress-report-download-mobile.png' });
+});

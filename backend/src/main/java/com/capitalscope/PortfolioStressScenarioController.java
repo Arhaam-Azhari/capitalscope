@@ -18,6 +18,12 @@ public class PortfolioStressScenarioController {
     public PortfolioStressStore.Scenario save(@PathVariable String portfolioId, @RequestBody PortfolioStressStore.SaveRequest request) {
         return store.save(portfolioId, request);
     }
+    @GetMapping(value = "/{id}/export.csv")
+    public ResponseEntity<String> export(@PathVariable String portfolioId, @PathVariable String id) {
+        return ResponseEntity.ok().header("Content-Disposition", "attachment; filename=portfolio-stress-scenario.csv")
+            .contentType(org.springframework.http.MediaType.parseMediaType("text/csv;charset=UTF-8"))
+            .body(CsvExport.stress(store.find(portfolioId, id)));
+    }
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable String portfolioId, @PathVariable String id) {
         return store.delete(portfolioId, id) ? ResponseEntity.noContent().build() : ResponseEntity.notFound().build();
