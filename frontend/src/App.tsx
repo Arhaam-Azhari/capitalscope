@@ -8,9 +8,10 @@ import PricePanel from './PricePanel';
 import PortfolioPanel from './PortfolioPanel';
 import WatchlistPanel from './WatchlistPanel';
 import ResearchNotes from './ResearchNotes';
+import ResearchSummary from './ResearchSummary';
 
 const demo: Company = { ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Industrials' };
-const tabs = ['Financials', 'Valuation', 'Research notes', 'Compare companies', 'Prices', 'Portfolios', 'Watchlist'] as const;
+const tabs = ['Financials', 'Research summary', 'Valuation', 'Research notes', 'Compare companies', 'Prices', 'Portfolios', 'Watchlist'] as const;
 type Section = typeof tabs[number];
 
 export default function App() {
@@ -88,7 +89,7 @@ export default function App() {
       </div>
       <div className="main-content">
         <div className="page-intro"><div><span className="eyebrow">RESEARCH / {isExample ? 'EXAMPLE' : company.ticker}</span><h1>{globalSection ? section === 'Portfolios' ? 'Practice portfolios' : section === 'Watchlist' ? 'Research watchlist' : 'Company comparisons' : company.name}</h1><p className="muted">Financial evidence. Independent assumptions. A clearer investment thesis.</p></div><div className="company-badge"><span className="eyebrow">{globalSection ? 'WORKSPACE' : 'INSTRUMENT'}</span><strong>{globalSection ? 'RESEARCH' : company.ticker}</strong><span>{globalSection ? 'Analysis & practice' : company.sector}</span></div></div>
-        <div className={`data-banner ${isExample ? 'example' : 'live'}`}><div><span className="status-dot" /><strong>{section === 'Watchlist' ? 'Shared research watchlist' : section === 'Portfolios' ? 'Simulated portfolio workspace' : section === 'Compare companies' ? 'Comparison workspace · sources shown below' : section === 'Prices' ? isExample ? 'Example prices · invented figures' : 'Daily market prices' : isExample ? 'Example data · invented figures' : 'SEC financial data'}</strong><p>{section === 'Watchlist' ? 'Saved theses, research status, and review dates. Company sources remain in the analysis views.' : section === 'Portfolios' ? 'Manual simulated trades in a shared practice workspace. No broker orders or real money.' : section === 'Compare companies' ? 'Choose fictional peers or real company filings in the comparison controls.' : section === 'Prices' ? 'Daily raw price history, with source and data mode shown below.' : isExample ? 'This workspace shows a fictional company. Select a listed company to request its real filings.' : 'Annual reported facts, with filing sources. The catalog ranking is a fixed snapshot.'}</p></div>{section === 'Financials' && !isExample && report?.retrievedAt && <span className="retrieved">Retrieved<br />{new Date(report.retrievedAt).toLocaleString()}</span>}</div>
+        <div className={`data-banner ${isExample ? 'example' : 'live'}`}><div><span className="status-dot" /><strong>{section === 'Research summary' ? 'Company research summary · dated evidence' : section === 'Watchlist' ? 'Shared research watchlist' : section === 'Portfolios' ? 'Simulated portfolio workspace' : section === 'Compare companies' ? 'Comparison workspace · sources shown below' : section === 'Prices' ? isExample ? 'Example prices · invented figures' : 'Daily market prices' : isExample ? 'Example data · invented figures' : 'SEC financial data'}</strong><p>{section === 'Research summary' ? 'Saved research, financial facts, model cases, and stored closes retain their own sources and dates.' : section === 'Watchlist' ? 'Saved theses, research status, and review dates. Company sources remain in the analysis views.' : section === 'Portfolios' ? 'Manual simulated trades in a shared practice workspace. No broker orders or real money.' : section === 'Compare companies' ? 'Choose fictional peers or real company filings in the comparison controls.' : section === 'Prices' ? 'Daily raw price history, with source and data mode shown below.' : isExample ? 'This workspace shows a fictional company. Select a listed company to request its real filings.' : 'Annual reported facts, with filing sources. The catalog ranking is a fixed snapshot.'}</p></div>{section === 'Financials' && !isExample && report?.retrievedAt && <span className="retrieved">Retrieved<br />{new Date(report.retrievedAt).toLocaleString()}</span>}</div>
 
         {section === 'Financials' && <>
           {loading && <div className="panel loading-state" role="status"><span className="loader" />{isExample ? 'Opening example workspace…' : `Retrieving ${company.ticker} financials…`}</div>}
@@ -100,6 +101,7 @@ export default function App() {
         {section === 'Prices' && <PricePanel key={selected} company={company} />}
         {section === 'Portfolios' && <PortfolioPanel companies={companies} />}
         {section === 'Watchlist' && <WatchlistPanel companies={companies} currentTicker={selected} onOpen={(ticker, target) => { setSelected(ticker); setSection(target); closeCatalog(); }} />}
+        {section === 'Research summary' && <ResearchSummary key={selected} company={company} report={report} financialLoading={loading} financialError={reportError} onOpen={target => setSection(target)} />}
         {section === 'Research notes' && <ResearchNotes key={selected} company={company} />}
         <footer className="workspace-footer"><span>CapitalScope</span><span>Company research & valuation · {isExample ? 'Example workspace' : company.ticker}</span></footer>
       </div>

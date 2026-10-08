@@ -581,3 +581,43 @@ test('I download current saved watchlist research while keeping my filtered draf
     }
   }
 });
+
+
+test('I gather saved company research and dated evidence without importing prices', async ({ page }) => {
+  const existing = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === 'DEMO');
+  const watchlist = await page.request.put('/api/watchlist/DEMO', { data: { status: 'archived', thesis: 'My summary thesis\nMy second evidence line', risks: 'My summary risk', reviewDate: '2026-12-01', version: existing?.version || 0, entryId: existing?.entryId || null } });
+  expect(watchlist.ok()).toBe(true);
+  const saved = await page.request.post('/api/companies/DEMO/scenarios', { data: { name: 'My summary case', assumptions: {
+    baseFreeCashFlow: 1000000, growthRate: 0.05, discountRate: 0.10, terminalGrowthRate: 0.02, years: 5, netDebt: 100000000, sharesOutstanding: 1000000
+  } } });
+  expect(saved.ok()).toBe(true); const scenario = await saved.json();
+  const imports: string[] = [];
+  page.on('request', request => { if (new URL(request.url()).pathname.endsWith('/prices')) imports.push(request.url()); });
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+    const summary = page.getByRole('region', { name: 'Research summary for DEMO', exact: true });
+    await expect(summary.getByRole('region', { name: 'Saved company thesis' })).toContainText('My summary thesis');
+    await expect(summary).toContainText('My summary risk');
+    await expect(summary).toContainText('This entry is archived');
+    await expect(summary.getByTestId('summary-close')).toHaveText('$21.60');
+    await expect(summary.getByRole('region', { name: 'Company stored close' })).toContainText('Invented example close');
+    await expect(summary.getByRole('region', { name: 'Company stored close' })).toContainText('2026-09-19');
+    await expect(summary.getByRole('region', { name: 'Company financial evidence' })).toContainText('$1,280,000,000.00');
+    await expect(summary.getByRole('row', { name: /^My summary case/ })).toContainText(new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(scenario.result.valuePerShare));
+    expect(scenario.result.valuePerShare).toBeLessThan(0);
+    await summary.getByRole('button', { name: 'Reload saved research' }).click();
+    await expect(summary.getByTestId('summary-close')).toHaveText('$21.60');
+    expect(imports).toEqual([]);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await summary.screenshot({ path: 'test-results/company-research-summary-mobile.png' });
+    await summary.getByRole('button', { name: 'Open watchlist', exact: true }).click();
+    await expect(page.getByLabel('Watchlist company')).toHaveValue('DEMO');
+    await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My summary thesis\nMy second evidence line');
+  } finally {
+    await page.request.delete(`/api/companies/DEMO/scenarios/${scenario.id}`);
+    const entry = (await (await page.request.get('/api/watchlist')).json()).find((item: { ticker: string }) => item.ticker === 'DEMO');
+    if (entry) await page.request.delete(`/api/watchlist/DEMO?version=${entry.version}&entryId=${entry.entryId}`);
+  }
+});

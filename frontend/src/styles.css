@@ -46,3 +46,10 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .watchlist-search { display: grid; gap: .5rem; margin: 1rem 0; }
 .watchlist-search input { min-width: 0; width: 100%; }
 .review-note-gap { color: #e9c58e; font-size: 12px; }
+.summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.research-summary .panel { min-width: 0; }
+.research-summary .panel-title { flex-wrap: wrap; }
+.research-summary .panel-title h3 { flex: 1 1 200px; }
+.summary-notes { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
+.summary-close { font: 32px monospace; color: var(--accent); margin: 1rem 0; }
+@media (max-width: 760px) { .summary-grid { grid-template-columns: 1fr; gap: 0; } }
