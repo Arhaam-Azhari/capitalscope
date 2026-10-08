@@ -288,3 +288,27 @@ test('I inspect cash and company concentration without normalizing missing price
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('I compare saved Java valuations and keep the open assumptions unchanged', async ({ page }) => {
+  const inputs = { baseFreeCashFlow: 100, growthRate: 0, discountRate: .1, terminalGrowthRate: 0, years: 5, netDebt: 100, sharesOutstanding: 10 };
+  const base = await page.request.post('/api/companies/DEMO/scenarios', { data: { name: 'My comparison base', assumptions: inputs } });
+  const upside = await page.request.post('/api/companies/DEMO/scenarios', { data: { name: 'My comparison upside', assumptions: { ...inputs, growthRate: .1 } } });
+  expect(base.ok()).toBe(true); expect(upside.ok()).toBe(true);
+  const baseId = (await base.json()).id, upsideId = (await upside.json()).id;
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Compare My comparison base', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Compare My comparison upside', exact: true }).check();
+  const table = page.getByRole('table', { name: 'Saved assumptions and valuation estimates' });
+  await expect(table.getByRole('row', { name: /^Estimated value \/ share/ })).toContainText('$90.00');
+  await expect(table.getByRole('row', { name: /^Estimated value \/ share/ })).toContainText('$140.00');
+  await expect(table.getByRole('row', { name: /^Difference \/ share/ })).toContainText('$50.00');
+  await expect(page.getByRole('spinbutton', { name: 'Starting unlevered cash flow', exact: false })).toHaveValue('100000000');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.locator('.scenario-comparison').screenshot({ path: 'test-results/scenario-comparison-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('.scenario-comparison').screenshot({ path: 'test-results/scenario-comparison-mobile.png' });
+  await page.request.delete(`/api/companies/DEMO/scenarios/${baseId}`);
+  await page.request.delete(`/api/companies/DEMO/scenarios/${upsideId}`);
+});

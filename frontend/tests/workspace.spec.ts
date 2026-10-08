@@ -229,3 +229,70 @@ test('I can open the company picker with my keyboard and navigate without a side
   await expect(page.locator('.masthead .section-tabs')).toBeVisible();
   await expect(page.locator('.sidebar')).toHaveCount(0);
 });
+
+test('I compare saved cases, switch baselines, and export my assumptions without changing the model', async ({ page }) => {
+  await installApi(page);
+  const assumptions = { baseFreeCashFlow: 100000000, growthRate: .05, discountRate: .1, terminalGrowthRate: .02, years: 5, netDebt: 200000000, sharesOutstanding: 50000000 };
+  let cases = [
+    { id: 'base', name: '=My base, "case"', value: 20, growth: .05 },
+    { id: 'up', name: 'My upside', value: 30, growth: .08 },
+    { id: 'down', name: 'My downside', value: 10, growth: .01 },
+    { id: 'four', name: 'My fourth case', value: 25, growth: .06 },
+    { id: 'five', name: 'My fifth case', value: 40, growth: .1 }
+  ].map(item => ({ id: item.id, name: item.name, ticker: 'DEMO', createdAt: '2026-10-07T00:00:00Z', modelVersion: 'fcff-v1',
+    assumptions: { ...assumptions, growthRate: item.growth }, result: { projections: [], enterpriseValue: 1200000000, equityValue: 1000000000, valuePerShare: item.value, terminalValueShare: .7, terminalValue: 1000000000, presentValueOfTerminalValue: 840000000 } }));
+  await page.route(/\/api\/companies\/DEMO\/scenarios(?:\/[^/]+)?$/,  route => {
+    if (route.request().method() === 'DELETE') { cases = cases.filter(item => !route.request().url().endsWith(`/${item.id}`)); return route.fulfill({ status: 204 }); }
+    return route.fulfill({ json: cases });
+  });
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Compare =My base, "case"', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Compare My upside', exact: true }).check();
+  const table = page.getByRole('table', { name: 'Saved assumptions and valuation estimates' });
+  await expect(table.getByRole('row', { name: /^Relative difference vs baseline/ })).toContainText('50%');
+  await expect(table.getByRole('row', { name: /^Annual growth/ })).toContainText('Changed from baseline');
+  await page.getByRole('combobox', { name: 'Comparison baseline' }).selectOption('up');
+  await expect(table.getByRole('row', { name: /^Difference \/ share vs baseline/ })).toContainText('-$10.00');
+  await expect(page.getByRole('spinbutton', { name: 'Annual growth', exact: false })).toHaveValue('5');
+  await expect(page.locator('.valuation-result')).toHaveCount(0);
+  const downloaded = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download comparison CSV' }).click();
+  const file = await downloaded;
+  const { readFile } = await import('node:fs/promises');
+  const csv = await readFile((await file.path())!, 'utf8');
+  expect(file.suggestedFilename()).toBe('valuation-comparison.csv');
+  expect(csv).toContain('"\'=My base, ""case"""');
+  expect(csv).toContain('"fcff-v1","up",100000000,0.05,0.1,0.02,5');
+  await page.getByRole('checkbox', { name: 'Compare My downside', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Compare My fourth case', exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Compare My fifth case', exact: true })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Delete My upside', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Comparison baseline' })).toHaveValue('base');
+  await expect(table).not.toContainText('My upside');
+});
+
+test('I leave relative differences unavailable for nonpositive baselines and deltas unavailable across models', async ({ page }) => {
+  await installApi(page);
+  const cases = [
+    { id: 'zero', name: 'My zero case', value: 0, model: 'fcff-v1' },
+    { id: 'negative', name: 'My negative case', value: -5, model: 'fcff-v1' },
+    { id: 'other', name: 'My different model', value: 10, model: 'other-v2' }
+  ].map(item => ({ id: item.id, name: item.name, ticker: 'DEMO', createdAt: '2026-10-07T00:00:00Z', modelVersion: item.model,
+    assumptions: { baseFreeCashFlow: 100, growthRate: .05, discountRate: .1, terminalGrowthRate: .02, years: 5, netDebt: 200, sharesOutstanding: 50 },
+    result: { projections: [], enterpriseValue: 200, equityValue: item.value * 50, valuePerShare: item.value, terminalValueShare: .7 } }));
+  await page.route('**/api/companies/DEMO/scenarios', route => route.fulfill({ json: cases }));
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Compare My zero case', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Compare My negative case', exact: true }).check();
+  const table = page.getByRole('table', { name: 'Saved assumptions and valuation estimates' });
+  await expect(table.getByRole('row', { name: /^Relative difference/ })).toContainText('baseline is not positive');
+  await expect(table.getByRole('row', { name: /^Difference \/ share/ })).toContainText('-$5.00');
+  await page.getByRole('combobox', { name: 'Comparison baseline' }).selectOption('negative');
+  await expect(table.getByRole('row', { name: /^Relative difference/ })).toContainText('baseline is not positive');
+  await expect(table.getByRole('row', { name: /^Difference \/ share/ })).toContainText('$5.00');
+  await page.getByRole('checkbox', { name: 'Compare My different model', exact: true }).check();
+  await expect(page.locator('.scenario-comparison .notice')).toContainText('different model versions');
+  await expect(table.getByRole('row', { name: /^Difference \/ share/ })).toContainText('Unavailable · different model');
+});
