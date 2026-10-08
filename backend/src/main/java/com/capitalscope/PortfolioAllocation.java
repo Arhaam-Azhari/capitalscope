@@ -19,7 +19,7 @@ public final class PortfolioAllocation {
         Map<String, BigDecimal> sectorValues = new TreeMap<>();
         Set<String> missingSectors = new HashSet<>();
         for (var mark : marks) {
-            String sector = mark.ticker().equals("DEMO") ? "Fictional Industrials" : CompanyCatalog.find(mark.ticker()).sector();
+            String sector = sector(mark.ticker());
             companies.add(new Exposure(mark.ticker(), mark.value(), available ? weight(mark.value(), total) : null));
             if (mark.value() == null) missingSectors.add(sector);
             else sectorValues.merge(sector, mark.value(), BigDecimal::add);
@@ -36,5 +36,6 @@ public final class PortfolioAllocation {
             available && !companies.isEmpty() ? companies.get(0) : null, available && !sectors.isEmpty() ? sectors.get(0) : null,
             topThree, List.copyOf(companies), List.copyOf(sectors));
     }
+    public static String sector(String ticker) { return ticker.equals("DEMO") ? "Fictional Industrials" : CompanyCatalog.find(ticker).sector(); }
     private static BigDecimal weight(BigDecimal value, BigDecimal total) { return value.divide(total, 10, RoundingMode.HALF_EVEN); }
 }

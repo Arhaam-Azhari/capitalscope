@@ -12,6 +12,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {"sec.user-agent=", "prices.api-key="})
@@ -38,4 +39,20 @@ class PortfolioValuationApiTest {
             mvc.perform(get("/api/portfolios/missing/valuation")).andExpect(status().isNotFound());
         } finally { jdbc.update("DELETE FROM daily_prices WHERE ticker = ?", "AAPL"); }
     }
+    @Test void iStressCurrentServerHoldingsWithoutWritingLedgerEvents() throws Exception {
+        var id = portfolios.create(new PortfolioService.NewPortfolio("My stress test", "example", new BigDecimal("1000"))).portfolio().id();
+        portfolios.trade(id, new PortfolioService.Fill(UUID.randomUUID().toString(), "DEMO", "BUY", new BigDecimal("10"), new BigDecimal("20"), BigDecimal.ONE));
+        var before = mapper.writeValueAsString(portfolios.summary(id));
+        mvc.perform(post("/api/portfolios/" + id + "/stress").contentType("application/json")
+            .content("{\"defaultShock\":-0.2,\"sectorShocks\":{}}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.baseline.cash").value(799))
+            .andExpect(jsonPath("$.baseline.totalValue").value(1015)).andExpect(jsonPath("$.stressedTotalValue").value(971.8))
+            .andExpect(jsonPath("$.change").value(-43.2)).andExpect(jsonPath("$.holdings[0].baseline.priceDate").value("2026-09-19"));
+        org.junit.jupiter.api.Assertions.assertEquals(before, mapper.writeValueAsString(portfolios.summary(id)));
+        mvc.perform(post("/api/portfolios/" + id + "/stress").contentType("application/json").content("{\"defaultShock\":-2}"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/portfolios/missing/stress").contentType("application/json").content("{\"defaultShock\":0}"))
+            .andExpect(status().isNotFound());
+    }
+
 }
