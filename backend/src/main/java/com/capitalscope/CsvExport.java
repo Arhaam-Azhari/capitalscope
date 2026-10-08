@@ -26,6 +26,18 @@ public final class CsvExport {
         }
         return csv.toString();
     }
+    public static String watchlist(java.util.List<WatchlistStore.Entry> entries, java.time.Instant exportedAt) {
+        StringBuilder csv = new StringBuilder(row("entry_id", "ticker", "company", "sector", "instrument_mode", "research_status",
+            "thesis", "risks", "review_date", "version", "created_at", "updated_at", "exported_at", "notes_origin"));
+        // I export saved notes, including archived entries, rather than the browser's draft or filtered list.
+        entries.stream().sorted(java.util.Comparator.comparing(WatchlistStore.Entry::ticker)).forEach(entry -> {
+            boolean example = entry.ticker().equals("DEMO");
+            var company = example ? new CompanyCatalog.Company("DEMO", "Example Manufacturing", "Fictional") : CompanyCatalog.find(entry.ticker());
+            csv.append(row(entry.entryId(), entry.ticker(), company.name(), company.sector(), example ? "example" : "market", entry.status(),
+                entry.thesis(), entry.risks(), entry.reviewDate(), entry.version(), entry.createdAt(), entry.updatedAt(), exportedAt, "User-entered research"));
+        });
+        return csv.toString();
+    }
     public static String portfolio(PaperPortfolio.Summary summary) {
         StringBuilder csv = new StringBuilder(row("portfolio_id", "portfolio_name", "instrument_mode", "simulated", "event_index", "recorded_at", "type", "ticker", "side", "shares", "manual_price", "fee", "new_shares", "old_shares", "dividend_per_share", "initial_cash", "currency"));
         var portfolio = summary.portfolio();

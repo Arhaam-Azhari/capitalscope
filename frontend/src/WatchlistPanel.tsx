@@ -15,6 +15,7 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('active'); const [error, setError] = useState(''); const [saved, setSaved] = useState('');
   const [ready, setReady] = useState(false);
+  const [exporting, setExporting] = useState(false); const [exportError, setExportError] = useState('');
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [attempt, setAttempt] = useState(0);
   const entry = entries.find(item => item.ticker === ticker);
   const universe = [{ ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Fictional' }, ...companies];
@@ -36,6 +37,22 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     setStatus(entry?.status || 'watching'); setThesis(entry?.thesis || ''); setRisks(entry?.risks || ''); setReviewDate(entry?.reviewDate || '');
   }, [entry, ticker]);
   function edit(symbol: string) { setTicker(symbol); setError(''); setSaved(''); }
+  async function downloadResearch() {
+    setExporting(true); setExportError('');
+    try {
+      const response = await fetch('/api/watchlist/export.csv');
+      if (!response.ok) {
+        let message = 'Could not download saved research. Try again shortly.';
+        try { message = (await response.json()).error || message; } catch { /* I keep a readable message when storage returns no JSON. */ }
+        throw new Error(message);
+      }
+      if (!response.headers.get('Content-Type')?.toLowerCase().startsWith('text/csv')) throw new Error('The research service did not return a CSV file. Try again shortly.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a'); link.href = url; link.download = 'watchlist-research.csv'; link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { setExportError(e instanceof Error ? e.message : 'Could not download saved research.'); }
+    finally { setExporting(false); }
+  }
   async function save(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError(''); setSaved('');
     try {
@@ -68,6 +85,8 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     <div className="panel-title"><div><span className="eyebrow">RESEARCH SHORTLIST</span><h2 id="watchlist-heading">My watchlist</h2></div><button className="secondary" disabled={busy || loading} onClick={() => setAttempt(n => n + 1)}>Reload watchlist</button></div>
     <p className="muted small">A shared shortlist without accounts. Everyone with app access can read and edit these theses. Research status and review dates are your notes, not trade recommendations or scheduled notifications. Reloading replaces the open draft with saved research.</p>
     {error && <p className="notice error" role="alert">{error}</p>}{saved && <p className="save-status" role="status">{saved}</p>}
+    <div className="export-actions"><button className="secondary" type="button" disabled={!ready || loading || busy || exporting} onClick={downloadResearch}>{exporting ? 'Downloading research…' : 'Download all saved research CSV'}</button><span className="muted small">Includes archived entries and saved notes from storage at download time. Search, filters, and unsaved drafts are excluded.</span></div>
+    {exportError && <p className="notice error" role="alert">{exportError}</p>}
     <section className="review-queue" aria-label="Research review queue">
       <div className="panel-title"><h3>Research review queue</h3><span className="pill">Calendar day · {today}</span></div>
       <p className="muted small">Counts cover active saved research and exclude archived entries. Dates use your browser's local calendar day and refresh while this view is open. These are review tasks, not market alerts. Filters and search change the list below without changing your draft.</p>

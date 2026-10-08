@@ -12,6 +12,12 @@ public class WatchlistController {
     private final WatchlistStore store;
     public WatchlistController(WatchlistStore store) { this.store = store; }
     @GetMapping public List<WatchlistStore.Entry> list() { return store.list(); }
+    @GetMapping("/export.csv") public ResponseEntity<String> export() {
+        var entries = store.list();
+        return ResponseEntity.ok().header("Content-Disposition", "attachment; filename=watchlist-research.csv")
+            .contentType(org.springframework.http.MediaType.parseMediaType("text/csv;charset=UTF-8"))
+            .body(CsvExport.watchlist(entries, java.time.Instant.now()));
+    }
     @PutMapping("/{ticker}") public WatchlistStore.Entry save(@PathVariable String ticker, @RequestBody WatchlistStore.Draft draft) { return store.save(ticker, draft); }
     @DeleteMapping("/{ticker}") public ResponseEntity<Void> remove(@PathVariable String ticker, @RequestParam long version, @RequestParam String entryId) {
         store.remove(ticker, version, entryId); return ResponseEntity.noContent().build();

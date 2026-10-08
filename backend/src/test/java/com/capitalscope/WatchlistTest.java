@@ -17,6 +17,18 @@ class WatchlistTest {
     @Autowired WatchlistStore store;
     @Autowired JdbcTemplate jdbc;
     @Autowired MockMvc mvc;
+    @Test void iDownloadResearchFromStorageWithoutChangingItsVersion() throws Exception {
+        jdbc.update("DELETE FROM research_watchlist WHERE ticker = ?", "NVDA");
+        try {
+            var saved = store.save("NVDA", new WatchlistStore.Draft("archived", "=My saved export", "My risks", null, 0L, null));
+            mvc.perform(get("/api/watchlist/export.csv"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "attachment; filename=watchlist-research.csv"))
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("\"NVDA\",\"NVIDIA\",\"Technology\",\"market\",\"archived\",\"'=My saved export\"")));
+            assertEquals(saved, store.list().stream().filter(e -> e.ticker().equals("NVDA")).findFirst().orElseThrow());
+        } finally { jdbc.update("DELETE FROM research_watchlist WHERE ticker = ?", "NVDA"); }
+    }
     @Test void iSaveCanonicalTickersAndPreventStaleEditsOrDeletes() throws Exception {
         jdbc.update("DELETE FROM research_watchlist WHERE ticker = ?", "AAPL");
         try {

@@ -8,6 +8,20 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CsvExportTest {
+    @Test void iExportSavedResearchWithArchivedEntriesAndExplicitNoteOrigins() {
+        var now = Instant.parse("2026-10-08T06:00:00Z");
+        var example = new WatchlistStore.Entry("my-example", "DEMO", "archived", "=My, \"thesis\"\nsecond line", "@My risks", null, 3, now, now);
+        var market = new WatchlistStore.Entry("my-market", "AAPL", "researching", "My saved thesis", "", java.time.LocalDate.of(2026, 11, 1), 2, now, now);
+        String csv = CsvExport.watchlist(List.of(example, market), now);
+        assertTrue(csv.startsWith("\"entry_id\",\"ticker\",\"company\""));
+        assertTrue(csv.indexOf("\"AAPL\"") < csv.indexOf("\"DEMO\""));
+        assertTrue(csv.contains("\"Apple\",\"Technology\",\"market\",\"researching\""));
+        assertTrue(csv.contains("\"Example Manufacturing\",\"Fictional\",\"example\",\"archived\""));
+        assertTrue(csv.contains("\"'=My, \"\"thesis\"\"\nsecond line\",\"'@My risks\",,3,"));
+        assertTrue(csv.contains("\"2026-11-01\",2,"));
+        assertTrue(csv.endsWith("\"2026-10-08T06:00:00Z\",\"User-entered research\"\r\n"));
+        assertEquals(1, CsvExport.watchlist(List.of(), now).split("\r\n").length);
+    }
     @Test void iEscapeTextAndKeepDecimalNumbersExact() {
         assertEquals("\"a,b\",\"a\"\"b\",\"line\nnext\",-12.3400001,\"'=SUM(A1)\",\"'  @name\",\"'\tname\"\r\n",
             CsvExport.row("a,b", "a\"b", "line\nnext", new BigDecimal("-12.3400001"), "=SUM(A1)", "  @name", "\tname"));
