@@ -22,3 +22,6 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .portfolio-stress { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
 .stress-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 1rem; margin-bottom: 1rem; }
 .stress-inputs label { display: grid; gap: .5rem; }
+.saved-stress { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.saved-stress-snapshot { margin-top: 1rem; padding: 1rem; background: #131b2b; border: 1px solid var(--line); border-radius: 6px; }
+.saved-stress .scenario-list button { white-space: normal; }
