@@ -43,3 +43,8 @@ export type Exposure = { label: string; value: number | null; weight: number | n
 export type PortfolioAllocation = { available: boolean; unavailableReason: string | null; cashWeight: number | null;
   largestHolding: Exposure | null; largestSector: Exposure | null; topThreeHoldingsWeight: number | null;
   companies: Exposure[]; sectors: Exposure[] };
+
+export type ValuationPriceEvidence = { ticker: string; dataMode: string; evaluatedAt: string; shareBasisConfirmed: boolean;
+  quote: { close: number; priceDate: string; priceAgeDays: number; source: string; sourceUrl: string | null; retrievedAt: string | null } | null;
+  quoteError: string | null; scenarios: { id: string; name: string; createdAt: string; modelVersion: string; modeledShares: number | null;
+    valuePerShare: number | null; valueMinusClose: number | null; relativeGap: number | null; unavailableReason: string | null }[] };

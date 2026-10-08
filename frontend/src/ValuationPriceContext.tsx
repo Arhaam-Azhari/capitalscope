@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { money, request } from './api';
-import type { Scenario } from './types';
+import type { Scenario, ValuationPriceEvidence as Context } from './types';
 
-type Context = { ticker: string; dataMode: string; evaluatedAt: string; shareBasisConfirmed: boolean;
-  quote: { close: number; priceDate: string; priceAgeDays: number; source: string; sourceUrl: string | null; retrievedAt: string | null } | null;
-  quoteError: string | null; scenarios: { id: string; name: string; createdAt: string; modelVersion: string; modeledShares: number | null;
-    valuePerShare: number | null; valueMinusClose: number | null; relativeGap: number | null; unavailableReason: string | null }[] };
 function evidenceKey(context: Context | null) {
   return JSON.stringify({ quote: context?.quote, scenarios: context?.scenarios.map(item => ({ id: item.id, createdAt: item.createdAt,
     modelVersion: item.modelVersion, modeledShares: item.modeledShares, valuePerShare: item.valuePerShare })).sort((a, b) => a.id.localeCompare(b.id)) });

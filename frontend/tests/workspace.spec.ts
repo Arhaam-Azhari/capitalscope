@@ -427,3 +427,57 @@ test('I report failed watchlist downloads without saving an error page or cleari
   await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My draft survives export errors');
   expect(downloads).toBe(0);
 });
+
+
+test('I keep summary sections independent and reject mismatched saved evidence on reload', async ({ page }) => {
+  await installApi(page);
+  let recovered = false;
+  await page.route('**/api/watchlist', route => recovered ? route.fulfill({ json: [{ ticker: 'DEMO', status: 'researching', thesis: 'My recovered thesis', risks: '', reviewDate: null, version: 2, updatedAt: '2026-10-08T00:00:00Z' }] })
+    : route.fulfill({ status: 503, json: { error: 'My summary notes are offline' } }));
+  await page.route('**/api/companies/DEMO/scenarios/price-context?*', route => route.fulfill({ json: {
+    ticker: recovered ? 'AAPL' : 'DEMO', dataMode: recovered ? 'market' : 'example', evaluatedAt: '2026-10-08T00:00:00Z', shareBasisConfirmed: false,
+    quote: { close: 21.6, priceDate: '2026-09-19', priceAgeDays: 19, source: 'My invented close', sourceUrl: null, retrievedAt: null }, quoteError: null,
+    scenarios: [{ id: 'my-summary', name: 'My summary fixture', createdAt: '2026-10-01T00:00:00Z', modelVersion: 'fcff-v1', modeledShares: 100, valuePerShare: 25 }]
+  } }));
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  const summary = page.getByRole('region', { name: 'Research summary for DEMO', exact: true });
+  await expect(summary.getByRole('region', { name: 'Saved company thesis' })).toContainText('My summary notes are offline');
+  await expect(summary.getByTestId('summary-close')).toHaveText('$21.60');
+  await expect(summary.getByRole('region', { name: 'Company saved valuation cases' })).toContainText('My summary fixture');
+  await expect(summary.getByRole('region', { name: 'Company financial evidence' })).toContainText('$1,280,000,000.00');
+  recovered = true;
+  await summary.getByRole('button', { name: 'Reload saved research' }).click();
+  await expect(summary.getByRole('region', { name: 'Saved company thesis' })).toContainText('My recovered thesis');
+  await expect(summary.getByRole('region', { name: 'Company stored close' })).toContainText('does not match this company');
+  await expect(summary.getByTestId('summary-close')).toHaveCount(0);
+  await expect(summary.getByRole('region', { name: 'Company saved valuation cases' })).not.toContainText('My summary fixture');
+  await expect(summary.getByRole('region', { name: 'Company financial evidence' })).toContainText('$1,280,000,000.00');
+});
+
+test('I clear a prior company summary when its delayed saved evidence arrives', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [
+    { ticker: 'AAPL', status: 'watching', thesis: 'My Apple thesis', risks: '', reviewDate: null, version: 1, updatedAt: '2026-10-08T00:00:00Z' },
+    { ticker: 'MSFT', status: 'watching', thesis: 'My Microsoft thesis', risks: '', reviewDate: null, version: 1, updatedAt: '2026-10-08T00:00:00Z' }
+  ] }));
+  let release: () => void = () => {};
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/companies/AAPL/scenarios/price-context?*', async route => {
+    await delayed;
+    try { await route.fulfill({ json: { ticker: 'AAPL', dataMode: 'market', evaluatedAt: '2026-10-08T00:00:00Z', shareBasisConfirmed: false,
+      quote: { close: 999, priceDate: '2026-10-07', priceAgeDays: 1, source: 'My old Apple fixture', sourceUrl: null, retrievedAt: null }, quoteError: null, scenarios: [] } }); }
+    catch { /* I allow the old company's request to be canceled. */ }
+  });
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toContainText('My Apple thesis');
+  await openCatalog(page); await page.getByRole('button', { name: /^Microsoft/ }).click();
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  release();
+  const summary = page.getByRole('region', { name: 'Research summary for MSFT', exact: true });
+  await expect(summary).toContainText('My Microsoft thesis');
+  await expect(summary.getByRole('region', { name: 'Company stored close' })).toContainText('No stored close in this fixture');
+  await expect(summary).not.toContainText('My Apple thesis');
+  await expect(summary).not.toContainText('My old Apple fixture');
+  await expect(summary.getByTestId('summary-close')).toHaveCount(0);
+});
