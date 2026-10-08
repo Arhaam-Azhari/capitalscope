@@ -533,3 +533,51 @@ test('I prioritize saved research reviews without changing my draft or counting 
     await page.request.delete(`/api/watchlist/${entry.ticker}?version=${entry.version}&entryId=${entry.entryId}`);
   }
 });
+
+
+test('I download current saved watchlist research while keeping my filtered draft open', async ({ page }) => {
+  const fixtures = [
+    { ticker: 'DEMO', status: 'watching', thesis: 'My earlier saved thesis', risks: 'My saved risks', reviewDate: null },
+    { ticker: 'NVDA', status: 'archived', thesis: 'My archived research', risks: '', reviewDate: '2026-11-01' }
+  ];
+  try {
+    for (const fixture of fixtures) {
+      const existing = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === fixture.ticker);
+      expect((await page.request.put(`/api/watchlist/${fixture.ticker}`, { data: { ...fixture, version: existing?.version || 0, entryId: existing?.entryId || null } })).ok()).toBe(true);
+    }
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit DEMO', exact: true }).click();
+    await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved export draft');
+    await page.getByLabel('Search saved research', { exact: true }).fill('No research matches this search');
+    await expect(page.locator('.watchlist-cards')).toContainText('No entries match this filter');
+    const entry = (await (await page.request.get('/api/watchlist')).json()).find((item: { ticker: string }) => item.ticker === 'DEMO');
+    const latest = '=My, "newer" thesis\nMy café evidence';
+    const changed = await page.request.put('/api/watchlist/DEMO', { data: { ...fixtures[0], thesis: latest, version: entry.version, entryId: entry.entryId } });
+    expect(changed.ok()).toBe(true);
+    const current = await changed.json();
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download all saved research CSV', exact: true }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('watchlist-research.csv');
+    const csv = await readFile((await download.path())!, 'utf8');
+    expect(csv).toContain('"entry_id","ticker","company","sector","instrument_mode","research_status"');
+    expect(csv).toContain(`"${entry.entryId}","DEMO","Example Manufacturing","Fictional","example","watching"`);
+    expect(csv).toContain('"\'=My, ""newer"" thesis\nMy café evidence"');
+    expect(csv).toContain(`"My saved risks",,${current.version},"${current.createdAt}","${current.updatedAt}"`);
+    expect(csv).toContain('"NVDA","NVIDIA","Technology","market","archived","My archived research"');
+    expect(csv).toContain('"User-entered research"');
+    expect(csv).not.toContain('My unsaved export draft');
+    expect(csv).not.toContain('My earlier saved thesis');
+    await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved export draft');
+    await expect(page.getByLabel('Search saved research', { exact: true })).toHaveValue('No research matches this search');
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  } finally {
+    const entries = await (await page.request.get('/api/watchlist')).json();
+    for (const fixture of fixtures) {
+      const entry = entries.find((item: { ticker: string }) => item.ticker === fixture.ticker);
+      if (entry) await page.request.delete(`/api/watchlist/${entry.ticker}?version=${entry.version}&entryId=${entry.entryId}`);
+    }
+  }
+});

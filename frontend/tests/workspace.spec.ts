@@ -404,3 +404,26 @@ test('I withhold stale review counts when storage reload fails and preserve a dr
   await queue.getByRole('button', { name: /^Overdue/ }).click();
   await expect(page.locator('.watchlist-cards')).toContainText('Example Manufacturing');
 });
+
+
+test('I report failed watchlist downloads without saving an error page or clearing my draft', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  let unexpected = false;
+  await page.route('**/api/watchlist/export.csv', route => unexpected
+    ? route.fulfill({ status: 200, contentType: 'text/html', body: '<p>My test service is unavailable</p>' })
+    : route.fulfill({ status: 503, json: { error: 'My export storage is offline' } }));
+  let downloads = 0; page.on('download', () => downloads++);
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My draft survives export errors');
+  const button = page.getByRole('button', { name: 'Download all saved research CSV', exact: true });
+  await button.click();
+  await expect(page.getByRole('alert')).toHaveText('My export storage is offline');
+  await expect(button).toBeEnabled();
+  unexpected = true;
+  await button.click();
+  await expect(page.getByRole('alert')).toContainText('did not return a CSV file');
+  await expect(button).toBeEnabled();
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My draft survives export errors');
+  expect(downloads).toBe(0);
+});
