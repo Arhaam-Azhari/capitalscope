@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { researchChecks, reviewedCount } from './researchChecklist';
 import { flushSync } from 'react-dom';
 import { money, request } from './api';
 import type { Company, FinancialReport, ValuationPriceEvidence, WatchlistEntry } from './types';
@@ -62,6 +63,7 @@ export default function ResearchSummary({ company, report, financialLoading, fin
       <section className="panel" aria-label="Saved company thesis"><div className="panel-title"><h3>My saved thesis and risks</h3><button className="secondary" onClick={() => onOpen('Watchlist')}>Open watchlist</button></div>
         {notesLoading ? <p role="status">Loading saved research…</p> : notesError ? <p className="notice error" role="alert">{notesError}</p> : !entry ? <p className="muted">No saved watchlist entry for {company.ticker}. Add a thesis and review date in Watchlist.</p> : <>
           <p className="muted small">{entry.status} · Review date: {entry.reviewDate || 'Not set'} · Version {entry.version}<br />Updated {new Date(entry.updatedAt).toLocaleString()} · User-entered research</p>
+          <h4>My saved research checklist</h4><p className="muted small">{reviewedCount(entry.checks)} of {researchChecks.length} marked reviewed · self-reported, not verified or an investment score</p><ul className="summary-checklist">{researchChecks.map(check => <li key={check.id}>{check.label}: <strong>{entry.checks?.includes(check.id) ? 'Marked reviewed' : 'Not marked reviewed'}</strong></li>)}</ul><p className="muted small">These checks do not confirm share-basis comparability for a valuation price comparison.</p>
           <h4>Investment thesis</h4><p className="summary-notes">{entry.thesis || 'No thesis saved.'}</p>
           <h4>Risks and evidence to check</h4><p className="summary-notes">{entry.risks || 'No risks saved.'}</p>
           {entry.status === 'archived' && <p className="notice warning">This entry is archived and excluded from active review counts.</p>}

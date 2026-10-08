@@ -11,7 +11,7 @@ class CsvExportTest {
     @Test void iExportSavedResearchWithArchivedEntriesAndExplicitNoteOrigins() {
         var now = Instant.parse("2026-10-08T06:00:00Z");
         var example = new WatchlistStore.Entry("my-example", "DEMO", "archived", "=My, \"thesis\"\nsecond line", "@My risks", null, 3, now, now);
-        var market = new WatchlistStore.Entry("my-market", "AAPL", "researching", "My saved thesis", "", java.time.LocalDate.of(2026, 11, 1), 2, now, now);
+        var market = new WatchlistStore.Entry("my-market", "AAPL", "researching", "My saved thesis", "", java.time.LocalDate.of(2026, 11, 1), 2, now, now, List.of("filings", "leverage"));
         String csv = CsvExport.watchlist(List.of(example, market), now);
         assertTrue(csv.startsWith("\"entry_id\",\"ticker\",\"company\""));
         assertTrue(csv.indexOf("\"AAPL\"") < csv.indexOf("\"DEMO\""));
@@ -19,7 +19,8 @@ class CsvExportTest {
         assertTrue(csv.contains("\"Example Manufacturing\",\"Fictional\",\"example\",\"archived\""));
         assertTrue(csv.contains("\"'=My, \"\"thesis\"\"\nsecond line\",\"'@My risks\",,3,"));
         assertTrue(csv.contains("\"2026-11-01\",2,"));
-        assertTrue(csv.endsWith("\"2026-10-08T06:00:00Z\",\"User-entered research\"\r\n"));
+        assertTrue(csv.endsWith("\"2026-10-08T06:00:00Z\",\"User-entered research\",false,false,false,false,false\r\n"));
+        assertTrue(csv.contains("\"User-entered research\",true,false,true,false,false\r\n"));
         assertEquals(1, CsvExport.watchlist(List.of(), now).split("\r\n").length);
     }
     @Test void iEscapeTextAndKeepDecimalNumbersExact() {
