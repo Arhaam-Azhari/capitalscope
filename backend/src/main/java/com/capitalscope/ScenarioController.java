@@ -13,14 +13,22 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 public class ScenarioController {
     public record SaveRequest(String name, DcfCalculator.Assumptions assumptions) {}
     private final ResearchStore store;
+    private final PriceClient prices;
     private static final Set<String> SPECIALIZED = Set.of("BRK-B", "JPM", "BAC", "MS", "GS", "WFC", "UNH");
-    public ScenarioController(ResearchStore store) { this.store = store; }
+    public ScenarioController(ResearchStore store, PriceClient prices) { this.store = store; this.prices = prices; }
     private String company(String ticker) {
         if (ticker.equalsIgnoreCase("DEMO")) return "DEMO";
         return CompanyCatalog.find(ticker).ticker();
     }
     @GetMapping
     public List<ResearchStore.Scenario> list(@PathVariable String ticker) { return store.scenarios(company(ticker)); }
+    @GetMapping("/price-context")
+    public ValuationPriceContext.Result priceContext(@PathVariable String ticker,
+            @RequestParam(defaultValue = "false") boolean shareBasisConfirmed) {
+        String canonical = company(ticker);
+        return ValuationPriceContext.calculate(canonical, store.scenarios(canonical), java.time.Instant.now(),
+            canonical.equals("DEMO") ? PriceClient.example() : prices.storedHistory(canonical), shareBasisConfirmed);
+    }
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ResearchStore.Scenario save(@PathVariable String ticker, @RequestBody SaveRequest request) {

@@ -347,3 +347,31 @@ test('I guard stress comparisons against changed evidence, missing prices, and m
   await expect(delta.nth(0)).toHaveText('$0.00');
 
 });
+
+test('I clear share-basis confirmation when the stored quote changes during comparison', async ({ page }) => {
+  await installApi(page);
+  const saved = { id: 'my-gap', ticker: 'DEMO', name: 'My gap fixture', createdAt: '2026-10-01T00:00:00Z', modelVersion: 'fcff-v1',
+    assumptions: { baseFreeCashFlow: 100, growthRate: 0.05, discountRate: 0.1, terminalGrowthRate: 0.02, years: 5, netDebt: 0, sharesOutstanding: 100 },
+    result: { projections: [], terminalValue: 1000, presentValueOfTerminalValue: 500, enterpriseValue: 2500, equityValue: 2500, valuePerShare: 25, terminalValueShare: 0.2 } };
+  await page.route('**/api/companies/DEMO/scenarios', route => route.fulfill({ json: [saved] }));
+  let close = 21.6;
+  await page.route('**/api/companies/DEMO/scenarios/price-context?*', route => {
+    const confirmed = new URL(route.request().url()).searchParams.get('shareBasisConfirmed') === 'true';
+    if (confirmed) close = 22;
+    return route.fulfill({ json: { ticker: 'DEMO', dataMode: 'example', evaluatedAt: '2026-10-08T00:00:00Z', shareBasisConfirmed: confirmed,
+      quote: { close, priceDate: close === 22 ? '2026-09-20' : '2026-09-19', priceAgeDays: close === 22 ? 18 : 19, source: 'Invented test prices', sourceUrl: null, retrievedAt: null }, quoteError: null,
+      scenarios: [{ id: saved.id, name: saved.name, createdAt: saved.createdAt, modelVersion: saved.modelVersion, modeledShares: 100,
+        valuePerShare: 25, valueMinusClose: confirmed ? 3 : null, relativeGap: confirmed ? 3 / 22 : null, unavailableReason: confirmed ? null : 'Confirm the share basis.' }] } });
+  });
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  const context = page.getByRole('region', { name: 'Saved valuations and dated prices' });
+  await expect(context.getByTestId('valuation-price-evidence')).toContainText('$21.60');
+  await context.getByRole('checkbox').check();
+  await expect(context).toContainText('The stored comparison evidence changed');
+  await expect(context.getByRole('checkbox')).not.toBeChecked();
+  await expect(context.getByTestId('valuation-price-evidence')).toContainText('$22.00');
+  const row = context.getByRole('row', { name: /^My gap fixture/ });
+  await expect(row.getByRole('cell').nth(2)).toHaveText('Unavailable');
+  await context.getByRole('checkbox').check();
+  await expect(row.getByRole('cell').nth(2)).toHaveText('$3.00');
+});
