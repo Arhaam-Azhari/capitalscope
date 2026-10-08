@@ -416,3 +416,38 @@ test('I download a saved stress report without replacing its original baseline',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.locator('.saved-stress').screenshot({ path: 'test-results/stress-report-download-mobile.png' });
 });
+
+test('I compare saved stress cases and withhold differences after holdings change', async ({ page }) => {
+  const created = await page.request.post('/api/portfolios', { data: { name: 'My stress comparison', mode: 'example', initialCash: '1000' } });
+  const id = (await created.json()).portfolio.id;
+  await page.request.post(`/api/portfolios/${id}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'BUY', quantity: '10', price: '20', fee: '1' } });
+  for (const [name, defaultShock] of [['My downside', '-0.2'], ['My upside', '0.2']] as const)
+    expect((await page.request.post(`/api/portfolios/${id}/stress-scenarios`, { data: { name, assumptions: { defaultShock } } })).ok()).toBe(true);
+  await page.request.post(`/api/portfolios/${id}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'SELL', quantity: '10', price: '20', fee: '1' } });
+  expect((await page.request.post(`/api/portfolios/${id}/stress-scenarios`, { data: { name: 'My changed holdings', assumptions: { defaultShock: '-0.2' } } })).ok()).toBe(true);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Open portfolio' }).selectOption(id);
+  await page.getByRole('checkbox', { name: 'Compare My downside', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Compare My upside', exact: true }).check();
+  const comparison = page.getByRole('region', { name: 'Saved stress scenario comparison', exact: true });
+  const delta = comparison.getByRole('row', { name: /^Stressed value difference vs reference/ });
+  await expect(delta.getByRole('cell').nth(0)).toHaveText('$0.00');
+  await expect(delta.getByRole('cell').nth(1)).toHaveText('$86.40');
+  await comparison.getByLabel('Reference stress scenario').selectOption({ label: 'My upside' });
+  await expect(delta.getByRole('cell').nth(0)).toHaveText('-$86.40');
+  await page.getByRole('checkbox', { name: 'Compare My changed holdings', exact: true }).check();
+  await expect(delta.getByRole('cell').nth(2)).toHaveText('Unavailable');
+  await expect(comparison).toContainText('Some cases have different or incomplete baselines');
+  await expect(comparison.getByRole('row', { name: /^DEMO · saved holding/ })).toContainText('Not held');
+  await page.locator('.stress-comparison').screenshot({ path: 'test-results/stress-comparison-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.locator('.stress-comparison').screenshot({ path: 'test-results/stress-comparison-mobile.png' });
+  await page.getByRole('button', { name: 'Delete My upside', exact: true }).click();
+  await expect(comparison.getByLabel('Reference stress scenario')).toHaveValue(await comparison.getByLabel('Reference stress scenario').locator('option').first().getAttribute('value') as string);
+  await expect(delta.getByRole('cell')).toHaveCount(2);
+  await expect(delta.getByRole('cell').nth(0)).toHaveText('$0.00');
+  await page.getByRole('checkbox', { name: 'Compare My changed holdings', exact: true }).uncheck();
+  await expect(comparison).toHaveCount(0);
+});
