@@ -53,3 +53,38 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .summary-notes { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .summary-close { font: 32px monospace; color: var(--accent); margin: 1rem 0; }
 @media (max-width: 760px) { .summary-grid { grid-template-columns: 1fr; gap: 0; } }
+.summary-print-header { display: none; }
+.summary-print-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+@page { size: A4; margin: 14mm; }
+@media print {
+  html:has(.research-summary), body:has(.research-summary) { background: white; color: #111; color-scheme: light; }
+  body:has(.research-summary) { --ink: #111; --muted: #444; --accent: #222; --line: #bbb; --panel: white; font: 10pt Arial, sans-serif; }
+  .workspace:has(.research-summary) { min-height: 0; }
+  .workspace:has(.research-summary) .masthead,
+  .workspace:has(.research-summary) .context-bar,
+  .workspace:has(.research-summary) .page-intro,
+  .workspace:has(.research-summary) .data-banner,
+  .workspace:has(.research-summary) .workspace-footer,
+  .research-summary button, .research-summary .summary-intro { display: none !important; }
+  .workspace:has(.research-summary) .main-content { max-width: none; margin: 0; padding: 0; }
+  .summary-print-header { display: block; border-bottom: 1pt solid #222; padding-bottom: 8pt; margin-bottom: 12pt; }
+  .summary-print-header h1 { font-size: 20pt; letter-spacing: 0; margin-bottom: 8pt; }
+  .summary-print-header p { font-size: 9pt; margin-bottom: 5pt; }
+  .research-summary .summary-grid { display: block; }
+  .research-summary .panel { border: 0; border-bottom: 1pt solid #bbb; border-radius: 0; padding: 0 0 10pt; margin: 0 0 12pt; background: white; break-inside: auto; }
+  .research-summary section[aria-label="Company stored close"] { break-inside: avoid; }
+  .research-summary .panel-title { margin-bottom: 8pt; }
+  .research-summary h3, .research-summary h4 { break-after: avoid; margin: 8pt 0; }
+  .research-summary h3 { font-size: 13pt; }
+  .research-summary p { orphans: 3; widows: 3; }
+  .research-summary .small { font-size: 9pt; }
+  .research-summary .summary-close { font-size: 20pt; }
+  .research-summary .notice { color: #111; background: white; border: 1pt solid #888; padding: 8pt; }
+  .research-summary .table-scroll { overflow: visible; }
+  .research-summary table { width: 100%; table-layout: fixed; font-size: 8pt; }
+  .research-summary th, .research-summary td { min-width: 0; white-space: normal; overflow-wrap: anywhere; padding: 6pt 4pt; color: #111; background: white; }
+  .research-summary thead { display: table-header-group; }
+  .research-summary tr { break-inside: avoid; }
+  .research-summary a { color: #111; text-decoration: underline; }
+  .research-summary a[href]::after { content: " (" attr(href) ")"; font-size: 7pt; overflow-wrap: anywhere; }
+}

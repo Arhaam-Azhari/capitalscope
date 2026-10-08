@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { money, request } from './api';
 import type { Company, FinancialReport, ValuationPriceEvidence, WatchlistEntry } from './types';
 
@@ -13,8 +14,27 @@ export default function ResearchSummary({ company, report, financialLoading, fin
   const [context, setContext] = useState<ValuationPriceEvidence | null>(null);
   const [contextError, setContextError] = useState(''); const [contextLoading, setContextLoading] = useState(true);
   const [attempt, setAttempt] = useState(0);
+  const [preparedAt, setPreparedAt] = useState(() => new Date().toISOString());
+  const [printError, setPrintError] = useState('');
   const example = company.ticker === 'DEMO';
   const financials = report?.company.ticker === company.ticker && report.dataMode === (example ? 'example' : 'sec') ? report : null;
+  const financialMessage = financialError.includes('SEC_USER_AGENT') ? 'Live SEC access has not been configured for this workspace. Financial facts are unavailable.' : financialError;
+  const pending = notesLoading || contextLoading || financialLoading;
+  useEffect(() => {
+    const prepare = () => flushSync(() => setPreparedAt(new Date().toISOString()));
+    window.addEventListener('beforeprint', prepare);
+    return () => window.removeEventListener('beforeprint', prepare);
+  }, []);
+  function printResearch() {
+    setPrintError('');
+    flushSync(() => setPreparedAt(new Date().toISOString()));
+    const originalTitle = document.title;
+    document.title = `CapitalScope - ${company.ticker} research summary`;
+    // I print the evidence already on screen without importing data or saving a new model.
+    try { window.print(); }
+    catch { setPrintError('The browser could not open printing. Try its Print command once the summary has loaded.'); }
+    finally { document.title = originalTitle; }
+  }
   useEffect(() => {
     const controller = new AbortController();
     setEntry(null); setNotesError(''); setNotesLoading(true);
@@ -32,8 +52,11 @@ export default function ResearchSummary({ company, report, financialLoading, fin
     return () => controller.abort();
   }, [company.ticker, example, attempt]);
   return <section className="research-summary" aria-label={`Research summary for ${company.ticker}`}>
+    <header className="summary-print-header"><p>CapitalScope / Company research</p><h1>{company.name} ({company.ticker})</h1><p>{company.sector} · {example ? 'Fictional company / invented data' : 'Market instrument / sources shown below'}</p><p data-testid="summary-print-time">Prepared for printing: {preparedAt} (UTC)</p><p>Read-only evidence from different dates, not an atomic snapshot or investment recommendation. Missing sections stay labeled. Unsaved drafts and browser-only notes are excluded.</p></header>
     <div className="panel summary-intro"><div className="panel-title"><div><span className="eyebrow">MY RESEARCH / {company.ticker}</span><h2>My company research summary</h2></div><button className="secondary" onClick={() => setAttempt(value => value + 1)}>Reload saved research</button></div>
       <p className="muted small">A read-only view of saved watchlist research, loaded financial facts, valuation cases, and dated closes. Sections can reflect different dates and are not an atomic snapshot. Reloading here reads saved notes, models, and stored prices; it does not import new prices or refresh financial facts. Unsaved drafts and browser-only research notes are excluded.</p>
+      <div className="summary-print-actions"><button className="secondary" type="button" disabled={pending} onClick={printResearch}>Print research summary</button><span className="muted small">Opens your browser's print dialog. Choose Save as PDF if available. Prints the displayed evidence, including unavailable sections, without fetching fresh data.</span></div>
+      {printError && <p className="notice error" role="alert">{printError}</p>}
     </div>
     <div className="summary-grid">
       <section className="panel" aria-label="Saved company thesis"><div className="panel-title"><h3>My saved thesis and risks</h3><button className="secondary" onClick={() => onOpen('Watchlist')}>Open watchlist</button></div>
@@ -55,7 +78,7 @@ export default function ResearchSummary({ company, report, financialLoading, fin
       </section>
     </div>
     <section className="panel" aria-label="Company financial evidence"><div className="panel-title"><h3>Latest supported financial facts</h3><button className="secondary" onClick={() => onOpen('Financials')}>Open financials</button></div>
-      {financialLoading ? <p role="status">Loading company financial facts…</p> : financialError ? <p className="notice error" role="alert">{financialError}</p> : !financials ? <p className="notice warning">Matching financial facts are unavailable.</p> : <>
+      {financialLoading ? <p role="status">Loading company financial facts…</p> : financialError ? <p className="notice error" role="alert">{financialMessage}</p> : !financials ? <p className="notice warning">Matching financial facts are unavailable.</p> : <>
         <p className="muted small">{financials.source} · {example ? 'Invented example figures' : 'Latest filed or restated annual facts, not point-in-time data'}{financials.retrievedAt ? ` · Retrieved ${new Date(financials.retrievedAt).toLocaleString()}` : ''}</p>
         <div className="table-scroll"><table><caption>Latest available period for each supported metric</caption><thead><tr><th>Metric</th><th>Value / unit</th><th>Period ended</th><th>Filed / source</th></tr></thead><tbody>{financials.metrics.map(metric => {
           const latest = [...metric.annualValues].sort((a, b) => b.periodEnd.localeCompare(a.periodEnd))[0];

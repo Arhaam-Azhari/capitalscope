@@ -621,3 +621,41 @@ test('I gather saved company research and dated evidence without importing price
     if (entry) await page.request.delete(`/api/watchlist/DEMO?version=${entry.version}&entryId=${entry.entryId}`);
   }
 });
+
+
+test('I prepare readable research PDFs with long notes and explicit missing market evidence', async ({ page }) => {
+  const existing = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === 'DEMO');
+  const thesis = Array.from({ length: 20 }, (_, i) => `My evidence line ${i + 1}: I want to revisit cash flow and margins before changing my assumptions.`).join('\n');
+  expect((await page.request.put('/api/watchlist/DEMO', { data: { status: 'researching', thesis, risks: 'My final risk: My thesis may fail if margins contract.', reviewDate: '2026-12-01', version: existing?.version || 0, entryId: existing?.entryId || null } })).ok()).toBe(true);
+  const saved = await page.request.post('/api/companies/DEMO/scenarios', { data: { name: 'My printable valuation case with a longer name', assumptions: {
+    baseFreeCashFlow: 1000000, growthRate: 0.05, discountRate: 0.1, terminalGrowthRate: 0.02, years: 5, netDebt: 0, sharesOutstanding: 1000000
+  } } });
+  expect(saved.ok()).toBe(true); const scenario = await saved.json();
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+    const button = page.getByRole('button', { name: 'Print research summary', exact: true });
+    await expect(button).toBeEnabled();
+    const requests: string[] = [];
+    page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) requests.push(request.url()); });
+    await page.evaluate(() => { window.print = () => window.dispatchEvent(new Event('beforeprint')); });
+    await button.click();
+    await page.pdf({ path: 'test-results/company-research-example.pdf', printBackground: false, preferCSSPageSize: true });
+    expect(requests).toEqual([]);
+    await expect(page.getByLabel('Research summary for DEMO', { exact: true })).toContainText('My final risk');
+    await page.locator('.company-browser summary').click();
+    await page.getByRole('button', { name: /^Apple/ }).click();
+    await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+    await expect(button).toBeEnabled();
+    const summary = page.getByRole('region', { name: 'Research summary for AAPL', exact: true });
+    await expect(summary.getByRole('region', { name: 'Company financial evidence' })).toContainText('Live SEC access has not been configured');
+    await expect(summary.getByRole('region', { name: 'Company stored close' })).toContainText('No stored close');
+    await page.pdf({ path: 'test-results/company-research-market-unavailable.pdf', printBackground: false, preferCSSPageSize: true });
+    await expect(summary).not.toContainText('My printable valuation case');
+    await expect(summary.getByTestId('summary-close')).toHaveCount(0);
+  } finally {
+    await page.request.delete(`/api/companies/DEMO/scenarios/${scenario.id}`);
+    const entry = (await (await page.request.get('/api/watchlist')).json()).find((item: { ticker: string }) => item.ticker === 'DEMO');
+    if (entry) await page.request.delete(`/api/watchlist/DEMO?version=${entry.version}&entryId=${entry.entryId}`);
+  }
+});

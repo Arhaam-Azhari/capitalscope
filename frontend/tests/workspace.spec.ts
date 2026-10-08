@@ -481,3 +481,53 @@ test('I clear a prior company summary when its delayed saved evidence arrives', 
   await expect(summary).not.toContainText('My old Apple fixture');
   await expect(summary.getByTestId('summary-close')).toHaveCount(0);
 });
+
+
+test('I wait for summary evidence before printing and keep unavailable sections visible', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ status: 503, json: { error: 'My print notes are unavailable' } }));
+  let release: () => void = () => {};
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/companies/DEMO/scenarios/price-context?*', async route => {
+    await delayed;
+    await route.fulfill({ json: { ticker: 'DEMO', dataMode: 'example', evaluatedAt: '2026-10-08T00:00:00Z', shareBasisConfirmed: false,
+      quote: null, quoteError: 'My print close is unavailable', scenarios: [] } });
+  });
+  await page.evaluate(() => { (window as unknown as { print: () => void }).print = () => { throw new Error('My print test is blocked'); }; });
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  const summary = page.getByRole('region', { name: 'Research summary for DEMO', exact: true });
+  const button = summary.getByRole('button', { name: 'Print research summary', exact: true });
+  await expect(button).toBeDisabled();
+  release(); await expect(button).toBeEnabled();
+  const originalTitle = await page.title();
+  await button.click();
+  await expect(summary).toContainText('The browser could not open printing');
+  expect(await page.title()).toBe(originalTitle);
+  await page.evaluate(() => {
+    window.print = () => { document.documentElement.dataset.printedTitle = document.title; };
+  });
+  await button.click();
+  expect(await page.evaluate(() => document.documentElement.dataset.printedTitle)).toBe('CapitalScope - DEMO research summary');
+  expect(await page.title()).toBe(originalTitle);
+  await expect(summary).not.toContainText('The browser could not open printing');
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.masthead')).toBeHidden();
+  await expect(button).toBeHidden();
+  await expect(summary.locator('.summary-print-header')).toContainText('Example Manufacturing (DEMO)');
+  await expect(summary.locator('.summary-print-header')).toContainText('Fictional company / invented data');
+  await expect(summary.getByTestId('summary-print-time')).toContainText('(UTC)');
+  await expect(summary).toContainText('My print notes are unavailable');
+  await expect(summary).toContainText('My print close is unavailable');
+  expect(await summary.locator('.table-scroll').evaluate(element => getComputedStyle(element).overflow)).toBe('visible');
+  await page.emulateMedia({ media: 'screen' });
+  await expect(button).toBeVisible();
+  await expect(page.locator('.masthead')).toBeVisible();
+  await openCatalog(page); await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  const market = page.getByRole('region', { name: 'Research summary for AAPL', exact: true });
+  const filing = market.getByRole('link', { name: 'SEC filing ↗' }).first();
+  await expect(filing).toBeVisible();
+  await page.emulateMedia({ media: 'print' });
+  expect(await filing.evaluate(element => getComputedStyle(element, '::after').content)).toContain('https://www.sec.gov/Archives/');
+  expect(await market.locator('thead th').first().evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(255, 255, 255)');
+});
