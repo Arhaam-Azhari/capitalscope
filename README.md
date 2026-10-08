@@ -21,6 +21,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 ## What I can do
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
+- Compare two to four saved valuation cases, inspect changed assumptions, and download their comparison as CSV.
 - Inspect cash, company, and sector weights, largest exposures, and the combined top three holdings.
 - Keep a saved company watchlist with theses, risks, research status, and review dates.
 - Value current holdings using stored daily closes, with dated price evidence, partial coverage, and unrealized P&L.
@@ -228,3 +229,9 @@ I persist the shortlist in the shared database, separately from my browser-local
 I calculate company and sector weights from the same dated holdings valuations, using cash plus all holdings as the denominator. I rank companies and sectors by snapshot value, show my cash weight, and add the three largest company weights together. I show cash in both breakdowns but keep it outside the company and sector rankings. I use the catalog's fixed sector labels, with a separate fictional sector for DEMO.
 
 I withhold every weight and largest-exposure summary if any holding lacks a usable close or total portfolio value is zero. I also withhold a sector's value if any of its holdings is unpriced. I retain available company values for inspection without treating their subset as the whole portfolio. I keep quote evidence in the valuation table, round displayed percentages, and do not claim that this concentration view measures volatility, correlation, or investment suitability.
+
+## How I compare saved valuation cases
+
+I select two to four saved scenarios for one company and choose a comparison baseline. I inspect all seven assumptions, highlight inputs that differ from the baseline, and compare enterprise value, equity value, per-share estimates, and terminal contribution. I keep the open calculator unchanged while comparing cases.
+
+I show absolute per-share differences for matching model versions and calculate relative differences only when the baseline estimate is positive. I do not infer probabilities or label a saved case as a market forecast. I show each case's saved date and model version, and suppress deltas across different model versions. I can download the selected cases and baseline as a CSV with decimal-fraction rates; I protect text fields against spreadsheet formula interpretation. These saved assumptions are not verified historical market inputs.

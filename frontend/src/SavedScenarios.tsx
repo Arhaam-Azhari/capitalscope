@@ -1,3 +1,4 @@
+import ScenarioComparison from './ScenarioComparison';
 import { useEffect, useState } from 'react';
 import { money, request } from './api';
 import type { Assumptions, Scenario } from './types';
@@ -5,6 +6,7 @@ import type { Assumptions, Scenario } from './types';
 export default function SavedScenarios({ ticker, assumptions, onLoad }: {
   ticker: string; assumptions: Assumptions | null; onLoad: (scenario: Scenario) => void;
 }) {
+  const [compared, setCompared] = useState<string[]>([]);
   const [items, setItems] = useState<Scenario[]>([]);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
@@ -19,6 +21,13 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [path]);
+
+  function toggleComparison(id: string, checked: boolean) {
+    setCompared(current => {
+      if (!checked) return current.filter(value => value !== id);
+      return current.length < 4 && !current.includes(id) ? [...current, id] : current;
+    });
+  }
 
   async function save() {
     if (!assumptions) return;
@@ -36,6 +45,7 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
       const response = await fetch(`${path}/${id}`, { method: 'DELETE' });
       if (!response.ok) throw new Error('Could not delete this scenario.');
       setItems(current => current.filter(item => item.id !== id));
+      setCompared(current => current.filter(value => value !== id));
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not delete this scenario.'); }
     finally { setBusy(false); }
   }
@@ -48,8 +58,9 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
     {!assumptions && <p className="muted small">Calculate a valuation before saving.</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
     {loading ? <p>Loading saved scenarios…</p> : !items.length ? <p className="muted">No saved scenarios for this company.</p> :
-      <ul className="scenario-list">{items.map(item => <li key={item.id}><div><strong>{item.name}</strong><span className="muted small">{new Date(item.createdAt).toLocaleString()} · {item.modelVersion} · {money(item.result.valuePerShare, false)} / share</span></div>
+      <ul className="scenario-list">{items.map(item => <li key={item.id}><label className="scenario-pick"><input type="checkbox" checked={compared.includes(item.id)} disabled={busy || (!compared.includes(item.id) && compared.length >= 4)} onChange={event => toggleComparison(item.id, event.target.checked)} />Compare {item.name}</label><div><strong>{item.name}</strong><span className="muted small">{new Date(item.createdAt).toLocaleString()} · {item.modelVersion} · {money(item.result.valuePerShare, false)} / share</span></div>
         <button type="button" disabled={busy} onClick={() => onLoad(item)}>Load {item.name}</button>
         <button type="button" disabled={busy} onClick={() => remove(item.id)}>Delete {item.name}</button></li>)}</ul>}
+    {!loading && <ScenarioComparison selected={compared.map(id => items.find(item => item.id === id)).filter((item): item is Scenario => !!item && item.ticker === ticker)} />}
   </section>;
 }
