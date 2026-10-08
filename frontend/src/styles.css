@@ -25,3 +25,9 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .saved-stress { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
 .saved-stress-snapshot { margin-top: 1rem; padding: 1rem; background: #131b2b; border: 1px solid var(--line); border-radius: 6px; }
 .saved-stress .scenario-list button { white-space: normal; }
+
+.stress-comparison { margin-top: 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+.stress-comparison table td { min-width: 210px; }
+.stress-comparison .panel-title label { display: grid; gap: .5rem; }
+.stress-comparison .panel-title label { min-width: 0; max-width: 100%; }
+.stress-comparison select { width: 100%; min-width: 0; }

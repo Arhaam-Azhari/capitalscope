@@ -296,3 +296,54 @@ test('I leave relative differences unavailable for nonpositive baselines and del
   await expect(page.locator('.scenario-comparison .notice')).toContainText('different model versions');
   await expect(table.getByRole('row', { name: /^Difference \/ share/ })).toContainText('Unavailable · different model');
 });
+
+test('I guard stress comparisons against changed evidence, missing prices, and model versions', async ({ page }) => {
+  await installApi(page);
+  const portfolio = { id: 'my-comparison', name: 'My comparison fixture', mode: 'market', initialCash: 600, createdAt: '2026-10-01T00:00:00Z' };
+  const marks = ['AAPL', 'MSFT'].map((ticker, i) => ({ ticker, quantity: i + 2, costBasis: 100, close: 100,
+    priceDate: '2026-10-01', priceAgeDays: 7, source: 'My fixture prices', sourceUrl: 'https://example.com/prices',
+    retrievedAt: '2026-10-01T12:00:00Z', value: (i + 2) * 100, unrealizedPnl: (i + 2) * 100 - 100, error: null }));
+  const baseline = { portfolioId: portfolio.id, dataMode: 'market', evaluatedAt: '2026-10-08T00:00:00Z', cash: 100,
+    pricedPositions: 2, totalPositions: 2, complete: true, pricedHoldingsValue: 500, totalValue: 600, unrealizedPnl: 300, holdings: marks,
+    allocation: { available: true, unavailableReason: null, cashWeight: 1 / 6, largestHolding: null, largestSector: null,
+      topThreeHoldingsWeight: 5 / 6, companies: [], sectors: [{ label: 'Technology', value: 500, weight: 5 / 6 }] } };
+  const base = { id: 'base', portfolioId: portfolio.id, name: 'My reference', createdAt: '2026-10-08T00:00:00Z', modelVersion: 'price-shock-v1',
+    result: { baseline, assumptions: { defaultShock: -0.2, sectorShocks: { Technology: 0 } },
+      holdings: marks.map(mark => ({ baseline: mark, sector: 'Technology', shock: 0, stressedValue: mark.value, change: 0 })),
+      stressedPricedHoldingsValue: 500, stressedTotalValue: 600, change: 0, relativeChange: 0 } };
+  const reorder = structuredClone(base); reorder.id = 'reorder'; reorder.name = 'My reordered snapshot';
+  reorder.result.baseline.evaluatedAt = '2026-10-09T00:00:00Z'; reorder.result.baseline.holdings.reverse(); reorder.result.holdings.reverse();
+  const evidence = structuredClone(base); evidence.id = 'evidence'; evidence.name = 'My changed evidence';
+  evidence.result.holdings[0].baseline.retrievedAt = '2026-10-02T12:00:00Z';
+  const version = structuredClone(base); version.id = 'version'; version.name = 'My future model'; version.modelVersion = 'price-shock-v2';
+  const partial = structuredClone(base); partial.id = 'partial'; partial.name = 'My missing prices'; partial.result.baseline.complete = false;
+  const items = [base, reorder, evidence, version, partial];
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith('/api/portfolios')) return route.fallback();
+    if (path.endsWith('/stress-scenarios')) return route.fulfill({ json: items });
+    if (path.endsWith('/valuation')) return route.fulfill({ json: baseline });
+    if (path === '/api/portfolios') return route.fulfill({ json: [portfolio] });
+    return route.fulfill({ json: { portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, positions: [], trades: [], events: [] } });
+  });
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  for (const name of ['My reference', 'My reordered snapshot', 'My changed evidence', 'My future model'])
+    await page.getByRole('checkbox', { name: `Compare ${name}`, exact: true }).check();
+  await expect(page.getByRole('checkbox', { name: 'Compare My missing prices', exact: true })).toBeDisabled();
+  const comparison = page.getByRole('region', { name: 'Saved stress scenario comparison', exact: true });
+  const delta = comparison.getByRole('row', { name: /^Stressed value difference vs reference/ }).getByRole('cell');
+  await expect(delta.nth(0)).toHaveText('$0.00'); await expect(delta.nth(1)).toHaveText('$0.00');
+  await expect(delta.nth(2)).toHaveText('Unavailable'); await expect(delta.nth(3)).toHaveText('Unavailable');
+  await expect(comparison.getByRole('row', { name: /^Technology override/ })).toContainText('0.00%');
+  await page.getByRole('checkbox', { name: 'Compare My changed evidence', exact: true }).uncheck();
+  await page.getByRole('checkbox', { name: 'Compare My missing prices', exact: true }).check();
+  await expect(delta.nth(3)).toHaveText('Unavailable');
+  await comparison.getByLabel('Reference stress scenario').selectOption('version');
+  for (let i = 0; i < 4; i++) await expect(delta.nth(i)).toHaveText('Unavailable');
+  await page.getByRole('checkbox', { name: 'Compare My future model', exact: true }).uncheck();
+  await expect(comparison.getByLabel('Reference stress scenario')).toHaveValue('base');
+  await page.getByRole('checkbox', { name: 'Compare My future model', exact: true }).check();
+  await expect(comparison.getByLabel('Reference stress scenario')).toHaveValue('base');
+  await expect(delta.nth(0)).toHaveText('$0.00');
+
+});
