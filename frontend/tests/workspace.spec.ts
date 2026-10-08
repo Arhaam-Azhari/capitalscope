@@ -378,3 +378,29 @@ test('I clear share-basis confirmation when the stored quote changes during comp
   await context.getByRole('checkbox').check();
   await expect(row.getByRole('cell').nth(2)).toHaveText('$3.00');
 });
+
+test('I withhold stale review counts when storage reload fails and preserve a draft while filtering', async ({ page }) => {
+  await installApi(page);
+  let unavailable = false;
+  const entry = { entryId: 'my-review', ticker: 'DEMO', status: 'watching', thesis: 'My saved thesis', risks: '', reviewDate: '2026-01-01',
+    version: 1, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' };
+  await page.route('**/api/watchlist', route => unavailable ? route.fulfill({ status: 503, json: { error: 'My test storage is offline' } }) : route.fulfill({ json: [entry] }));
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  const queue = page.getByRole('region', { name: 'Research review queue' });
+  await expect(queue.getByTestId('review-count-overdue')).toHaveText('1');
+  await page.getByRole('button', { name: 'Edit DEMO', exact: true }).click();
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved thesis');
+  await queue.getByRole('button', { name: /^No review date/ }).click();
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved thesis');
+  unavailable = true;
+  await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('My test storage is offline');
+  await expect(queue.getByTestId('review-count-overdue')).toHaveText('—');
+  await expect(queue.getByRole('button', { name: /^Overdue/ })).toBeDisabled();
+  await expect(page.locator('.watchlist-cards')).toHaveCount(0);
+  unavailable = false;
+  await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
+  await expect(queue.getByTestId('review-count-overdue')).toHaveText('1');
+  await queue.getByRole('button', { name: /^Overdue/ }).click();
+  await expect(page.locator('.watchlist-cards')).toContainText('Example Manufacturing');
+});

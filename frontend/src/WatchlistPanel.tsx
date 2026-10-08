@@ -1,3 +1,4 @@
+import { localReviewDay, reviewQueue, reviewState } from './watchlistReview';
 import { useEffect, useState, type FormEvent } from 'react';
 import { request } from './api';
 import type { Company, WatchlistEntry } from './types';
@@ -10,11 +11,19 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
   const [ticker, setTicker] = useState(currentTicker);
   const [status, setStatus] = useState('watching');
   const [thesis, setThesis] = useState(''); const [risks, setRisks] = useState(''); const [reviewDate, setReviewDate] = useState('');
+  const [today, setToday] = useState(localReviewDay);
+  const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('active'); const [error, setError] = useState(''); const [saved, setSaved] = useState('');
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [attempt, setAttempt] = useState(0);
   const entry = entries.find(item => item.ticker === ticker);
   const universe = [{ ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Fictional' }, ...companies];
+  useEffect(() => {
+    const refreshDay = () => setToday(localReviewDay());
+    const timer = window.setInterval(refreshDay, 60000);
+    window.addEventListener('focus', refreshDay); document.addEventListener('visibilitychange', refreshDay);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refreshDay); document.removeEventListener('visibilitychange', refreshDay); };
+  }, []);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setReady(false); setError(''); setSaved('');
     request<WatchlistEntry[]>('/api/watchlist', { signal: controller.signal }).then(data => {
@@ -46,18 +55,33 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not remove this entry.'); }
     finally { setBusy(false); }
   }
-  const now = new Date();
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const visible = entries.filter(item => filter === 'all' || (filter === 'due' ? item.status !== 'archived' && item.reviewDate && item.reviewDate <= today : item.status !== 'archived'));
+  const counts = { overdue: 0, today: 0, soon: 0, undated: 0 };
+  entries.forEach(item => { const bucket = reviewState(item, today).bucket; if (bucket in counts) counts[bucket as keyof typeof counts]++; });
+  const query = search.trim().toLowerCase();
+  const visible = reviewQueue(entries, today).filter(item => {
+    const bucket = reviewState(item, today).bucket;
+    const matches = filter === 'all' || (filter === 'active' ? bucket !== 'archived' : filter === 'due' ? bucket === 'overdue' || bucket === 'today' : filter === 'notes' ? bucket !== 'archived' && (!item.thesis.trim() || !item.risks.trim()) : bucket === filter);
+    const company = universe.find(c => c.ticker === item.ticker);
+    return matches && (!query || [item.ticker, company?.name, company?.sector, item.thesis, item.risks].filter(Boolean).join(' ').toLowerCase().includes(query));
+  });
   return <section className="panel" aria-labelledby="watchlist-heading">
     <div className="panel-title"><div><span className="eyebrow">RESEARCH SHORTLIST</span><h2 id="watchlist-heading">My watchlist</h2></div><button className="secondary" disabled={busy || loading} onClick={() => setAttempt(n => n + 1)}>Reload watchlist</button></div>
     <p className="muted small">A shared shortlist without accounts. Everyone with app access can read and edit these theses. Research status and review dates are your notes, not trade recommendations or scheduled notifications. Reloading replaces the open draft with saved research.</p>
     {error && <p className="notice error" role="alert">{error}</p>}{saved && <p className="save-status" role="status">{saved}</p>}
+    <section className="review-queue" aria-label="Research review queue">
+      <div className="panel-title"><h3>Research review queue</h3><span className="pill">Calendar day · {today}</span></div>
+      <p className="muted small">Counts cover active saved research and exclude archived entries. Dates use your browser's local calendar day and refresh while this view is open. These are review tasks, not market alerts. Filters and search change the list below without changing your draft.</p>
+      <div className="review-counts">{([['overdue', 'Overdue'], ['today', 'Due today'], ['soon', 'Next 7 days'], ['undated', 'No review date']] as const).map(([bucket, label]) => <button type="button" className={`review-count ${filter === bucket ? 'selected' : ''}`} aria-pressed={filter === bucket} disabled={!ready || loading} key={bucket} onClick={() => setFilter(bucket)}><span>{label}</span><strong data-testid={`review-count-${bucket}`}>{ready && !loading ? counts[bucket] : '—'}</strong></button>)}</div>
+      <p className="muted small">Dated active entries appear first, with the oldest overdue date first; undated entries follow and archived entries come last. Equal dates sort by ticker. “Next 7 days” means tomorrow through seven calendar days from now. Missing notes flag an empty thesis or risks field, without assessing research quality.</p>
+    </section>
     <div className="watchlist-layout"><div>
-      <label className="watchlist-filter">Show entries<select value={filter} onChange={e => setFilter(e.target.value)}><option value="active">Active research</option><option value="due">Review due</option><option value="all">All entries, including archived</option></select></label>
-      {loading ? <p role="status">Loading watchlist…</p> : <ul className="watchlist-cards">{visible.map(item => {
+      <label className="watchlist-filter">Show entries<select value={filter} onChange={e => setFilter(e.target.value)}><option value="active">Active research</option><option value="due">Review due</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="soon">Next 7 days</option><option value="later">Later reviews</option><option value="undated">No review date</option><option value="notes">Missing thesis or risks</option><option value="all">All entries, including archived</option></select></label>
+      <label className="watchlist-search">Search saved research<input type="search" value={search} maxLength={200} onChange={event => setSearch(event.target.value)} placeholder="Ticker, company, sector, thesis, or risks" /></label>
+      {!loading && ready && <p className="muted small">{visible.length} of {entries.length} saved entries shown.</p>}
+      {loading ? <p role="status">Loading watchlist…</p> : !ready ? <p className="notice warning">The review queue is unavailable until the watchlist reload succeeds.</p> : <ul className="watchlist-cards">{visible.map(item => {
         const company = universe.find(c => c.ticker === item.ticker);
-        return <li key={item.ticker}><div className="watchlist-card-heading"><strong>{item.ticker}</strong><span className="pill">{item.status}</span></div><h3>{company?.name || item.ticker}</h3><p>{item.thesis || 'No thesis recorded yet.'}</p><span className="muted small">{item.reviewDate ? `Review ${item.reviewDate}${item.status !== 'archived' && item.reviewDate <= today ? ' · due' : ''}` : 'No review date'} · {item.ticker === 'DEMO' ? 'Fictional company' : company?.sector}</span><div className="watchlist-card-actions"><button className="secondary" disabled={busy || loading || !ready} onClick={() => edit(item.ticker)}>Edit {item.ticker}</button>{(['Financials', 'Valuation', 'Prices'] as const).map(section => <button className="text-button" key={section} disabled={busy || loading || !ready} onClick={() => onOpen(item.ticker, section)}>{section} for {item.ticker}</button>)}</div></li>;
+        const review = reviewState(item, today);
+        return <li key={item.ticker}><div className="watchlist-card-heading"><strong>{item.ticker}</strong><span className="pill">{item.status}</span></div><h3>{company?.name || item.ticker}</h3><p>{item.thesis || 'No thesis recorded yet.'}</p><span className="muted small">{item.reviewDate ? `Review ${item.reviewDate}${review.bucket === 'overdue' || review.bucket === 'today' ? ' · due' : ''}${review.bucket === 'overdue' ? ` · ${Math.abs(review.days!)} calendar days overdue` : review.bucket === 'today' ? ' · today' : review.bucket === 'soon' ? ` · in ${review.days} calendar days` : ''}` : 'No review date'} · {item.ticker === 'DEMO' ? 'Fictional company' : company?.sector}</span>{item.status !== 'archived' && (!item.thesis.trim() || !item.risks.trim()) && <p className="review-note-gap">Missing notes: {[!item.thesis.trim() ? 'thesis' : '', !item.risks.trim() ? 'risks' : ''].filter(Boolean).join(' and ')}.</p>}<div className="watchlist-card-actions"><button className="secondary" disabled={busy || loading || !ready} onClick={() => edit(item.ticker)}>Edit {item.ticker}</button>{(['Financials', 'Valuation', 'Prices'] as const).map(section => <button className="text-button" key={section} disabled={busy || loading || !ready} onClick={() => onOpen(item.ticker, section)}>{section} for {item.ticker}</button>)}</div></li>;
       })}{!visible.length && <li className="muted">{entries.length ? 'No entries match this filter.' : 'My shortlist is empty. Choose a company to start.'}</li>}</ul>}
     </div><form onSubmit={save} className="watchlist-editor"><h3>{entry ? `Edit ${ticker}` : 'Add a company'}</h3>
       <div className="model-fields"><label>Watchlist company<select disabled={busy || loading || !ready} value={ticker} onChange={e => edit(e.target.value)}>{universe.map(company => <option key={company.ticker} value={company.ticker}>{company.name} ({company.ticker})</option>)}</select></label><label>Research status<select disabled={busy || loading || !ready} value={status} onChange={e => setStatus(e.target.value)}><option value="watching">Watching</option><option value="researching">Researching</option><option value="archived">Archived</option></select></label><label>Next review date<input disabled={busy || loading || !ready} type="date" min="1900-01-01" max="2100-12-31" value={reviewDate} onChange={e => setReviewDate(e.target.value)} /></label></div>
