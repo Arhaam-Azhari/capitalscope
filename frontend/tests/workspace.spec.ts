@@ -531,3 +531,30 @@ test('I wait for summary evidence before printing and keep unavailable sections 
   expect(await filing.evaluate(element => getComputedStyle(element, '::after').content)).toContain('https://www.sec.gov/Archives/');
   expect(await market.locator('thead th').first().evaluate(element => getComputedStyle(element).backgroundColor)).toBe('rgb(255, 255, 255)');
 });
+
+
+test('I keep my checklist draft when a save fails and reset it only when saved research reloads', async ({ page }) => {
+  await installApi(page);
+  const entry = { entryId: 'my-checklist', ticker: 'DEMO', status: 'watching', thesis: 'My saved checklist thesis', risks: '', reviewDate: null,
+    checks: ['filings'], version: 1, createdAt: '2026-10-08T00:00:00Z', updatedAt: '2026-10-08T00:00:00Z' };
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [entry] }));
+  await page.route('**/api/watchlist/DEMO', route => {
+    expect(route.request().postDataJSON().checks).toEqual(['filings', 'risks']);
+    return route.fulfill({ status: 409, json: { error: 'My checklist changed in another session. Reload before saving.' } });
+  });
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  const risks = page.getByRole('checkbox', { name: /^I revisited risks to my thesis/ });
+  await expect(page.getByRole('checkbox', { name: /^I reviewed the latest filing/ })).toBeChecked();
+  await risks.check();
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved checklist evidence');
+  await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('My checklist changed in another session');
+  await expect(risks).toBeChecked();
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved checklist evidence');
+  await page.getByRole('combobox', { name: 'Show entries' }).selectOption('checks');
+  await expect(risks).toBeChecked();
+  await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
+  await expect(risks).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: /^I reviewed the latest filing/ })).toBeChecked();
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My saved checklist thesis');
+});

@@ -55,6 +55,12 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 @media (max-width: 760px) { .summary-grid { grid-template-columns: 1fr; gap: 0; } }
 .summary-print-header { display: none; }
 .summary-print-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.research-checklist { margin: 20px 0; padding: 14px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+.research-checklist legend { padding: 0 6px; font-weight: 600; }
+.research-checklist label { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0; }
+.research-checklist input { flex: 0 0 auto; margin-top: 3px; accent-color: var(--accent); }
+.research-checklist small { display: block; margin-top: 4px; color: var(--muted); line-height: 1.5; }
+.summary-checklist { padding-left: 20px; font-size: 12px; line-height: 1.8; }
 @page { size: A4; margin: 14mm; }
 @media print {
   html:has(.research-summary), body:has(.research-summary) { background: white; color: #111; color-scheme: light; }

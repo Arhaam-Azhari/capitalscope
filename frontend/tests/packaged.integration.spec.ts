@@ -659,3 +659,51 @@ test('I prepare readable research PDFs with long notes and explicit missing mark
     if (entry) await page.request.delete(`/api/watchlist/DEMO?version=${entry.version}&entryId=${entry.entryId}`);
   }
 });
+
+
+test('I save manual research checks and carry them into my summary and CSV', async ({ page }) => {
+  const existing = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === 'DEMO');
+  if (existing) await page.request.delete(`/api/watchlist/DEMO?version=${existing.version}&entryId=${existing.entryId}`);
+  try {
+    await page.goto('/'); await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+    await page.getByLabel('My investment thesis', { exact: true }).fill('My checklist-backed thesis');
+    await page.getByRole('checkbox', { name: /^I reviewed the latest filing/ }).check();
+    await page.getByRole('checkbox', { name: /^I checked my valuation share basis/ }).check();
+    await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Saved to the shared watchlist');
+    await page.reload(); await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+    const filing = page.getByRole('checkbox', { name: /^I reviewed the latest filing/ });
+    await expect(filing).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: /^I checked my valuation share basis/ })).toBeChecked();
+    await page.getByRole('combobox', { name: 'Show entries' }).selectOption('checks');
+    await expect(page.locator('.watchlist-cards')).toContainText('DEMO');
+    await filing.uncheck();
+    await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved checklist draft');
+    await page.getByLabel('Search saved research', { exact: true }).fill('No matching company');
+    await expect(filing).not.toBeChecked();
+    await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved checklist draft');
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download all saved research CSV', exact: true }).click();
+    const csv = await readFile((await (await downloadPromise).path())!, 'utf8');
+    expect(csv).toContain('"user_reviewed_filings","user_reviewed_cash_flow","user_reviewed_leverage","user_reviewed_share_basis","user_reviewed_risks"');
+    expect(csv).toContain('"User-entered research",true,false,false,true,false');
+    expect(csv).toContain('My checklist-backed thesis'); expect(csv).not.toContain('My unsaved checklist draft');
+    await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+    const notes = page.getByRole('region', { name: 'Saved company thesis', exact: true });
+    await expect(notes).toContainText('2 of 5 marked reviewed');
+    await expect(notes.locator('.summary-checklist')).toContainText('I reviewed the latest filing: Marked reviewed');
+    await expect(notes.locator('.summary-checklist')).toContainText('I checked cash flow quality: Not marked reviewed');
+    await page.getByRole('button', { name: 'Open watchlist', exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.locator('.research-checklist').screenshot({ path: 'test-results/research-checklist-mobile.png' });
+    for (const label of [/^I checked cash flow quality/, /^I reviewed debt and liquidity/, /^I revisited risks to my thesis/]) await page.getByRole('checkbox', { name: label }).check();
+    await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Saved to the shared watchlist');
+    await page.getByRole('combobox', { name: 'Show entries' }).selectOption('checks');
+    await expect(page.locator('.watchlist-cards')).not.toContainText('DEMO');
+  } finally {
+    const entry = (await (await page.request.get('/api/watchlist')).json()).find((item: { ticker: string }) => item.ticker === 'DEMO');
+    if (entry) await page.request.delete(`/api/watchlist/DEMO?version=${entry.version}&entryId=${entry.entryId}`);
+  }
+});

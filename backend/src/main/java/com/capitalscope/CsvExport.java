@@ -28,13 +28,15 @@ public final class CsvExport {
     }
     public static String watchlist(java.util.List<WatchlistStore.Entry> entries, java.time.Instant exportedAt) {
         StringBuilder csv = new StringBuilder(row("entry_id", "ticker", "company", "sector", "instrument_mode", "research_status",
-            "thesis", "risks", "review_date", "version", "created_at", "updated_at", "exported_at", "notes_origin"));
+            "thesis", "risks", "review_date", "version", "created_at", "updated_at", "exported_at", "notes_origin",
+            "user_reviewed_filings", "user_reviewed_cash_flow", "user_reviewed_leverage", "user_reviewed_share_basis", "user_reviewed_risks"));
         // I export saved notes, including archived entries, rather than the browser's draft or filtered list.
         entries.stream().sorted(java.util.Comparator.comparing(WatchlistStore.Entry::ticker)).forEach(entry -> {
             boolean example = entry.ticker().equals("DEMO");
             var company = example ? new CompanyCatalog.Company("DEMO", "Example Manufacturing", "Fictional") : CompanyCatalog.find(entry.ticker());
             csv.append(row(entry.entryId(), entry.ticker(), company.name(), company.sector(), example ? "example" : "market", entry.status(),
-                entry.thesis(), entry.risks(), entry.reviewDate(), entry.version(), entry.createdAt(), entry.updatedAt(), exportedAt, "User-entered research"));
+                entry.thesis(), entry.risks(), entry.reviewDate(), entry.version(), entry.createdAt(), entry.updatedAt(), exportedAt, "User-entered research",
+                entry.checks().contains("filings"), entry.checks().contains("cash_flow"), entry.checks().contains("leverage"), entry.checks().contains("share_basis"), entry.checks().contains("risks")));
         });
         return csv.toString();
     }
