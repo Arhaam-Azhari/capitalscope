@@ -477,3 +477,59 @@ test('I compare a saved valuation with an invented dated close after checking sh
   await context.screenshot({ path: 'test-results/valuation-price-context-mobile.png' });
   await page.request.delete(`/api/companies/DEMO/scenarios/${saved.id}`);
 });
+
+test('I prioritize saved research reviews without changing my draft or counting archived entries', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-07T12:00:00Z') });
+  const localDay = await page.evaluate(() => {
+    const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+  const date = (offset: number) => { const [year, month, day] = localDay.split('-').map(Number); return new Date(Date.UTC(year, month - 1, day + offset)).toISOString().slice(0, 10); };
+  const fixtures = [
+    { ticker: 'AAPL', reviewDate: date(-2), status: 'researching', thesis: 'My oldest review', risks: 'My risk notes' },
+    { ticker: 'MSFT', reviewDate: date(-1), status: 'watching', thesis: 'My second review', risks: 'My risk notes' },
+    { ticker: 'META', reviewDate: date(0), status: 'researching', thesis: 'My review today', risks: 'My risk notes' },
+    { ticker: 'NVDA', reviewDate: date(7), status: 'watching', thesis: 'My seven-day review', risks: 'My risk notes' },
+    { ticker: 'AMZN', reviewDate: date(8), status: 'watching', thesis: 'My later review', risks: 'My risk notes' },
+    { ticker: 'XOM', reviewDate: null, status: 'watching', thesis: '', risks: 'My commodity evidence' },
+    { ticker: 'WMT', reviewDate: date(-20), status: 'archived', thesis: 'My archived review', risks: '' }
+  ];
+  for (const fixture of fixtures) {
+    const existing = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === fixture.ticker);
+    const response = await page.request.put(`/api/watchlist/${fixture.ticker}`, { data: { ...fixture, version: existing?.version || 0, entryId: existing?.entryId || null } });
+    expect(response.ok()).toBe(true);
+  }
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  const queue = page.getByRole('region', { name: 'Research review queue' });
+  await expect(queue.getByTestId('review-count-overdue')).toHaveText('2');
+  await expect(queue.getByTestId('review-count-today')).toHaveText('1');
+  await expect(queue.getByTestId('review-count-soon')).toHaveText('1');
+  await expect(queue.getByTestId('review-count-undated')).toHaveText('1');
+  await expect(page.locator('.watchlist-cards > li .watchlist-card-heading strong')).toHaveText(['AAPL', 'MSFT', 'META', 'NVDA', 'AMZN', 'XOM']);
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved research draft');
+  await queue.getByRole('button', { name: /^Next 7 days/ }).click();
+  await expect(page.locator('.watchlist-cards')).toContainText('NVDA');
+  await expect(page.locator('.watchlist-cards')).not.toContainText('AMZN');
+  await page.getByRole('combobox', { name: 'Show entries' }).selectOption('notes');
+  await page.getByLabel('Search saved research', { exact: true }).fill('commodity');
+  await expect(page.locator('.watchlist-cards .watchlist-card-heading strong')).toHaveText(['XOM']);
+  await expect(page.locator('.watchlist-cards')).toContainText('Missing notes: thesis');
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved research draft');
+  await page.getByLabel('Search saved research', { exact: true }).fill('');
+  await page.getByRole('combobox', { name: 'Show entries' }).selectOption('all');
+  await expect(page.locator('.watchlist-cards .watchlist-card-heading strong').last()).toHaveText('WMT');
+  await page.clock.setSystemTime(new Date('2026-10-08T12:00:00Z'));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(queue.getByTestId('review-count-overdue')).toHaveText('3');
+  await expect(queue.getByTestId('review-count-today')).toHaveText('0');
+  await expect(queue.getByTestId('review-count-soon')).toHaveText('2');
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved research draft');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await queue.screenshot({ path: 'test-results/research-review-queue-mobile.png' });
+  const entries = await (await page.request.get('/api/watchlist')).json();
+  for (const fixture of fixtures) {
+    const entry = entries.find((item: { ticker: string }) => item.ticker === fixture.ticker);
+    await page.request.delete(`/api/watchlist/${entry.ticker}?version=${entry.version}&entryId=${entry.entryId}`);
+  }
+});
