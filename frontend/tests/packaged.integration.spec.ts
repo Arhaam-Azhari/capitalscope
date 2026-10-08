@@ -451,3 +451,29 @@ test('I compare saved stress cases and withhold differences after holdings chang
   await page.getByRole('checkbox', { name: 'Compare My changed holdings', exact: true }).uncheck();
   await expect(comparison).toHaveCount(0);
 });
+
+test('I compare a saved valuation with an invented dated close after checking share basis', async ({ page }) => {
+  const response = await page.request.post('/api/companies/DEMO/scenarios', { data: { name: 'My price gap browser', assumptions: {
+    baseFreeCashFlow: 1000000, growthRate: 0.05, discountRate: 0.10, terminalGrowthRate: 0.02, years: 5, netDebt: 0, sharesOutstanding: 1000000
+  } } });
+  expect(response.ok()).toBe(true);
+  const saved = await response.json();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  const context = page.getByRole('region', { name: 'Saved valuations and dated prices' });
+  const row = context.getByRole('row', { name: /^My price gap browser/ });
+  await expect(context.getByTestId('valuation-price-evidence')).toContainText('2026-09-19');
+  await expect(context.getByTestId('valuation-price-evidence')).toContainText('Invented example close');
+  await expect(row.getByRole('cell').nth(2)).toHaveText('Unavailable');
+  await context.getByRole('checkbox').check();
+  const difference = saved.result.valuePerShare - 21.6;
+  await expect(row.getByRole('cell').nth(2)).toHaveText(new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(difference));
+  await expect(row.getByRole('cell').nth(3)).toHaveText(`${(difference / 21.6 * 100).toFixed(2)}%`);
+  await context.getByRole('button', { name: 'Recheck valuation price' }).click();
+  await expect(context.getByRole('checkbox')).not.toBeChecked();
+  await expect(row.getByRole('cell').nth(2)).toHaveText('Unavailable');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await context.screenshot({ path: 'test-results/valuation-price-context-mobile.png' });
+  await page.request.delete(`/api/companies/DEMO/scenarios/${saved.id}`);
+});

@@ -1,3 +1,4 @@
+import ValuationPriceContext from './ValuationPriceContext';
 import ScenarioComparison from './ScenarioComparison';
 import { useEffect, useState } from 'react';
 import { money, request } from './api';
@@ -61,6 +62,7 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
       <ul className="scenario-list">{items.map(item => <li key={item.id}><label className="scenario-pick"><input type="checkbox" checked={compared.includes(item.id)} disabled={busy || (!compared.includes(item.id) && compared.length >= 4)} onChange={event => toggleComparison(item.id, event.target.checked)} />Compare {item.name}</label><div><strong>{item.name}</strong><span className="muted small">{new Date(item.createdAt).toLocaleString()} · {item.modelVersion} · {money(item.result.valuePerShare, false)} / share</span></div>
         <button type="button" disabled={busy} onClick={() => onLoad(item)}>Load {item.name}</button>
         <button type="button" disabled={busy} onClick={() => remove(item.id)}>Delete {item.name}</button></li>)}</ul>}
+    {!loading && items.length > 0 && <ValuationPriceContext key={ticker} ticker={ticker} scenarios={items} />}
     {!loading && <ScenarioComparison selected={compared.map(id => items.find(item => item.id === id)).filter((item): item is Scenario => !!item && item.ticker === ticker)} />}
   </section>;
 }
