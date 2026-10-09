@@ -804,3 +804,50 @@ test('I inspect saved revisions on demand and keep history separate from my draf
   await apple.getByRole('button', { name: 'Load research history', exact: true }).click();
   await expect(apple).toContainText('No recorded revisions for AAPL');
 });
+
+test('I compare exact research fields across revisions without confusing removals or recreated entries', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  const original = { ticker: 'DEMO', entryId: 'my-original-entry', version: 2, status: 'watching', thesis: 'My unchanged thesis', risks: 'My unchanged risks', checks: ['filings'], reviewDate: null, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
+  await page.route('**/api/watchlist/DEMO/history*', route => route.fulfill({ json: new URL(route.request().url()).searchParams.has('before') ? {
+    items: [{ id: 1, action: 'baseline', recordedAt: '2026-10-03T00:00:00Z', entry: { ...original, version: 1 } }], nextBefore: null
+  } : { items: [
+    { id: 5, action: 'saved', recordedAt: '2026-10-05T00:00:00Z', entry: { ...original, entryId: 'my-recreated-entry', version: 1, status: 'researching', thesis: 'My replacement thesis\nMy second line', risks: '', checks: ['risks'], reviewDate: '2026-12-01' } },
+    { id: 3, action: 'removed', recordedAt: '2026-10-04T00:00:00Z', entry: original },
+    { id: 2, action: 'saved', recordedAt: '2026-10-03T00:00:00Z', entry: original }
+  ], nextBefore: 2 } }));
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My untouched draft');
+  const history = page.getByRole('region', { name: 'Research revision history · DEMO', exact: true });
+  await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+  await history.getByRole('checkbox', { name: /^Compare record 3 / }).check();
+  await history.getByRole('checkbox', { name: /^Compare record 2 / }).check();
+  const comparison = history.getByRole('region', { name: 'Changes between saved research records', exact: true });
+  await expect(comparison).toContainText('0 of 9 research fields changed');
+  await expect(comparison.locator('.revision-comparison-records > div').first()).toContainText('Earlier record · Record 2');
+  await expect(comparison.locator('.revision-comparison-records > div').last()).toContainText('Removed from watchlist');
+  await expect(history.getByRole('checkbox', { name: /^Compare record 5 / })).toBeDisabled();
+  await comparison.getByRole('checkbox', { name: 'Only show changed research fields' }).check();
+  await expect(comparison.getByRole('table')).toHaveCount(0);
+  await expect(comparison).toContainText('No research fields changed');
+  await history.getByRole('button', { name: 'Clear revision comparison' }).click();
+  await history.getByRole('checkbox', { name: /^Compare record 5 / }).check();
+  await history.getByRole('button', { name: 'Load older research revisions' }).click();
+  await history.getByRole('checkbox', { name: /^Compare record 1 / }).check();
+  await expect(comparison).toContainText('6 of 9 research fields changed');
+  await expect(comparison.getByRole('status')).toHaveCount(0);
+  await expect(comparison.getByText('These records belong to different entry IDs.', { exact: false })).toBeVisible();
+  const thesis = comparison.getByRole('row', { name: /Investment thesis/ });
+  await expect(thesis.locator('td').first()).toHaveText('My unchanged thesis');
+  await expect(thesis.locator('td').last()).toHaveText('My replacement thesis\nMy second line');
+  await expect(comparison.getByRole('row', { name: /Risks and evidence/ }).locator('td').last()).toHaveText('Not recorded');
+  await comparison.getByRole('checkbox', { name: 'Only show changed research fields' }).check();
+  await expect(comparison.locator('tbody tr')).toHaveCount(6);
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My untouched draft');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await comparison.screenshot({ path: 'test-results/research-revision-comparison-mobile.png' });
+  await history.getByRole('button', { name: 'Reload research history', exact: true }).click();
+  await expect(comparison).toHaveCount(0);
+  await expect(history.getByRole('checkbox', { name: /^Compare record 5 / })).not.toBeChecked();
+});

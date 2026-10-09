@@ -104,3 +104,10 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .research-history-items details { border: 1px solid var(--line); border-radius: 6px; margin: .75rem 0; padding: 1rem; overflow-wrap: anywhere; }
 .research-history-items summary { cursor: pointer; color: var(--accent); line-height: 1.6; }
 .research-history-items details[open] summary { margin-bottom: 1rem; }
+
+.revision-selection { display: flex; align-items: center; gap: .6rem; color: var(--muted); font-size: 12px; margin: .75rem 0; line-height: 1.6; }
+.revision-selection input { flex-shrink: 0; accent-color: var(--accent); }
+.revision-comparison { border: 1px solid var(--line); border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+.revision-comparison-records { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; overflow-wrap: anywhere; }
+.revision-field-changed { background: #29233f; }
+@media (max-width: 600px) { .revision-comparison-records { grid-template-columns: 1fr; } }
