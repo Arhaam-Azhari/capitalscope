@@ -1,3 +1,4 @@
+import { watchlistDrafts, type WatchlistDraft } from './researchDrafts';
 import { researchChecks, reviewedCount } from './researchChecklist';
 import { localReviewDay, reviewQueue, reviewState } from './watchlistReview';
 import { useEffect, useState, type FormEvent } from 'react';
@@ -36,8 +37,15 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     return () => controller.abort();
   }, [attempt]);
   useEffect(() => {
-    setChecks(entry?.checks || []); setStatus(entry?.status || 'watching'); setThesis(entry?.thesis || ''); setRisks(entry?.risks || ''); setReviewDate(entry?.reviewDate || '');
-  }, [entry, ticker]);
+    const draft = watchlistDrafts.get(ticker) ?? entry;
+    setChecks(draft?.checks || []); setStatus(draft?.status || 'watching'); setThesis(draft?.thesis || ''); setRisks(draft?.risks || ''); setReviewDate(draft?.reviewDate || '');
+  }, [entry, ticker, ready]);
+  function keepDraft(patch: Partial<WatchlistDraft>) {
+    const previous = watchlistDrafts.get(ticker);
+    watchlistDrafts.set(ticker, { status, thesis, risks, checks, reviewDate: reviewDate || null,
+      version: previous?.version ?? entry?.version ?? 0, entryId: previous ? previous.entryId : entry?.entryId || null, ...patch });
+    setSaved('');
+  }
   function edit(symbol: string) { setTicker(symbol); setError(''); setSaved(''); }
   async function downloadResearch() {
     setExporting(true); setExportError('');
@@ -59,7 +67,8 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     event.preventDefault(); setBusy(true); setError(''); setSaved('');
     try {
       const result = await request<WatchlistEntry>(`/api/watchlist/${ticker}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status, thesis, risks, checks, reviewDate: reviewDate || null, version: entry?.version || 0, entryId: entry?.entryId || null }) });
+        body: JSON.stringify({ status, thesis, risks, checks, reviewDate: reviewDate || null, version: watchlistDrafts.get(ticker)?.version ?? entry?.version ?? 0, entryId: watchlistDrafts.has(ticker) ? watchlistDrafts.get(ticker)!.entryId : entry?.entryId || null }) });
+      watchlistDrafts.delete(ticker);
       setEntries(items => [result, ...items.filter(item => item.ticker !== ticker)]); setSaved('Saved to the shared watchlist.');
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save this research.'); }
     finally { setBusy(false); }
@@ -70,6 +79,7 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     try {
       const response = await fetch(`/api/watchlist/${ticker}?version=${entry.version}&entryId=${encodeURIComponent(entry.entryId)}`, { method: 'DELETE' });
       if (!response.ok) { const body = await response.json(); throw new Error(body.error || 'Could not remove this entry.'); }
+      watchlistDrafts.delete(ticker);
       setEntries(items => items.filter(item => item.ticker !== ticker)); setSaved('Removed from the shared watchlist.');
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not remove this entry.'); }
     finally { setBusy(false); }
@@ -84,8 +94,8 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     return matches && (!query || [item.ticker, company?.name, company?.sector, item.thesis, item.risks].filter(Boolean).join(' ').toLowerCase().includes(query));
   });
   return <section className="panel" aria-labelledby="watchlist-heading">
-    <div className="panel-title"><div><span className="eyebrow">RESEARCH SHORTLIST</span><h2 id="watchlist-heading">My watchlist</h2></div><button className="secondary" disabled={busy || loading} onClick={() => setAttempt(n => n + 1)}>Reload watchlist</button></div>
-    <p className="muted small">A shared shortlist without accounts. Everyone with app access can read and edit these theses. Research status and review dates are your notes, not trade recommendations or scheduled notifications. Reloading replaces the open draft with saved research.</p>
+    <div className="panel-title"><div><span className="eyebrow">RESEARCH SHORTLIST</span><h2 id="watchlist-heading">My watchlist</h2></div><button className="secondary" disabled={busy || loading} onClick={() => { watchlistDrafts.delete(ticker); setAttempt(n => n + 1); }}>Reload watchlist</button></div>
+    <p className="muted small">A shared shortlist without accounts. Everyone with app access can read and edit these theses. Research status and review dates are your notes, not trade recommendations or scheduled notifications. Unsaved drafts stay available when switching companies or views while this app is open. Closing or refreshing can lose drafts. Reloading replaces the open draft with saved research.</p>
     {error && <p className="notice error" role="alert">{error}</p>}{saved && <p className="save-status" role="status">{saved}</p>}
     <div className="export-actions"><button className="secondary" type="button" disabled={!ready || loading || busy || exporting} onClick={downloadResearch}>{exporting ? 'Downloading research…' : 'Download all saved research CSV'}</button><span className="muted small">Includes archived entries and saved notes from storage at download time. Search, filters, and unsaved drafts are excluded.</span></div>
     {exportError && <p className="notice error" role="alert">{exportError}</p>}
@@ -105,10 +115,10 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
         return <li key={item.ticker}><div className="watchlist-card-heading"><strong>{item.ticker}</strong><span className="pill">{item.status}</span></div><h3>{company?.name || item.ticker}</h3><p>{item.thesis || 'No thesis recorded yet.'}</p><span className="muted small">{item.reviewDate ? `Review ${item.reviewDate}${review.bucket === 'overdue' || review.bucket === 'today' ? ' · due' : ''}${review.bucket === 'overdue' ? ` · ${Math.abs(review.days!)} calendar days overdue` : review.bucket === 'today' ? ' · today' : review.bucket === 'soon' ? ` · in ${review.days} calendar days` : ''}` : 'No review date'} · {item.ticker === 'DEMO' ? 'Fictional company' : company?.sector}</span>{item.status !== 'archived' && (!item.thesis.trim() || !item.risks.trim()) && <p className="review-note-gap">Missing notes: {[!item.thesis.trim() ? 'thesis' : '', !item.risks.trim() ? 'risks' : ''].filter(Boolean).join(' and ')}.</p>}<p className="muted small">{reviewedCount(item.checks)} of {researchChecks.length} research checks marked reviewed · self-reported</p><div className="watchlist-card-actions"><button className="secondary" disabled={busy || loading || !ready} onClick={() => edit(item.ticker)}>Edit {item.ticker}</button>{(['Financials', 'Valuation', 'Prices'] as const).map(section => <button className="text-button" key={section} disabled={busy || loading || !ready} onClick={() => onOpen(item.ticker, section)}>{section} for {item.ticker}</button>)}</div></li>;
       })}{!visible.length && <li className="muted">{entries.length ? 'No entries match this filter.' : 'My shortlist is empty. Choose a company to start.'}</li>}</ul>}
     </div><form onSubmit={save} className="watchlist-editor"><h3>{entry ? `Edit ${ticker}` : 'Add a company'}</h3>
-      <div className="model-fields"><label>Watchlist company<select disabled={busy || loading || !ready} value={ticker} onChange={e => edit(e.target.value)}>{universe.map(company => <option key={company.ticker} value={company.ticker}>{company.name} ({company.ticker})</option>)}</select></label><label>Research status<select disabled={busy || loading || !ready} value={status} onChange={e => setStatus(e.target.value)}><option value="watching">Watching</option><option value="researching">Researching</option><option value="archived">Archived</option></select></label><label>Next review date<input disabled={busy || loading || !ready} type="date" min="1900-01-01" max="2100-12-31" value={reviewDate} onChange={e => setReviewDate(e.target.value)} /></label></div>
-      <label className="note-label" htmlFor="watchlist-thesis">My investment thesis</label><textarea id="watchlist-thesis" maxLength={2000} disabled={busy || loading || !ready} value={thesis} onChange={e => setThesis(e.target.value)} placeholder="What would need to be true for this business to become more valuable?" />
-      <label className="note-label" htmlFor="watchlist-risks">Risks and evidence to check</label><textarea id="watchlist-risks" maxLength={1000} disabled={busy || loading || !ready} value={risks} onChange={e => setRisks(e.target.value)} placeholder="What could invalidate my thesis? Which filings should I revisit?" />
-      <fieldset className="research-checklist" disabled={busy || loading || !ready}><legend>My research checklist</legend><p className="muted small">These are my manual acknowledgments, not verified evidence or an investment score. Saving the watchlist also saves these checks. Revisit them when facts change; checking share basis here does not confirm a valuation price comparison.</p>{researchChecks.map(check => <label key={check.id}><input type="checkbox" checked={checks.includes(check.id)} onChange={event => setChecks(current => event.target.checked ? [...current, check.id] : current.filter(id => id !== check.id))} /><span>{check.label}<small>{check.detail}</small></span></label>)}<p className="muted small">{reviewedCount(checks)} of {researchChecks.length} marked reviewed in this draft.</p></fieldset>
+      <div className="model-fields"><label>Watchlist company<select disabled={busy || loading || !ready} value={ticker} onChange={e => edit(e.target.value)}>{universe.map(company => <option key={company.ticker} value={company.ticker}>{company.name} ({company.ticker})</option>)}</select></label><label>Research status<select disabled={busy || loading || !ready} value={status} onChange={e => { setStatus(e.target.value); keepDraft({ status: e.target.value }); }}><option value="watching">Watching</option><option value="researching">Researching</option><option value="archived">Archived</option></select></label><label>Next review date<input disabled={busy || loading || !ready} type="date" min="1900-01-01" max="2100-12-31" value={reviewDate} onChange={e => { setReviewDate(e.target.value); keepDraft({ reviewDate: e.target.value }); }} /></label></div>
+      <label className="note-label" htmlFor="watchlist-thesis">My investment thesis</label><textarea id="watchlist-thesis" maxLength={2000} disabled={busy || loading || !ready} value={thesis} onChange={e => { setThesis(e.target.value); keepDraft({ thesis: e.target.value }); }} placeholder="What would need to be true for this business to become more valuable?" />
+      <label className="note-label" htmlFor="watchlist-risks">Risks and evidence to check</label><textarea id="watchlist-risks" maxLength={1000} disabled={busy || loading || !ready} value={risks} onChange={e => { setRisks(e.target.value); keepDraft({ risks: e.target.value }); }} placeholder="What could invalidate my thesis? Which filings should I revisit?" />
+      <fieldset className="research-checklist" disabled={busy || loading || !ready}><legend>My research checklist</legend><p className="muted small">These are my manual acknowledgments, not verified evidence or an investment score. Saving the watchlist also saves these checks. Revisit them when facts change; checking share basis here does not confirm a valuation price comparison.</p>{researchChecks.map(check => <label key={check.id}><input type="checkbox" checked={checks.includes(check.id)} onChange={event => { const next = event.target.checked ? [...checks, check.id] : checks.filter(id => id !== check.id); setChecks(next); keepDraft({ checks: next }); }} /><span>{check.label}<small>{check.detail}</small></span></label>)}<p className="muted small">{reviewedCount(checks)} of {researchChecks.length} marked reviewed in this draft.</p></fieldset>
       <div className="model-actions"><button className="primary" disabled={busy || loading || !ready} type="submit">{busy ? 'Saving…' : 'Save watchlist entry'}</button>{entry && <button className="text-button" disabled={busy || loading || !ready} type="button" onClick={remove}>Remove {ticker} from watchlist</button>}</div>
       {entry && <p className="muted small">Version {entry.version} · Updated {new Date(entry.updatedAt).toLocaleString()}</p>}
     </form></div>
