@@ -950,3 +950,55 @@ test('I download all stored research history without changing my draft or requir
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await history.locator('.export-actions').screenshot({ path: 'test-results/research-history-export-mobile.png' });
 });
+
+test('I review saved research for current holdings and reset it when I switch portfolios', async ({ page }) => {
+  await installApi(page);
+  const portfolio = { id: 'review', name: 'My research portfolio', mode: 'market', initialCash: 1000, createdAt: '2026-10-01T00:00:00Z' };
+  const empty = { ...portfolio, id: 'empty', name: 'My cash portfolio' };
+  const checks = ['filings', 'cash_flow', 'leverage', 'share_basis', 'risks'];
+  const entries = [
+    { ticker: 'AAPL', status: 'researching', thesis: 'My complete thesis', risks: 'My recorded risks', reviewDate: '2099-01-01', checks },
+    { ticker: 'MSFT', status: 'watching', thesis: ' ', risks: 'My risk notes', reviewDate: '2000-01-01', checks: [] },
+    { ticker: 'AMZN', status: 'archived', thesis: '', risks: '', reviewDate: '2000-01-01', checks: [] }
+  ].map((entry, i) => ({ ...entry, entryId: `entry-${i}`, version: 1, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' }));
+  let reads = 0;
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/watchlist') {
+      reads++;
+      return reads === 1 ? route.fulfill({ status: 503, json: { error: 'My saved research is unavailable' } }) : route.fulfill({ json: entries });
+    }
+    if (path === '/api/portfolios') return route.fulfill({ json: [portfolio, empty] });
+    if (path === '/api/portfolios/review' || path === '/api/portfolios/empty') return route.fulfill({ json: {
+      portfolio: path.endsWith('empty') ? empty : portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, events: [], trades: [],
+      positions: path.endsWith('empty') ? [] : ['AAPL', 'MSFT', 'AMZN', 'NVDA', 'DEMO'].map(ticker => ({ ticker, quantity: 2, costBasis: 100, averageCost: 50 }))
+    } });
+    return route.fallback();
+  });
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  const review = page.getByRole('region', { name: 'Research review for my holdings', exact: true });
+  await expect(review.getByRole('button', { name: 'Load portfolio research' })).toBeEnabled();
+  expect(reads).toBe(0);
+  await review.getByRole('button', { name: 'Load portfolio research' }).click();
+  await expect(review.getByRole('alert')).toContainText('unavailable');
+  await review.getByRole('button', { name: 'Load portfolio research' }).click();
+  await expect(review).toContainText('5 holdings · 1 without a saved entry · 1 with archived research · 1 with missing notes · 1 with open manual checks · 1 due for review');
+  await expect(review.getByRole('button', { name: 'Open research for DEMO' })).toBeDisabled();
+  await review.getByLabel('Portfolio research filter').selectOption('needs');
+  await expect(review.getByRole('button', { name: 'Open research for AAPL' })).toHaveCount(0);
+  await expect(review.getByRole('button', { name: 'Open research for MSFT' })).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await review.getByText('Read saved notes for MSFT', { exact: true }).click();
+  await expect(review).toContainText('My risk notes');
+  await page.getByLabel('Open portfolio').selectOption('empty');
+  await expect(review).toContainText('No open positions to review');
+  await expect(review.getByRole('button', { name: 'Load portfolio research' })).toBeDisabled();
+  await page.getByLabel('Open portfolio').selectOption('review');
+  await expect(review).toContainText('Load saved research to review the current holdings');
+  expect(reads).toBe(2);
+  await review.getByRole('button', { name: 'Load portfolio research' }).click();
+  await review.getByRole('button', { name: 'Open research for AAPL' }).click();
+  await expect(page).toHaveURL(/company=AAPL&view=summary/);
+  await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toBeVisible();
+});

@@ -1,0 +1,57 @@
+import { useEffect, useState } from 'react';
+import { request } from './api';
+import { localReviewDay, reviewState } from './watchlistReview';
+import { researchChecks, reviewedCount } from './researchChecklist';
+import type { Company, PortfolioSummary, WatchlistEntry } from './types';
+
+export default function PortfolioResearchReview({ summary, companies, onOpen }: {
+  summary: PortfolioSummary; companies: Company[]; onOpen: (ticker: string) => void;
+}) {
+  const [entries, setEntries] = useState<WatchlistEntry[]>([]);
+  const [attempt, setAttempt] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [today, setToday] = useState(localReviewDay);
+  useEffect(() => {
+    const refresh = () => setToday(localReviewDay());
+    const timer = window.setInterval(refresh, 60000); window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, []);
+  useEffect(() => {
+    if (!attempt) return;
+    const controller = new AbortController(); setLoading(true); setReady(false); setEntries([]); setError('');
+    request<WatchlistEntry[]>('/api/watchlist', { signal: controller.signal }).then(data => {
+      if (!controller.signal.aborted) { setEntries(data); setReady(true); }
+    }).catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Saved research is unavailable.'); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [attempt]);
+  const rows = summary.positions.map(position => {
+    const supported = summary.portfolio.mode === 'example' ? position.ticker === 'DEMO' : position.ticker !== 'DEMO' && companies.some(c => c.ticker === position.ticker);
+    const entry = supported ? entries.find(item => item.ticker === position.ticker) : undefined;
+    const archived = entry?.status === 'archived';
+    const missingNotes = Boolean(entry && !archived && (!entry.thesis.trim() || !entry.risks.trim()));
+    const openChecks = Boolean(entry && !archived && reviewedCount(entry.checks) < researchChecks.length);
+    const due = Boolean(entry && !archived && ['overdue', 'today'].includes(reviewState(entry, today).bucket));
+    return { position, supported, entry, archived, missingNotes, openChecks, due, needsReview: !supported || !entry || archived || missingNotes || openChecks || due };
+  });
+  const visible = filter === 'needs' ? rows.filter(row => row.needsReview) : rows;
+  return <section className="portfolio-actions" aria-labelledby="portfolio-research-heading">
+    <div className="panel-title"><h3 id="portfolio-research-heading">Research review for my holdings</h3><button className="secondary" disabled={loading || !rows.length} onClick={() => setAttempt(value => value + 1)}>{ready ? 'Reload portfolio research' : 'Load portfolio research'}</button></div>
+    <p className="muted small">Current simulated positions matched to shared saved watchlist research. Cash and closed positions are excluded. Research is not a recommendation, a coverage score, or evidence supporting past trades. Manual checklist marks are self-reported. Drafts and browser-only notes are excluded; loading here reads saved notes without importing prices or filings.</p>
+    {!rows.length ? <p className="muted">No open positions to review.</p> : loading ? <p role="status">Loading portfolio research…</p> : error ? <p role="alert" className="notice error">{error}</p> : !ready ? <p className="muted">Load saved research to review the current holdings.</p> : <>
+      <p className="muted small">{rows.length} holdings · {rows.filter(row => row.supported && !row.entry).length} without a saved entry · {rows.filter(row => row.archived).length} with archived research · {rows.filter(row => row.missingNotes).length} with missing notes · {rows.filter(row => row.openChecks).length} with open manual checks · {rows.filter(row => row.due).length} due for review.</p>
+      <p className="muted small">Missing notes, open checks, and due dates count active saved entries only; categories can overlap. Review dates use this browser's local calendar day ({today}), not scheduled alerts. Unsupported holdings remain labeled and cannot open a company view.</p>
+      <label className="watchlist-filter">Portfolio research filter<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All current holdings</option><option value="needs">Research needs review</option></select></label>
+      <div className="table-scroll"><table className="comparison-table"><caption>Saved research matched to current simulated holdings</caption><thead><tr><th>Holding / shares</th><th>Saved research</th><th>Notes and manual checks</th><th>Review / saved date</th><th>Company research</th></tr></thead><tbody>{visible.map(({ position, supported, entry, archived }) => <tr key={position.ticker}>
+        <th scope="row">{position.ticker}<small className="comparison-evidence">{position.ticker === 'DEMO' ? 'Fictional company' : companies.find(c => c.ticker === position.ticker)?.name || 'Outside current catalog'}<span>{position.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })} simulated shares</span></small></th>
+        <td>{!supported ? 'Unsupported instrument for this portfolio mode' : !entry ? 'No saved watchlist entry' : archived ? 'Archived research' : entry.status}</td>
+        <td>{entry ? <><p className="muted small">Thesis: {entry.thesis.trim() ? 'Recorded' : 'Missing'} · Risks: {entry.risks.trim() ? 'Recorded' : 'Missing'}<br />{reviewedCount(entry.checks)} of {researchChecks.length} marked reviewed</p><details><summary>Read saved notes for {position.ticker}</summary><h4>Investment thesis</h4><p className="summary-notes">{entry.thesis || 'No thesis recorded.'}</p><h4>Risks and evidence to check</h4><p className="summary-notes">{entry.risks || 'No risks recorded.'}</p></details></> : 'Unavailable'}</td>
+        <td>{entry ? <>{entry.reviewDate || 'No review date'}{!archived && ['overdue', 'today'].includes(reviewState(entry, today).bucket) && <span> · due</span>}<small className="comparison-evidence">Version {entry.version}<span>Updated {new Date(entry.updatedAt).toLocaleString()}</span></small></> : '—'}</td>
+        <td><button className="text-button" disabled={!supported} onClick={() => onOpen(position.ticker)}>Open research for {position.ticker}</button></td>
+      </tr>)}{!visible.length && <tr><td colSpan={5}>No holdings match this research filter. This does not verify research quality.</td></tr>}</tbody></table></div>
+    </>}
+  </section>;
+}
