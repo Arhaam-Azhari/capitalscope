@@ -23,6 +23,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
 - Compare two to four saved valuation cases, inspect changed assumptions, and download their comparison as CSV.
 - Inspect cash, company, and sector weights, largest exposures, and the combined top three holdings.
+- Download all current holdings and their last loaded saved research as CSV, including full notes, manual checks, review flags, entry versions, and load/export dates. I export all holdings regardless of the filter and label the separate positions and research reads.
 - Review current simulated holdings against saved research, spot missing notes, open manual checks, archived entries, and due dates, then open each company’s research summary. I load shared saved notes on demand; drafts and closed positions stay outside this review.
 - Keep a saved company watchlist with theses, risks, research status, and review dates.
 - Value current holdings using stored daily closes, with dated price evidence, partial coverage, and unrealized P&L.

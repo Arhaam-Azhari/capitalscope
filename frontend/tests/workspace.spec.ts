@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
+import { readCsv } from './readCsv';
 
 // I use invented financial values and stub the API so these checks don't hit the SEC.
 const example = {
@@ -953,12 +954,13 @@ test('I download all stored research history without changing my draft or requir
 
 test('I review saved research for current holdings and reset it when I switch portfolios', async ({ page }) => {
   await installApi(page);
-  const portfolio = { id: 'review', name: 'My research portfolio', mode: 'market', initialCash: 1000, createdAt: '2026-10-01T00:00:00Z' };
+  const portfolio = { id: 'review', name: '=My, "research" portfolio', mode: 'market', initialCash: 1000, createdAt: '2026-10-01T00:00:00Z' };
   const empty = { ...portfolio, id: 'empty', name: 'My cash portfolio' };
   const checks = ['filings', 'cash_flow', 'leverage', 'share_basis', 'risks'];
   const entries = [
-    { ticker: 'AAPL', status: 'researching', thesis: 'My complete thesis', risks: 'My recorded risks', reviewDate: '2099-01-01', checks },
+    { ticker: 'AAPL', status: 'researching', thesis: '=SUM(1,2)\nMy "quoted" thesis', risks: '\tMy recorded risks', reviewDate: '2099-01-01', checks },
     { ticker: 'MSFT', status: 'watching', thesis: ' ', risks: 'My risk notes', reviewDate: '2000-01-01', checks: [] },
+    { ticker: 'TSLA', status: 'watching', thesis: 'My unrelated notes', risks: 'My unrelated risk', reviewDate: null, checks: [] },
     { ticker: 'AMZN', status: 'archived', thesis: '', risks: '', reviewDate: '2000-01-01', checks: [] }
   ].map((entry, i) => ({ ...entry, entryId: `entry-${i}`, version: 1, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' }));
   let reads = 0;
@@ -978,25 +980,62 @@ test('I review saved research for current holdings and reset it when I switch po
   await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
   const review = page.getByRole('region', { name: 'Research review for my holdings', exact: true });
   await expect(review.getByRole('button', { name: 'Load portfolio research' })).toBeEnabled();
+  await expect(review.getByRole('button', { name: 'Download all holdings research CSV' })).toBeDisabled();
   expect(reads).toBe(0);
   await review.getByRole('button', { name: 'Load portfolio research' }).click();
   await expect(review.getByRole('alert')).toContainText('unavailable');
+  await expect(review.getByRole('button', { name: 'Download all holdings research CSV' })).toBeDisabled();
   await review.getByRole('button', { name: 'Load portfolio research' }).click();
   await expect(review).toContainText('5 holdings · 1 without a saved entry · 1 with archived research · 1 with missing notes · 1 with open manual checks · 1 due for review');
   await expect(review.getByRole('button', { name: 'Open research for DEMO' })).toBeDisabled();
   await review.getByLabel('Portfolio research filter').selectOption('needs');
   await expect(review.getByRole('button', { name: 'Open research for AAPL' })).toHaveCount(0);
   await expect(review.getByRole('button', { name: 'Open research for MSFT' })).toBeVisible();
+  const downloaded = page.waitForEvent('download');
+  await review.getByRole('button', { name: 'Download all holdings research CSV' }).click();
+  const file = await downloaded;
+  expect(file.suggestedFilename()).toBe('portfolio-research.csv');
+  const { readFile } = await import('node:fs/promises');
+  const csv = await readFile((await file.path())!, 'utf8');
+  const records = readCsv(csv);
+  expect(records.map(row => row.ticker)).toEqual(['AAPL', 'MSFT', 'AMZN', 'NVDA', 'DEMO']);
+  const [apple, microsoft, amazon, nvidia, demo] = records;
+  expect(apple.portfolio_name).toBe("'=My, \"research\" portfolio");
+  expect(apple.thesis).toBe("'=SUM(1,2)\nMy \"quoted\" thesis");
+  expect(apple.risks).toBe("'\tMy recorded risks");
+  expect(apple.simulated_shares).toBe('2');
+  expect(apple.research_needs_review).toBe('false');
+  expect(apple.manual_checks_reviewed).toBe('5');
+  expect(apple.user_reviewed_filings).toBe('true');
+  expect(microsoft.review_bucket).toBe('overdue');
+  expect(microsoft.missing_active_notes).toBe('true');
+  expect(microsoft.open_active_manual_checks).toBe('true');
+  expect(amazon.research_status).toBe('archived');
+  expect(amazon.active_review_due).toBe('false');
+  expect(nvidia.saved_entry_present).toBe('false');
+  expect(nvidia.manual_checks_reviewed).toBe('');
+  expect(nvidia.user_reviewed_filings).toBe('');
+  expect(demo.supported_in_portfolio_mode).toBe('false');
+  expect(demo.entry_id).toBe('');
+  expect(apple.saved_research_loaded_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(apple.local_review_day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  expect(apple.export_scope).toContain('not an atomic database snapshot');
+  expect(apple.exported_at >= apple.saved_research_loaded_at).toBe(true);
+  expect(reads).toBe(2);
+
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await review.locator('.export-actions').screenshot({ path: 'test-results/portfolio-research-export-mobile.png' });
   await review.getByText('Read saved notes for MSFT', { exact: true }).click();
   await expect(review).toContainText('My risk notes');
   await page.getByLabel('Open portfolio').selectOption('empty');
   await expect(review).toContainText('No open positions to review');
   await expect(review.getByRole('button', { name: 'Load portfolio research' })).toBeDisabled();
+  await expect(review.getByRole('button', { name: 'Download all holdings research CSV' })).toBeDisabled();
   await page.getByLabel('Open portfolio').selectOption('review');
   await expect(review).toContainText('Load saved research to review the current holdings');
   expect(reads).toBe(2);
+  await expect(review.getByRole('button', { name: 'Download all holdings research CSV' })).toBeDisabled();
   await review.getByRole('button', { name: 'Load portfolio research' }).click();
   await review.getByRole('button', { name: 'Open research for AAPL' }).click();
   await expect(page).toHaveURL(/company=AAPL&view=summary/);

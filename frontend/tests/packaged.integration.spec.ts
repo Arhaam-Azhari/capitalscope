@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { test, expect } from '@playwright/test';
+import { readCsv } from './readCsv';
 
 // I run these against the packaged Spring app without intercepting its API requests.
 test('packaged dashboard serves its catalog and explicitly labeled example', async ({ page }) => {
@@ -888,6 +889,15 @@ test('I match actual saved research to a packaged portfolio without importing ev
     await expect(review).toContainText('My portfolio thesis');
     await expect(review).toContainText('1 of 5 marked reviewed');
     expect(imports).toEqual([]);
+    const downloaded = page.waitForEvent('download');
+    await review.getByRole('button', { name: 'Download all holdings research CSV' }).click();
+    const file = await downloaded;
+    const records = readCsv(await readFile((await file.path())!, 'utf8'));
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ portfolio_id: portfolio.id, ticker: 'AAPL', thesis: 'My portfolio thesis', risks: 'My portfolio risk',
+      simulated_shares: '2', research_status: 'researching', manual_checks_reviewed: '1', user_reviewed_filings: 'true', user_reviewed_risks: 'false', active_review_due: 'true' });
+    expect(imports).toEqual([]);
+
     await review.getByRole('button', { name: 'Open research for AAPL' }).click();
     await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toContainText('My portfolio risk');
   } finally {
