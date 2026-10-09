@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { request } from './api';
 import { localReviewDay, reviewState } from './watchlistReview';
 import { researchChecks, reviewedCount } from './researchChecklist';
+import { portfolioResearchCsv, portfolioResearchRows } from './portfolioResearch';
 import type { Company, PortfolioSummary, WatchlistEntry } from './types';
 
 export default function PortfolioResearchReview({ summary, companies, onOpen }: {
@@ -12,6 +13,8 @@ export default function PortfolioResearchReview({ summary, companies, onOpen }: 
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
+  const [loadedAt, setLoadedAt] = useState('');
+  const [exportError, setExportError] = useState('');
   const [filter, setFilter] = useState('all');
   const [today, setToday] = useState(localReviewDay);
   useEffect(() => {
@@ -21,26 +24,29 @@ export default function PortfolioResearchReview({ summary, companies, onOpen }: 
   }, []);
   useEffect(() => {
     if (!attempt) return;
-    const controller = new AbortController(); setLoading(true); setReady(false); setEntries([]); setError('');
+    const controller = new AbortController(); setLoading(true); setReady(false); setEntries([]); setError(''); setLoadedAt(''); setExportError('');
     request<WatchlistEntry[]>('/api/watchlist', { signal: controller.signal }).then(data => {
-      if (!controller.signal.aborted) { setEntries(data); setReady(true); }
+      if (!controller.signal.aborted) { setEntries(data); setLoadedAt(new Date().toISOString()); setReady(true); }
     }).catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Saved research is unavailable.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [attempt]);
-  const rows = summary.positions.map(position => {
-    const supported = summary.portfolio.mode === 'example' ? position.ticker === 'DEMO' : position.ticker !== 'DEMO' && companies.some(c => c.ticker === position.ticker);
-    const entry = supported ? entries.find(item => item.ticker === position.ticker) : undefined;
-    const archived = entry?.status === 'archived';
-    const missingNotes = Boolean(entry && !archived && (!entry.thesis.trim() || !entry.risks.trim()));
-    const openChecks = Boolean(entry && !archived && reviewedCount(entry.checks) < researchChecks.length);
-    const due = Boolean(entry && !archived && ['overdue', 'today'].includes(reviewState(entry, today).bucket));
-    return { position, supported, entry, archived, missingNotes, openChecks, due, needsReview: !supported || !entry || archived || missingNotes || openChecks || due };
-  });
+  const rows = portfolioResearchRows(summary, companies, entries, today);
+  function download() {
+    setExportError('');
+    try {
+      const csv = portfolioResearchCsv(summary, rows, today, loadedAt, new Date().toISOString());
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = 'portfolio-research.csv';
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch { setExportError('I could not prepare the research CSV. Please try again.'); }
+  }
   const visible = filter === 'needs' ? rows.filter(row => row.needsReview) : rows;
   return <section className="portfolio-actions" aria-labelledby="portfolio-research-heading">
     <div className="panel-title"><h3 id="portfolio-research-heading">Research review for my holdings</h3><button className="secondary" disabled={loading || !rows.length} onClick={() => setAttempt(value => value + 1)}>{ready ? 'Reload portfolio research' : 'Load portfolio research'}</button></div>
     <p className="muted small">Current simulated positions matched to shared saved watchlist research. Cash and closed positions are excluded. Research is not a recommendation, a coverage score, or evidence supporting past trades. Manual checklist marks are self-reported. Drafts and browser-only notes are excluded; loading here reads saved notes without importing prices or filings.</p>
+    <div className="export-actions"><button className="secondary" disabled={!ready || loading || !rows.length} onClick={download}>Download all holdings research CSV</button><p className="muted small">Exports every current holding, regardless of the filter, with the last loaded saved notes and their timestamps. Reload research for newer notes. This combines current positions with separately loaded research, not a synchronized database snapshot.</p></div>
+    {exportError && <p className="notice error" role="alert">{exportError}</p>}
     {!rows.length ? <p className="muted">No open positions to review.</p> : loading ? <p role="status">Loading portfolio research…</p> : error ? <p role="alert" className="notice error">{error}</p> : !ready ? <p className="muted">Load saved research to review the current holdings.</p> : <>
       <p className="muted small">{rows.length} holdings · {rows.filter(row => row.supported && !row.entry).length} without a saved entry · {rows.filter(row => row.archived).length} with archived research · {rows.filter(row => row.missingNotes).length} with missing notes · {rows.filter(row => row.openChecks).length} with open manual checks · {rows.filter(row => row.due).length} due for review.</p>
       <p className="muted small">Missing notes, open checks, and due dates count active saved entries only; categories can overlap. Review dates use this browser's local calendar day ({today}), not scheduled alerts. Unsupported holdings remain labeled and cannot open a company view.</p>
