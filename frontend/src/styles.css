@@ -111,3 +111,5 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .revision-comparison-records { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; overflow-wrap: anywhere; }
 .revision-field-changed { background: #29233f; }
 @media (max-width: 600px) { .revision-comparison-records { grid-template-columns: 1fr; } }
+
+.revision-restore { margin: 1rem 0; padding: 1rem; border: 1px solid var(--accent); border-radius: 6px; overflow-wrap: anywhere; }
