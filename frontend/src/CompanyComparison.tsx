@@ -1,3 +1,4 @@
+import { comparisonLink } from './researchNavigation';
 import SavedResearchComparison from './SavedResearchComparison';
 import { useEffect, useRef, useState } from 'react';
 import { money, request } from './api';
@@ -20,9 +21,12 @@ function Evidence({ point, example }: { point: Point | undefined; example: boole
   </small>;
 }
 
-export default function CompanyComparison({ companies, onOpen }: { companies: Company[]; onOpen: (ticker: string) => void }) {
-  const [mode, setMode] = useState<'example' | 'sec'>('example');
-  const [selected, setSelected] = useState<string[]>(['AAPL', 'MSFT']);
+export default function CompanyComparison({ companies, peers, onChange, contextTicker, onOpen }: { companies: Company[]; peers: string[] | null; onChange: (peers: string[] | null) => void; contextTicker: string; onOpen: (ticker: string) => void }) {
+  const mode = peers ? 'sec' : 'example';
+  const selected = peers || ['AAPL', 'MSFT'];
+  const [copyMessage, setCopyMessage] = useState('');
+  const link = comparisonLink(contextTicker, selected);
+  useEffect(() => setCopyMessage(''), [peers]);
   const [reports, setReports] = useState<FinancialReport[]>([]);
   const [failures, setFailures] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -48,10 +52,10 @@ export default function CompanyComparison({ companies, onOpen }: { companies: Co
       if (!controller.signal.aborted) setBusy(false);
     }
     void load(); return () => controller.abort();
-  }, [mode, selected, attempt]);
+  }, [mode, peers, attempt]);
   function change(index: number, ticker: string) {
     active.current?.abort(); setReports([]); setFailures([]);
-    setSelected(current => current.map((value, i) => i === index ? ticker : value));
+    setCopyMessage(''); onChange(selected.map((value, i) => i === index ? ticker : value));
   }
   const rows = reports.map(report => {
     const revenue = points(report, 'Revenue')[0];
@@ -67,11 +71,15 @@ export default function CompanyComparison({ companies, onOpen }: { companies: Co
   });
   return <section className="panel" aria-labelledby="comparison-heading">
     <div className="panel-title"><div><span className="eyebrow">PEER RESEARCH</span><h2 id="comparison-heading">Compare company fundamentals</h2></div></div>
-    <div className="comparison-controls"><label>Comparison data<select value={mode} onChange={e => { active.current?.abort(); setReports([]); setMode(e.target.value as 'example' | 'sec'); }}><option value="example">Fictional example peers</option><option value="sec">Real SEC companies</option></select></label>
+    <div className="comparison-controls"><label>Comparison data<select disabled={companies.length < 2} value={mode} onChange={e => { active.current?.abort(); setReports([]); setCopyMessage(''); onChange(e.target.value === 'sec' ? companies.filter(c => ['AAPL', 'MSFT'].includes(c.ticker)).map(c => c.ticker) : null); }}><option value="example">Fictional example peers</option><option value="sec">Real SEC companies</option></select></label>
       {mode === 'sec' && selected.map((ticker, i) => <label key={i}>Company {i + 1}<select value={ticker} onChange={e => change(i, e.target.value)}>{companies.filter(c => c.ticker === ticker || !selected.includes(c.ticker)).map(c => <option key={c.ticker} value={c.ticker}>{c.name} ({c.ticker})</option>)}</select></label>)}
-      {mode === 'sec' && selected.length < 4 && <button type="button" className="secondary" onClick={() => { const next = companies.find(c => !selected.includes(c.ticker)); if (next) setSelected([...selected, next.ticker]); }}>Add company</button>}
-      {mode === 'sec' && selected.length > 2 && <button type="button" className="secondary" onClick={() => setSelected(selected.slice(0, -1))}>Remove last company</button>}
+      {mode === 'sec' && selected.length < 4 && <button type="button" className="secondary" onClick={() => { const next = companies.find(c => !selected.includes(c.ticker)); if (next) onChange([...selected, next.ticker]); }}>Add company</button>}
+      {mode === 'sec' && selected.length > 2 && <button type="button" className="secondary" onClick={() => onChange(selected.slice(0, -1))}>Remove last company</button>}
     </div>
+    {mode === 'sec' && <div className="summary-share"><button className="secondary" onClick={async () => {
+      try { await navigator.clipboard.writeText(link); setCopyMessage('Comparison link copied.'); }
+      catch { setCopyMessage('Copy is unavailable. Select and copy the link below.'); }
+    }}>Copy company comparison link</button><label>Company comparison link<input readOnly value={link} onFocus={event => event.target.select()} /></label><p className="muted small">Opens these companies in the same app instance with the latest available evidence, not a frozen report. The link contains company selections only and does not grant access. Localhost links remain local.</p>{copyMessage && <p role="status" className="save-status">{copyMessage}</p>}</div>}
     <p className={`notice ${mode === 'example' ? 'example' : 'warning'}`}>{mode === 'example' ? 'All three companies and their figures are invented. They are separate from the real catalog.' : 'Latest annual periods may end on different dates. Compare businesses with similar economics; this table does not rank investments.'}</p>
     <p className="muted small">Margins use matching start and end dates within each company. Growth uses the preceding annual revenue period, 300–400 days earlier. Missing or mismatched inputs stay blank. Cash after capex is reported operating cash flow minus capex; it is not the unlevered cash flow used by the valuation model.</p>
     {busy && <p role="status">Loading comparison…</p>}

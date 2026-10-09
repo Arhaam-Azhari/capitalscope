@@ -1,7 +1,7 @@
 import { useDraftExitWarning } from './researchDrafts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { request } from './api';
-import { readResearchRoute, researchLink, tabs, type Section } from './researchNavigation';
+import { comparisonLink, readResearchRoute, researchLink, tabs, type Section } from './researchNavigation';
 import type { Company, FinancialReport } from './types';
 import FinancialOverview from './FinancialOverview';
 import ValuationPanel from './ValuationPanel';
@@ -16,7 +16,8 @@ const demo: Company = { ticker: 'DEMO', name: 'Example Manufacturing', sector: '
 
 export default function App() {
   useDraftExitWarning();
-  const [routeWaiting, setRouteWaiting] = useState(() => readResearchRoute().ticker !== 'DEMO');
+  const [routeWaiting, setRouteWaiting] = useState(() => readResearchRoute().ticker !== 'DEMO' || Boolean(readResearchRoute().peers));
+  const [comparisonPeers, setComparisonPeers] = useState<string[] | null>(null);
   const [routeError, setRouteError] = useState(() => readResearchRoute().error);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [catalogReady, setCatalogReady] = useState(false);
@@ -74,16 +75,23 @@ export default function App() {
   }, [companies, catalogReady]);
   function restoreRoute(catalog: Company[], ready = catalogReady) {
     const route = readResearchRoute();
-    if (route.ticker !== 'DEMO' && !ready) { setRouteWaiting(true); return; }
-    const supported = route.ticker === 'DEMO' || catalog.some(item => item.ticker === route.ticker);
+    if ((route.ticker !== 'DEMO' || route.peers) && !ready) { setRouteWaiting(true); return; }
+    const supported = (route.ticker === 'DEMO' || catalog.some(item => item.ticker === route.ticker)) && (!route.peers || route.peers.every(ticker => catalog.some(item => item.ticker === ticker)));
+    setComparisonPeers(supported ? route.peers || null : null);
     setSelected(supported ? route.ticker : 'DEMO'); setSection(supported ? route.section : 'Financials');
     setRouteError(supported ? route.error : 'This company is not in the catalog. The example workspace is open instead.');
     setRouteWaiting(false); closeCatalog();
   }
   function navigate(ticker: string, target: Section) {
-    const url = researchLink(ticker, target);
+    const peers = target === 'Compare companies' && section === target ? comparisonPeers : null;
+    const url = peers ? comparisonLink(ticker, peers) : researchLink(ticker, target);
     if (url !== window.location.href) window.history.pushState(null, '', url);
-    setSelected(ticker); setSection(target); setRouteWaiting(false); setRouteError(''); closeCatalog();
+    setComparisonPeers(peers); setSelected(ticker); setSection(target); setRouteWaiting(false); setRouteError(''); closeCatalog();
+  }
+  function changeComparison(peers: string[] | null) {
+    const url = peers ? comparisonLink(selected, peers) : researchLink(selected, 'Compare companies');
+    if (url !== window.location.href) window.history.pushState(null, '', url);
+    setComparisonPeers(peers); setRouteError('');
   }
   function closeCatalog() { if (catalogDetails.current) catalogDetails.current.open = false; }
   function choose(ticker: string) { navigate(ticker, 'Financials'); catalogSummary.current?.focus(); }
@@ -125,7 +133,7 @@ export default function App() {
           {report && !loading && <FinancialOverview key={selected} report={report} />}
         </>}
         {section === 'Valuation' && <ValuationPanel key={selected} company={company} />}
-        {section === 'Compare companies' && <CompanyComparison companies={companies} onOpen={ticker => navigate(ticker, 'Research summary')} />}
+        {section === 'Compare companies' && <CompanyComparison companies={companies} peers={comparisonPeers} onChange={changeComparison} contextTicker={selected} onOpen={ticker => navigate(ticker, 'Research summary')} />}
         {section === 'Prices' && <PricePanel key={selected} company={company} />}
         {section === 'Portfolios' && <PortfolioPanel companies={companies} />}
         {section === 'Watchlist' && <WatchlistPanel companies={companies} currentTicker={selected} onOpen={(ticker, target) => { navigate(ticker, target); }} />}
