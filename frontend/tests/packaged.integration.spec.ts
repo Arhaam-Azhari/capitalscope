@@ -829,6 +829,23 @@ test('I revisit saved research revisions after editing removing and recreating a
     await history.getByRole('checkbox', { name: /^Compare record / }).first().check();
     await history.getByRole('checkbox', { name: /^Compare record / }).nth(1).check();
     await expect(comparison).toContainText('These records belong to different entry IDs');
+    const beforeRestore = await (await page.request.get(`/api/watchlist/${ticker}/history`)).json();
+    const source = beforeRestore.items[1];
+    await history.locator('details').nth(1).getByRole('button', { name: /^Prepare draft from record / }).click();
+    const preview = history.getByRole('region', { name: /^Prepare record .* as an editor draft/ });
+    await preview.getByRole('button', { name: /^Replace editor draft with record / }).click();
+    await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My revised history thesis');
+    const stillSaved = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
+    expect(stillSaved).toEqual(recreated);
+    expect((await (await page.request.get(`/api/watchlist/${ticker}/history`)).json()).items[0].id).toBe(beforeRestore.items[0].id);
+    await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+    await expect(page.locator('.save-status').first()).toContainText('Saved to the shared watchlist');
+    const restored = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
+    expect(restored.entryId).toBe(recreated.entryId); expect(restored.version).toBe(2);
+    expect(restored.thesis).toBe(source.entry.thesis); expect(restored.checks).toEqual(source.entry.checks);
+    const afterRestore = await (await page.request.get(`/api/watchlist/${ticker}/history`)).json();
+    expect(afterRestore.items[0].action).toBe('saved');
+    expect(afterRestore.items.find((item: { id: number }) => item.id === source.id)).toEqual(source);
   } finally {
     const current = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
     if (original) await page.request.put(`/api/watchlist/${ticker}`, { data: { ...original, entryId: current?.entryId || null, version: current?.version || 0 } });

@@ -851,3 +851,71 @@ test('I compare exact research fields across revisions without confusing removal
   await expect(comparison).toHaveCount(0);
   await expect(history.getByRole('checkbox', { name: /^Compare record 5 / })).not.toBeChecked();
 });
+
+test('I preview historical research before replacing my draft and keep my original conflict version', async ({ page }) => {
+  await installApi(page);
+  let current = { ticker: 'DEMO', entryId: 'my-active-entry', version: 2, status: 'researching', thesis: 'My current saved thesis', risks: 'My current risks', checks: [], reviewDate: null, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
+  const historical = { ...current, entryId: 'my-earlier-entry', version: 7, status: 'archived', thesis: 'My historical thesis', risks: 'My historical risks', checks: ['filings'], reviewDate: '2026-01-01' };
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [current] }));
+  await page.route('**/api/watchlist/DEMO/history*', route => route.fulfill({ json: { items: [{ id: 9, action: 'removed', recordedAt: '2026-10-03T00:00:00Z', entry: historical }], nextBefore: null } }));
+  let writes = 0;
+  await page.route('**/api/watchlist/DEMO', route => {
+    writes++;
+    expect(route.request().postDataJSON()).toMatchObject({ version: 2, entryId: 'my-active-entry', thesis: 'My historical thesis', status: 'archived', checks: ['filings'], reviewDate: '2026-01-01' });
+    return route.fulfill({ status: 409, json: { error: 'Research changed elsewhere. Reload before saving.' } });
+  });
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My existing unsaved draft');
+  const history = page.getByRole('region', { name: 'Research revision history · DEMO', exact: true });
+  await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+  await history.locator('summary').first().click();
+  await history.getByRole('button', { name: 'Prepare draft from record 9' }).click();
+  const preview = history.getByRole('region', { name: 'Prepare record 9 as an editor draft', exact: true });
+  await expect(preview).toContainText('This replaces your current unsaved editor draft');
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My existing unsaved draft');
+  await preview.getByRole('button', { name: 'Cancel draft replacement' }).click();
+  await expect(preview).toHaveCount(0);
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My existing unsaved draft');
+  await history.getByRole('button', { name: 'Prepare draft from record 9' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await preview.screenshot({ path: 'test-results/research-restore-preview-mobile.png' });
+  await preview.getByRole('button', { name: 'Replace editor draft with record 9' }).click();
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My historical thesis');
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toBeFocused();
+  await expect(page.getByRole('checkbox', { name: /^I reviewed the latest filing/ })).toBeChecked();
+  await expect(page.getByRole('combobox', { name: 'Research status', exact: true })).toHaveValue('archived');
+  expect(writes).toBe(0);
+  current = { ...current, version: 3 };
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My historical thesis');
+  await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Research changed elsewhere');
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My historical thesis');
+  expect(writes).toBe(1);
+});
+
+test('I save a restored removed record as a new entry without reusing its historical identity', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  const old = { ticker: 'DEMO', entryId: 'my-removed-entry', version: 8, status: 'watching', thesis: 'My recovered thesis', risks: 'My recovered risks', checks: ['risks'], reviewDate: null, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
+  await page.route('**/api/watchlist/DEMO/history*', route => route.fulfill({ json: { items: [{ id: 11, action: 'removed', recordedAt: '2026-10-03T00:00:00Z', entry: old }], nextBefore: null } }));
+  let writes = 0;
+  await page.route('**/api/watchlist/DEMO', route => {
+    writes++;
+    expect(route.request().postDataJSON()).toMatchObject({ version: 0, entryId: null, thesis: old.thesis, risks: old.risks, checks: ['risks'] });
+    return route.fulfill({ json: { ...old, entryId: 'my-new-entry', version: 1 } });
+  });
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  const history = page.getByRole('region', { name: 'Research revision history · DEMO', exact: true });
+  await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+  await history.locator('summary').first().click();
+  await history.getByRole('button', { name: 'Prepare draft from record 11' }).click();
+  await history.getByRole('button', { name: 'Replace editor draft with record 11' }).click();
+  expect(writes).toBe(0);
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue(old.thesis);
+  await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+  await expect(page.locator('.save-status').first()).toContainText('Saved to the shared watchlist');
+  expect(writes).toBe(1);
+});

@@ -4,7 +4,7 @@ import { researchChecks, reviewedCount } from './researchChecklist';
 import { localReviewDay, reviewQueue, reviewState } from './watchlistReview';
 import { useEffect, useState, type FormEvent } from 'react';
 import { request } from './api';
-import type { Company, WatchlistEntry } from './types';
+import type { Company, ResearchRevision, WatchlistEntry } from './types';
 
 type ResearchSection = 'Financials' | 'Valuation' | 'Prices';
 export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
@@ -46,6 +46,15 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
     watchlistDrafts.set(ticker, { status, thesis, risks, checks, reviewDate: reviewDate || null,
       version: previous?.version ?? entry?.version ?? 0, entryId: previous ? previous.entryId : entry?.entryId || null, ...patch });
     setSaved('');
+  }
+  function restoreDraft(revision: ResearchRevision) {
+    if (busy || loading || !ready || revision.entry.ticker !== ticker) return;
+    const fields = { status: revision.entry.status, thesis: revision.entry.thesis, risks: revision.entry.risks,
+      reviewDate: revision.entry.reviewDate || '', checks: researchChecks.filter(check => revision.entry.checks?.includes(check.id)).map(check => check.id) };
+    // I copy historical research fields while keeping the version and entry ID that my editor originally opened.
+    keepDraft(fields); setStatus(fields.status); setThesis(fields.thesis); setRisks(fields.risks); setReviewDate(fields.reviewDate); setChecks(fields.checks);
+    setError(''); setSaved(`Record ${revision.id} loaded as an unsaved draft. Save to create a new revision.`);
+    document.getElementById('watchlist-thesis')?.focus();
   }
   function edit(symbol: string) { setTicker(symbol); setError(''); setSaved(''); }
   async function downloadResearch() {
@@ -123,6 +132,6 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
       <div className="model-actions"><button className="primary" disabled={busy || loading || !ready} type="submit">{busy ? 'Saving…' : 'Save watchlist entry'}</button>{entry && <button className="text-button" disabled={busy || loading || !ready} type="button" onClick={remove}>Remove {ticker} from watchlist</button>}</div>
       {entry && <p className="muted small">Version {entry.version} · Updated {new Date(entry.updatedAt).toLocaleString()}</p>}
     </form></div>
-    <ResearchHistoryPanel key={`${ticker}:${entry?.entryId || 'none'}:${entry?.version || 0}`} ticker={ticker} />
+    <ResearchHistoryPanel key={`${ticker}:${entry?.entryId || 'none'}:${entry?.version || 0}`} ticker={ticker} editorReady={ready && !loading && !busy} hasDraft={watchlistDrafts.has(ticker)} onRestore={restoreDraft} />
   </section>;
 }
