@@ -97,3 +97,6 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
   .research-summary a { color: #111; text-decoration: underline; }
   .research-summary a[href]::after { content: " (" attr(href) ")"; font-size: 7pt; overflow-wrap: anywhere; }
 }
+
+.saved-research-comparison { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
+.research-comparison-text { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 200px; max-width: 360px; }

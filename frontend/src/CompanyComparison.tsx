@@ -1,3 +1,4 @@
+import SavedResearchComparison from './SavedResearchComparison';
 import { useEffect, useRef, useState } from 'react';
 import { money, request } from './api';
 import type { Company, FinancialReport, Point } from './types';
@@ -19,7 +20,7 @@ function Evidence({ point, example }: { point: Point | undefined; example: boole
   </small>;
 }
 
-export default function CompanyComparison({ companies }: { companies: Company[] }) {
+export default function CompanyComparison({ companies, onOpen }: { companies: Company[]; onOpen: (ticker: string) => void }) {
   const [mode, setMode] = useState<'example' | 'sec'>('example');
   const [selected, setSelected] = useState<string[]>(['AAPL', 'MSFT']);
   const [reports, setReports] = useState<FinancialReport[]>([]);
@@ -84,5 +85,6 @@ export default function CompanyComparison({ companies }: { companies: Company[] 
       <tr><th>Cash after capex / revenue</th>{rows.map(({ report, revenue, afterCapex }) => <td key={report.company.ticker}>{percent(afterCapex, revenue?.value)}</td>)}</tr>
     </tbody></table></div>}
     {!busy && !rows.length && <p>No company figures are available for this comparison.</p>}
+    {mode === 'sec' && <SavedResearchComparison companies={companies} tickers={selected} onOpen={onOpen} />}
   </section>;
 }

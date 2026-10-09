@@ -731,3 +731,42 @@ test('I reopen a company summary from its share link without exposing saved note
   await page.reload();
   await expect(page.getByRole('region', { name: 'Research summary for DEMO', exact: true })).toBeVisible();
 });
+
+test('I compare stored company theses without requiring live financial imports', async ({ page }) => {
+  const tickers = ['NVDA', 'AMD'];
+  const entries = await (await page.request.get('/api/watchlist')).json();
+  try {
+    for (const ticker of tickers) {
+      const previous = entries.find((entry: { ticker: string }) => entry.ticker === ticker);
+      const response = await page.request.put(`/api/watchlist/${ticker}`, { data: {
+        status: ticker === 'AMD' ? 'archived' : 'researching', thesis: `My saved comparison thesis for ${ticker}`,
+        risks: `My saved comparison risk for ${ticker}`, checks: ['filings'], reviewDate: null,
+        version: previous?.version || 0, entryId: previous?.entryId || null
+      } });
+      expect(response.ok()).toBe(true);
+    }
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+    await page.getByLabel('Comparison data').selectOption('sec');
+    await page.getByRole('combobox', { name: 'Company 1', exact: true }).selectOption('NVDA');
+    await page.getByRole('combobox', { name: 'Company 2', exact: true }).selectOption('AMD');
+    const saved = page.getByRole('region', { name: 'Compare saved company research' });
+    await expect(saved).toContainText('My saved comparison thesis for NVDA');
+    await expect(saved).toContainText('My saved comparison thesis for AMD');
+    await expect(saved).toContainText('Archived research');
+    await expect(saved.getByRole('row', { name: /Manual research progress/ })).toContainText('1 of 5 marked reviewed');
+    await page.getByRole('button', { name: 'Add company', exact: true }).click();
+    await expect(saved.getByRole('row', { name: /Saved status/ })).toContainText('No saved watchlist entry');
+    await page.getByRole('button', { name: 'Remove last company', exact: true }).click();
+    await saved.getByRole('button', { name: 'Open research for NVDA' }).click();
+    await expect(page.getByRole('region', { name: 'Saved company thesis', exact: true })).toContainText('My saved comparison thesis for NVDA');
+  } finally {
+    const current = await (await page.request.get('/api/watchlist')).json();
+    for (const ticker of tickers) {
+      const entry = current.find((item: { ticker: string }) => item.ticker === ticker);
+      const previous = entries.find((item: { ticker: string }) => item.ticker === ticker);
+      if (entry && previous) await page.request.put(`/api/watchlist/${ticker}`, { data: { ...previous, entryId: entry.entryId, version: entry.version } });
+      else if (entry) await page.request.delete(`/api/watchlist/${ticker}?version=${entry.version}&entryId=${entry.entryId}`);
+    }
+  }
+});
