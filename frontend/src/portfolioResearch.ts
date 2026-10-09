@@ -34,6 +34,19 @@ export function portfolioResearchQueue(rows: ReturnType<typeof portfolioResearch
     || a.position.ticker.localeCompare(b.position.ticker));
 }
 
+export function filterPortfolioResearch(rows: ReturnType<typeof portfolioResearchRows>, filter: string, query: string) {
+  const search = query.trim().toLocaleLowerCase();
+  return rows.filter(row => {
+    const matches = filter === 'needs' ? row.needsReview : filter === 'due' ? row.due
+      : filter === 'missing' ? row.supported && !row.entry : filter === 'notes' ? row.missingNotes
+      : filter === 'checks' ? row.openChecks : filter === 'archived' ? row.archived
+      : filter === 'unsupported' ? !row.supported : true;
+    const description = [row.position.ticker, row.company?.name, row.company?.sector,
+      row.position.ticker === 'DEMO' ? 'Fictional company' : ''].join(' ').toLocaleLowerCase();
+    return matches && description.includes(search);
+  });
+}
+
 function csvCell(value: string | number | boolean | null | undefined) {
   if (value == null) return '';
   if (typeof value !== 'string') return String(value);

@@ -995,9 +995,27 @@ test('I review saved research for current holdings and reset it when I switch po
   await expect(review.getByRole('row', { name: /^MSFT/ })).toContainText('Review overdue · Missing thesis · Open manual checks');
   await expect(review.getByRole('row', { name: /^NVDA/ })).toContainText('No saved research');
   await expect(review.getByRole('row', { name: /^DEMO/ })).toContainText('Unsupported instrument');
+  const gapFilter = review.getByLabel('Portfolio research filter');
+  for (const [filter, expected] of [['due', 'MSFT'], ['notes', 'MSFT'], ['checks', 'MSFT'], ['missing', 'NVDA'], ['archived', 'AMZN'], ['unsupported', 'DEMO']]) {
+    await gapFilter.selectOption(filter);
+    await expect(tickers).toHaveText([new RegExp(`^${expected}`)]);
+  }
+  await gapFilter.selectOption('all');
+  await review.getByLabel('Search holdings research').fill('  teCHnology  ');
+  await expect(tickers).toHaveText([/^MSFT/, /^NVDA/, /^AAPL/]);
+  await gapFilter.selectOption('missing');
+  await expect(tickers).toHaveText([/^NVDA/]);
+  await review.getByLabel('Search holdings research').fill('apple');
+  await expect(review).toContainText('Showing 0 of 5 holdings');
+  await expect(review).toContainText('No holdings match this research filter');
+  await review.getByRole('button', { name: 'Clear research filters' }).click();
+  await expect(tickers).toHaveText([/^MSFT/, /^NVDA/, /^AMZN/, /^AAPL/, /^DEMO/]);
+  await expect(review.getByLabel('Portfolio research order')).toHaveValue('queue');
   await review.getByLabel('Portfolio research filter').selectOption('needs');
   await expect(review.getByRole('button', { name: 'Open research for AAPL' })).toHaveCount(0);
   await expect(review.getByRole('button', { name: 'Open research for MSFT' })).toBeVisible();
+  await review.getByLabel('Search holdings research').fill('microsoft');
+  await expect(tickers).toHaveText([/^MSFT/]);
   const downloaded = page.waitForEvent('download');
   await review.getByRole('button', { name: 'Download all holdings research CSV' }).click();
   const file = await downloaded;
@@ -1034,7 +1052,7 @@ test('I review saved research for current holdings and reset it when I switch po
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await review.locator('.export-actions').screenshot({ path: 'test-results/portfolio-research-export-mobile.png' });
+  await review.locator('.export-actions').first().screenshot({ path: 'test-results/portfolio-research-export-mobile.png' });
   await review.getByText('Read saved notes for MSFT', { exact: true }).click();
   await expect(review).toContainText('My risk notes');
   await page.getByLabel('Open portfolio').selectOption('empty');
@@ -1047,6 +1065,8 @@ test('I review saved research for current holdings and reset it when I switch po
   await expect(review.getByLabel('Portfolio research order')).toHaveCount(0);
   await expect(review.getByRole('button', { name: 'Download all holdings research CSV' })).toBeDisabled();
   await review.getByRole('button', { name: 'Load portfolio research' }).click();
+  await expect(review.getByLabel('Search holdings research')).toHaveValue('');
+  await expect(review.getByLabel('Portfolio research filter')).toHaveValue('all');
   await review.getByRole('button', { name: 'Open research for AAPL' }).click();
   await expect(page).toHaveURL(/company=AAPL&view=summary/);
   await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toBeVisible();
