@@ -863,3 +863,36 @@ test('I revisit saved research revisions after editing removing and recreating a
     else if (current) await page.request.delete(`/api/watchlist/${ticker}?version=${current.version}&entryId=${current.entryId}`);
   }
 });
+
+test('I match actual saved research to a packaged portfolio without importing evidence', async ({ page }) => {
+  const ticker = 'AAPL';
+  const existing = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
+  const saved = await page.request.put(`/api/watchlist/${ticker}`, { data: {
+    status: 'researching', thesis: 'My portfolio thesis', risks: 'My portfolio risk', reviewDate: '2000-01-01', checks: ['filings'], version: existing?.version || 0, entryId: existing?.entryId || null
+  } });
+  expect(saved.ok()).toBe(true);
+  const created = await page.request.post('/api/portfolios', { data: { name: 'My holdings research review', mode: 'market', initialCash: '1000' } });
+  expect(created.ok()).toBe(true); const { portfolio } = await created.json();
+  expect((await page.request.post(`/api/portfolios/${portfolio.id}/trades`, { data: { requestId: crypto.randomUUID(), ticker, side: 'BUY', quantity: '2', price: '100', fee: '0' } })).ok()).toBe(true);
+  const imports: string[] = [];
+  page.on('request', request => { if (/\/(prices|financials)$/.test(new URL(request.url()).pathname)) imports.push(request.url()); });
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+    await page.getByLabel('Open portfolio').selectOption(portfolio.id);
+    const review = page.getByRole('region', { name: 'Research review for my holdings', exact: true });
+    imports.length = 0;
+    await review.getByRole('button', { name: 'Load portfolio research' }).click();
+    await expect(review).toContainText('1 holdings · 0 without a saved entry · 0 with archived research · 0 with missing notes · 1 with open manual checks · 1 due for review');
+    await review.getByText('Read saved notes for AAPL', { exact: true }).click();
+    await expect(review).toContainText('My portfolio thesis');
+    await expect(review).toContainText('1 of 5 marked reviewed');
+    expect(imports).toEqual([]);
+    await review.getByRole('button', { name: 'Open research for AAPL' }).click();
+    await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toContainText('My portfolio risk');
+  } finally {
+    const current = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
+    if (existing) await page.request.put(`/api/watchlist/${ticker}`, { data: { ...existing, version: current.version, entryId: current.entryId } });
+    else if (current) await page.request.delete(`/api/watchlist/${ticker}?version=${current.version}&entryId=${current.entryId}`);
+  }
+});
