@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { request } from './api';
+import { readResearchRoute, researchLink, tabs, type Section } from './researchNavigation';
 import type { Company, FinancialReport } from './types';
 import FinancialOverview from './FinancialOverview';
 import ValuationPanel from './ValuationPanel';
@@ -11,11 +12,12 @@ import ResearchNotes from './ResearchNotes';
 import ResearchSummary from './ResearchSummary';
 
 const demo: Company = { ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Industrials' };
-const tabs = ['Financials', 'Research summary', 'Valuation', 'Research notes', 'Compare companies', 'Prices', 'Portfolios', 'Watchlist'] as const;
-type Section = typeof tabs[number];
 
 export default function App() {
+  const [routeWaiting, setRouteWaiting] = useState(() => readResearchRoute().ticker !== 'DEMO');
+  const [routeError, setRouteError] = useState(() => readResearchRoute().error);
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
   const [catalogError, setCatalogError] = useState('');
   const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [universeDate, setUniverseDate] = useState('');
@@ -24,7 +26,7 @@ export default function App() {
   const [sector, setSector] = useState('All sectors');
   const catalogSummary = useRef<HTMLElement>(null);
   const catalogDetails = useRef<HTMLDetailsElement>(null);
-  const [section, setSection] = useState<Section>('Financials');
+  const [section, setSection] = useState<Section>(() => readResearchRoute().ticker === 'DEMO' ? readResearchRoute().section : 'Financials');
   const [report, setReport] = useState<FinancialReport | null>(null);
   const [reportError, setReportError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -40,7 +42,10 @@ export default function App() {
   useEffect(() => {
     const controller = new AbortController();
     setCatalogError('');
-    request<Company[]>('/api/companies', { signal: controller.signal }).then(setCompanies).catch(e => {
+    request<Company[]>('/api/companies', { signal: controller.signal }).then(data => {
+      if (controller.signal.aborted) return;
+      setCompanies(data); setCatalogReady(true); restoreRoute(data, true);
+    }).catch(e => {
       if (!controller.signal.aborted) setCatalogError(e.message);
     });
     request<{ asOf: string }>('/api/universe', { signal: controller.signal }).then(v => setUniverseDate(v.asOf)).catch(() => {});
@@ -49,6 +54,7 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    if (routeWaiting) return;
     setLoading(true); setReport(null); setReportError('');
     const path = selected === 'DEMO' ? '/api/examples/financials' : `/api/companies/${encodeURIComponent(selected)}/financials`;
     request<FinancialReport>(path, { signal: controller.signal }).then(r => {
@@ -57,15 +63,34 @@ export default function App() {
       if (!controller.signal.aborted) setReportError(e.message);
     }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [selected, reportAttempt]);
+  }, [selected, reportAttempt, routeWaiting]);
 
+  useEffect(() => {
+    const restore = () => restoreRoute(companies);
+    window.addEventListener('popstate', restore); window.addEventListener('hashchange', restore);
+    return () => { window.removeEventListener('popstate', restore); window.removeEventListener('hashchange', restore); };
+  }, [companies, catalogReady]);
+  function restoreRoute(catalog: Company[], ready = catalogReady) {
+    const route = readResearchRoute();
+    if (route.ticker !== 'DEMO' && !ready) { setRouteWaiting(true); return; }
+    const supported = route.ticker === 'DEMO' || catalog.some(item => item.ticker === route.ticker);
+    setSelected(supported ? route.ticker : 'DEMO'); setSection(supported ? route.section : 'Financials');
+    setRouteError(supported ? route.error : 'This company is not in the catalog. The example workspace is open instead.');
+    setRouteWaiting(false); closeCatalog();
+  }
+  function navigate(ticker: string, target: Section) {
+    const url = researchLink(ticker, target);
+    if (url !== window.location.href) window.history.pushState(null, '', url);
+    setSelected(ticker); setSection(target); setRouteWaiting(false); setRouteError(''); closeCatalog();
+  }
   function closeCatalog() { if (catalogDetails.current) catalogDetails.current.open = false; }
-  function choose(ticker: string) { setSelected(ticker); setSection('Financials'); closeCatalog(); catalogSummary.current?.focus(); }
+  function choose(ticker: string) { navigate(ticker, 'Financials'); catalogSummary.current?.focus(); }
 
+  if (routeWaiting) return <main className="main-content"><section className="panel"><h1>Opening research link</h1>{catalogError ? <><p className="notice error" role="alert">{catalogError}</p><button className="secondary" onClick={() => setCatalogAttempt(value => value + 1)}>Retry company catalog</button></> : <p role="status">Checking the linked company against the catalog…</p>}<button className="text-button" onClick={() => navigate('DEMO', 'Financials')}>Open example workspace</button></section></main>;
   return <div className="workspace">
     <header className="masthead">
       <a className="brand" href="#"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span><span>CapitalScope<small>COMPANY INTELLIGENCE</small></span></a>
-      <nav className="section-tabs" aria-label="Research sections">{tabs.map(t => <button key={t} onClick={() => { setSection(t); closeCatalog(); }} aria-current={section === t ? 'page' : undefined} className={section === t ? 'active' : ''}>{t}</button>)}</nav>
+      <nav className="section-tabs" aria-label="Research sections">{tabs.map(t => <button key={t} onClick={() => { navigate(selected, t); }} aria-current={section === t ? 'page' : undefined} className={section === t ? 'active' : ''}>{t}</button>)}</nav>
       <span className="workspace-tag">RESEARCH / 01</span>
     </header>
     <main>
@@ -88,6 +113,7 @@ export default function App() {
         <div className="context-metadata">{universeDate ? `Universe · ${universeDate}` : 'Fixed company universe'}<span>50 U.S. companies</span></div>
       </div>
       <div className="main-content">
+        {routeError && <p className="notice warning" role="status">{routeError}</p>}
         <div className="page-intro"><div><span className="eyebrow">RESEARCH / {isExample ? 'EXAMPLE' : company.ticker}</span><h1>{globalSection ? section === 'Portfolios' ? 'Practice portfolios' : section === 'Watchlist' ? 'Research watchlist' : 'Company comparisons' : company.name}</h1><p className="muted">Financial evidence. Independent assumptions. A clearer investment thesis.</p></div><div className="company-badge"><span className="eyebrow">{globalSection ? 'WORKSPACE' : 'INSTRUMENT'}</span><strong>{globalSection ? 'RESEARCH' : company.ticker}</strong><span>{globalSection ? 'Analysis & practice' : company.sector}</span></div></div>
         <div className={`data-banner ${isExample ? 'example' : 'live'}`}><div><span className="status-dot" /><strong>{section === 'Research summary' ? 'Company research summary · dated evidence' : section === 'Watchlist' ? 'Shared research watchlist' : section === 'Portfolios' ? 'Simulated portfolio workspace' : section === 'Compare companies' ? 'Comparison workspace · sources shown below' : section === 'Prices' ? isExample ? 'Example prices · invented figures' : 'Daily market prices' : isExample ? 'Example data · invented figures' : 'SEC financial data'}</strong><p>{section === 'Research summary' ? 'Saved research, financial facts, model cases, and stored closes retain their own sources and dates.' : section === 'Watchlist' ? 'Saved theses, research status, and review dates. Company sources remain in the analysis views.' : section === 'Portfolios' ? 'Manual simulated trades in a shared practice workspace. No broker orders or real money.' : section === 'Compare companies' ? 'Choose fictional peers or real company filings in the comparison controls.' : section === 'Prices' ? 'Daily raw price history, with source and data mode shown below.' : isExample ? 'This workspace shows a fictional company. Select a listed company to request its real filings.' : 'Annual reported facts, with filing sources. The catalog ranking is a fixed snapshot.'}</p></div>{section === 'Financials' && !isExample && report?.retrievedAt && <span className="retrieved">Retrieved<br />{new Date(report.retrievedAt).toLocaleString()}</span>}</div>
 
@@ -100,8 +126,8 @@ export default function App() {
         {section === 'Compare companies' && <CompanyComparison companies={companies} />}
         {section === 'Prices' && <PricePanel key={selected} company={company} />}
         {section === 'Portfolios' && <PortfolioPanel companies={companies} />}
-        {section === 'Watchlist' && <WatchlistPanel companies={companies} currentTicker={selected} onOpen={(ticker, target) => { setSelected(ticker); setSection(target); closeCatalog(); }} />}
-        {section === 'Research summary' && <ResearchSummary key={selected} company={company} report={report} financialLoading={loading} financialError={reportError} onOpen={target => setSection(target)} />}
+        {section === 'Watchlist' && <WatchlistPanel companies={companies} currentTicker={selected} onOpen={(ticker, target) => { navigate(ticker, target); }} />}
+        {section === 'Research summary' && <ResearchSummary key={selected} company={company} report={report} financialLoading={loading} financialError={reportError} onOpen={target => navigate(selected, target)} />}
         {section === 'Research notes' && <ResearchNotes key={selected} company={company} />}
         <footer className="workspace-footer"><span>CapitalScope</span><span>Company research & valuation · {isExample ? 'Example workspace' : company.ticker}</span></footer>
       </div>

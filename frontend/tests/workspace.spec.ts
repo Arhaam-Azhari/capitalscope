@@ -558,3 +558,74 @@ test('I keep my checklist draft when a save fails and reset it only when saved r
   await expect(page.getByRole('checkbox', { name: /^I reviewed the latest filing/ })).toBeChecked();
   await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My saved checklist thesis');
 });
+
+
+test('I open company research links and restore my view with browser history', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  await page.goto('/#research?company=aapl&view=summary');
+  await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Apple', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(page).toHaveURL(/company=AAPL&view=valuation$/);
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  await page.goBack();
+  await expect(page.getByRole('button', { name: 'Valuation', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.goForward();
+  await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toBeVisible();
+  await page.evaluate(() => { window.location.hash = 'research?company=MSFT&view=summary'; });
+  await expect(page.getByRole('region', { name: 'Research summary for MSFT', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toHaveCount(0);
+});
+
+test('I copy only navigation and offer manual copying if the clipboard is blocked', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (value: string) => { document.documentElement.dataset.copiedResearchLink = value; } } });
+  });
+  await page.goto('/?api_key=private-test#research?company=DEMO&view=summary');
+  const input = page.getByRole('textbox', { name: 'Company research link', exact: true });
+  await expect(input).toHaveValue(/#research\?company=DEMO&view=summary$/);
+  const value = await input.inputValue(); expect(value).not.toContain('private-test'); expect(value).not.toContain('api_key');
+  await page.getByRole('button', { name: 'Copy company research link', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Research link copied');
+  expect(await page.evaluate(() => document.documentElement.dataset.copiedResearchLink)).toBe(value);
+  await page.evaluate(() => { navigator.clipboard.writeText = async () => { throw new Error('My clipboard fixture is blocked'); }; });
+  await page.getByRole('button', { name: 'Copy company research link', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Select and copy the link below');
+  await input.focus();
+  expect(await input.evaluate(element => (element as HTMLInputElement).selectionEnd)).toBe(value.length);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.locator('.summary-share').screenshot({ path: 'test-results/company-research-link-mobile.png' });
+});
+
+test('I validate linked companies before loading evidence and explain invalid links', async ({ page }) => {
+  await installApi(page);
+  let unavailable = true;
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  await page.route('**/api/companies', route => unavailable ? route.fulfill({ status: 503, json: { error: 'My link catalog is offline' } }) : route.fulfill({ json: catalog }));
+  const financialRequests: string[] = [];
+  page.on('request', request => { if (new URL(request.url()).pathname.endsWith('/financials')) financialRequests.push(request.url()); });
+  await page.goto('/?test=catalog-reload#research?company=AAPL&view=summary');
+  await expect(page.getByRole('heading', { name: 'Opening research link', exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('My link catalog is offline');
+  expect(financialRequests).toEqual([]);
+  unavailable = false;
+  await page.getByRole('button', { name: 'Retry company catalog', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toBeVisible();
+  expect(financialRequests.every(url => url.includes('/AAPL/'))).toBe(true);
+  await page.goto('/#research?company=UNKNOWN&view=summary');
+  await expect(page.locator('.main-content > .notice.warning')).toContainText('This company is not in the catalog');
+  await expect(page.getByRole('heading', { name: 'Example Manufacturing', exact: true })).toBeVisible();
+  await page.goto('/#research?company=DEMO&view=unknown');
+  await expect(page.locator('.main-content > .notice.warning')).toContainText('This research link is invalid');
+  await page.goto('/#research?company=AAPL&company=MSFT&view=summary');
+  await expect(page.locator('.main-content > .notice.warning')).toContainText('This research link is invalid');
+  await page.route('**/api/companies', route => route.fulfill({ json: [] }));
+  await page.goto('/?test=empty-catalog#research?company=AAPL&view=summary');
+  await expect(page.locator('.main-content > .notice.warning')).toContainText('This company is not in the catalog');
+});

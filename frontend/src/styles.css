@@ -61,6 +61,9 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .research-checklist input { flex: 0 0 auto; margin-top: 3px; accent-color: var(--accent); }
 .research-checklist small { display: block; margin-top: 4px; color: var(--muted); line-height: 1.5; }
 .summary-checklist { padding-left: 20px; font-size: 12px; line-height: 1.8; }
+.summary-share { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 16px; }
+.summary-share label { display: grid; gap: 6px; margin: 12px 0; font-size: 12px; }
+.summary-share input { width: 100%; min-width: 0; font-family: monospace; font-size: 11px; }
 @page { size: A4; margin: 14mm; }
 @media print {
   html:has(.research-summary), body:has(.research-summary) { background: white; color: #111; color-scheme: light; }
