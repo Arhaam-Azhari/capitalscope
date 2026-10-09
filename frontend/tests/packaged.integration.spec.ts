@@ -694,6 +694,9 @@ test('I save manual research checks and carry them into my summary and CSV', asy
     await expect(notes.locator('.summary-checklist')).toContainText('I reviewed the latest filing: Marked reviewed');
     await expect(notes.locator('.summary-checklist')).toContainText('I checked cash flow quality: Not marked reviewed');
     await page.getByRole('button', { name: 'Open watchlist', exact: true }).click();
+    await expect(filing).not.toBeChecked();
+    await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved checklist draft');
+    await filing.check();
     await page.setViewportSize({ width: 390, height: 844 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.locator('.research-checklist').screenshot({ path: 'test-results/research-checklist-mobile.png' });
