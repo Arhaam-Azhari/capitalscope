@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
 import { readCsv } from './readCsv';
+import { portfolioResearchRows, portfolioResearchQueue } from '../src/portfolioResearch';
 
 // I use invented financial values and stub the API so these checks don't hit the SEC.
 const example = {
@@ -988,6 +989,12 @@ test('I review saved research for current holdings and reset it when I switch po
   await review.getByRole('button', { name: 'Load portfolio research' }).click();
   await expect(review).toContainText('5 holdings · 1 without a saved entry · 1 with archived research · 1 with missing notes · 1 with open manual checks · 1 due for review');
   await expect(review.getByRole('button', { name: 'Open research for DEMO' })).toBeDisabled();
+  await review.getByLabel('Portfolio research order').selectOption('queue');
+  const tickers = review.locator('tbody th[scope="row"]');
+  await expect(tickers).toHaveText([/^MSFT/, /^NVDA/, /^AMZN/, /^AAPL/, /^DEMO/]);
+  await expect(review.getByRole('row', { name: /^MSFT/ })).toContainText('Review overdue · Missing thesis · Open manual checks');
+  await expect(review.getByRole('row', { name: /^NVDA/ })).toContainText('No saved research');
+  await expect(review.getByRole('row', { name: /^DEMO/ })).toContainText('Unsupported instrument');
   await review.getByLabel('Portfolio research filter').selectOption('needs');
   await expect(review.getByRole('button', { name: 'Open research for AAPL' })).toHaveCount(0);
   await expect(review.getByRole('button', { name: 'Open research for MSFT' })).toBeVisible();
@@ -1008,6 +1015,8 @@ test('I review saved research for current holdings and reset it when I switch po
   expect(apple.manual_checks_reviewed).toBe('5');
   expect(apple.user_reviewed_filings).toBe('true');
   expect(microsoft.review_bucket).toBe('overdue');
+  expect(microsoft.review_queue_group).toBe('Overdue');
+  expect(microsoft.review_reasons).toBe('Review overdue; Missing thesis; Open manual checks');
   expect(microsoft.missing_active_notes).toBe('true');
   expect(microsoft.open_active_manual_checks).toBe('true');
   expect(amazon.research_status).toBe('archived');
@@ -1035,9 +1044,30 @@ test('I review saved research for current holdings and reset it when I switch po
   await page.getByLabel('Open portfolio').selectOption('review');
   await expect(review).toContainText('Load saved research to review the current holdings');
   expect(reads).toBe(2);
+  await expect(review.getByLabel('Portfolio research order')).toHaveCount(0);
   await expect(review.getByRole('button', { name: 'Download all holdings research CSV' })).toBeDisabled();
   await review.getByRole('button', { name: 'Load portfolio research' }).click();
   await review.getByRole('button', { name: 'Open research for AAPL' }).click();
   await expect(page).toHaveURL(/company=AAPL&view=summary/);
   await expect(page.getByRole('region', { name: 'Research summary for AAPL', exact: true })).toBeVisible();
+});
+
+
+test('I order due research by local calendar dates without elevating old archived dates', () => {
+  const tickers = ['AMZN', 'MSFT', 'AAPL', 'NVDA', 'GOOG'];
+  const summary = { portfolio: { id: 'queue', name: 'My queue', mode: 'market' as const, initialCash: 1000, createdAt: '2026-01-01T00:00:00Z' },
+    cash: 0, realizedPnl: 0, dividendIncome: 0, trades: [], events: [],
+    positions: tickers.map(ticker => ({ ticker, quantity: 1, costBasis: 1, averageCost: 1 })) };
+  const entries = tickers.map(ticker => ({ ticker, entryId: ticker, version: 1, status: ticker === 'AMZN' ? 'archived' as const : 'researching' as const,
+    thesis: 'My thesis', risks: 'My risks', checks: ['filings', 'cash_flow', 'leverage', 'share_basis', 'risks'],
+    reviewDate: ticker === 'AMZN' ? '2000-01-01' : ticker === 'NVDA' ? '2026-10-08' : ticker === 'GOOG' ? '2026-10-10' : '2026-10-09',
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z' }));
+  const rows = portfolioResearchRows(summary, catalog, entries, '2026-10-09');
+  const queue = portfolioResearchQueue(rows);
+  expect(queue.map(row => row.position.ticker)).toEqual(['NVDA', 'AAPL', 'MSFT', 'AMZN', 'GOOG']);
+  expect(queue[1].reasons).toEqual(['Review due today']);
+  expect(queue[4].needsReview).toBe(false);
+  expect(rows.map(row => row.position.ticker)).toEqual(tickers);
+  const nextDay = portfolioResearchQueue(portfolioResearchRows(summary, catalog, entries, '2026-10-10'));
+  expect(nextDay.find(row => row.position.ticker === 'GOOG')?.reasons).toEqual(['Review due today']);
 });
