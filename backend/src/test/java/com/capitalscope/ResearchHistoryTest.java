@@ -100,4 +100,31 @@ class ResearchHistoryTest {
         assertTrue(migrated.history("AMD", null).items().isEmpty());
     }
 
+    @Test void iExportEveryRecordedRevisionWithSafeTextAndSeparateCaptureDates() throws Exception {
+        mvc.perform(get("/api/watchlist/AMD/history/export.csv")).andExpect(status().isOk())
+            .andExpect(header().string("Content-Disposition", "attachment; filename=research-history.csv"))
+            .andExpect(content().contentTypeCompatibleWith("text/csv"));
+        jdbc.update("INSERT INTO research_watchlist(ticker, entry_id, status, thesis, risks, version, created_at, updated_at, research_checks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "AMD", "my-export-baseline", "watching", "=My \"first\", thesis\r\nSecond line", "@My risk", 7, "2026-10-01T00:00:00Z", "2026-10-02T00:00:00Z", "risks");
+        var saved = store.list().stream().filter(e -> e.ticker().equals("AMD")).findFirst().orElseThrow();
+        for (int n = 0; n < 25; n++) saved = store.save("AMD", draft("My export revision " + n, saved));
+        store.remove("AMD", saved.version(), saved.entryId());
+        var revisions = store.historyForExport("amd");
+        assertEquals(27, revisions.size());
+        var result = mvc.perform(get("/api/watchlist/AMD/history/export.csv")).andExpect(status().isOk()).andReturn();
+        String csv = result.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(csv.startsWith("\"revision_id\",\"action\",\"recorded_at\""));
+        assertTrue(csv.contains("\"'=My \"\"first\"\", thesis\r\nSecond line\""));
+        assertTrue(csv.contains("\"'@My risk\""));
+        assertTrue(csv.contains("\"2026-10-02T00:00:00Z\""));
+        assertTrue(csv.contains("Recorded snapshots only; legacy baselines do not reconstruct earlier edits"));
+        assertTrue(csv.contains("\"user_reviewed_filings\""));
+        var matcher = java.util.regex.Pattern.compile("^(\\d+),\"(?:baseline|saved|removed)\",", java.util.regex.Pattern.MULTILINE).matcher(csv);
+        var ids = new java.util.ArrayList<Long>();
+        while (matcher.find()) ids.add(Long.parseLong(matcher.group(1)));
+        assertEquals(revisions.stream().map(WatchlistStore.Revision::id).toList(), ids);
+        assertEquals("baseline", revisions.get(0).action()); assertEquals("removed", revisions.get(26).action());
+        mvc.perform(get("/api/watchlist/UNKNOWN/history/export.csv")).andExpect(status().isBadRequest());
+    }
+
 }

@@ -919,3 +919,34 @@ test('I save a restored removed record as a new entry without reusing its histor
   await expect(page.locator('.save-status').first()).toContainText('Saved to the shared watchlist');
   expect(writes).toBe(1);
 });
+
+test('I download all stored research history without changing my draft or requiring loaded pages', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  let mode = 'unavailable'; let historyReads = 0;
+  await page.route('**/api/watchlist/DEMO/history', route => { historyReads++; return route.fulfill({ json: { items: [], nextBefore: null } }); });
+  await page.route('**/api/watchlist/DEMO/history/export.csv', route => mode === 'unavailable'
+    ? route.fulfill({ status: 503, json: { error: 'History export unavailable' } })
+    : mode === 'html' ? route.fulfill({ contentType: 'text/html', body: '<html>Unexpected response</html>' })
+    : route.fulfill({ contentType: 'text/csv;charset=UTF-8', body: '"revision_id","action","thesis"\r\n1,"baseline","My stored older thesis"\r\n' }));
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved export draft');
+  const history = page.getByRole('region', { name: 'Research revision history · DEMO', exact: true });
+  const button = history.getByRole('button', { name: 'Download all DEMO research revisions CSV' });
+  await button.click();
+  await expect(history.getByRole('alert')).toContainText('History export unavailable');
+  mode = 'html'; await button.click();
+  await expect(history.getByRole('alert')).toContainText('did not return a CSV');
+  mode = 'csv';
+  const downloadPromise = page.waitForEvent('download'); await button.click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('DEMO-research-history.csv');
+  const { readFile } = await import('node:fs/promises');
+  const csv = await readFile((await download.path())!, 'utf8');
+  expect(csv).toContain('My stored older thesis'); expect(csv).not.toContain('My unsaved export draft');
+  expect(historyReads).toBe(0);
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved export draft');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await history.locator('.export-actions').screenshot({ path: 'test-results/research-history-export-mobile.png' });
+});
