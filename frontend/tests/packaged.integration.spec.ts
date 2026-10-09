@@ -771,3 +771,17 @@ test('I compare stored company theses without requiring live financial imports',
     }
   }
 });
+
+
+test('I reopen the same real company comparison from its link', async ({ page }) => {
+  await page.goto('/#research?company=DEMO&view=compare&peers=AAPL,MSFT,BRK-B');
+  await expect(page.getByRole('combobox', { name: 'Company 1', exact: true })).toHaveValue('AAPL');
+  await expect(page.getByRole('combobox', { name: 'Company 3', exact: true })).toHaveValue('BRK-B');
+  const link = await page.getByLabel('Company comparison link', { exact: true }).inputValue();
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.goto(link);
+  await expect(page.getByRole('combobox', { name: 'Company 3', exact: true })).toHaveValue('BRK-B');
+  await expect(page.getByRole('table', { name: 'Saved theses, risks, and self-reported research checks', exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Company 2', exact: true })).toHaveValue('MSFT');
+});

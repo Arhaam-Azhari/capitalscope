@@ -722,3 +722,45 @@ test('I compare saved research independently of filings and retry without exposi
   await expect(page).toHaveURL(/company=MSFT&view=summary/);
   await expect(page.getByRole('region', { name: 'Saved company thesis', exact: true })).toContainText('archived');
 });
+
+
+test('I reopen company comparisons and restore selections with browser history', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  await page.goto('/?comparison=start#research?company=DEMO&view=compare&peers=aapl,MSFT,BRK-B');
+  await expect(page.getByRole('combobox', { name: 'Company 1', exact: true })).toHaveValue('AAPL');
+  await expect(page.getByRole('combobox', { name: 'Company 3', exact: true })).toHaveValue('BRK-B');
+  await page.getByRole('combobox', { name: 'Company 2', exact: true }).selectOption('NVDA');
+  const link = await page.getByLabel('Company comparison link', { exact: true }).inputValue();
+  expect(new URL(link).search).toBe('');
+  expect(new URLSearchParams(new URL(link).hash.slice('#research?'.length)).get('peers')).toBe('AAPL,NVDA,BRK-B');
+  await page.getByRole('button', { name: 'Add company', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Company 4', exact: true })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByRole('combobox', { name: 'Company 4', exact: true })).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByRole('combobox', { name: 'Company 2', exact: true })).toHaveValue('MSFT');
+  await page.goForward();
+  await expect(page.getByRole('combobox', { name: 'Company 2', exact: true })).toHaveValue('NVDA');
+  await page.reload();
+  await expect(page.getByRole('combobox', { name: 'Company 3', exact: true })).toHaveValue('BRK-B');
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Blocked')) } }));
+  await page.getByRole('button', { name: 'Copy company comparison link' }).click();
+  await expect(page.getByText('Copy is unavailable. Select and copy the link below.')).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.locator('.summary-share').screenshot({ path: 'test-results/comparison-link-mobile.png' });
+});
+
+test('I reject malformed or unsupported comparison selections before requesting their evidence', async ({ page }) => {
+  await installApi(page);
+  const requested: string[] = [];
+  page.on('request', request => { if (/\/companies\/.*\/financials/.test(request.url())) requested.push(request.url()); });
+  const links = ['peers=AAPL', 'peers=AAPL,AAPL', 'peers=AAPL,MSFT,NVDA,AMD,GOOG', 'peers=AAPL,DEMO', 'peers=AAPL,MSFT&peers=NVDA,AMD', 'peers=AAPL,UNKNOWN', 'peers=AAPL,,MSFT'];
+  for (let i = 0; i < links.length; i++) {
+    await page.goto(`/?invalidComparison=${i}#research?company=DEMO&view=compare&${links[i]}`);
+    await expect(page.locator('.main-content > .notice.warning')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Financials', exact: true })).toHaveAttribute('aria-current', 'page');
+  }
+  expect(requested).toEqual([]);
+});
