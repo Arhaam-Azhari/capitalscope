@@ -785,3 +785,44 @@ test('I reopen the same real company comparison from its link', async ({ page })
   await page.reload();
   await expect(page.getByRole('combobox', { name: 'Company 2', exact: true })).toHaveValue('MSFT');
 });
+
+test('I revisit saved research revisions after editing removing and recreating an entry', async ({ page }) => {
+  const ticker = 'AMD';
+  const original = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
+  try {
+    const response = await page.request.put(`/api/watchlist/${ticker}`, { data: { status: 'watching', thesis: 'My initial history thesis', risks: 'My initial history risk', checks: [], reviewDate: null, version: original?.version || 0, entryId: original?.entryId || null } });
+    expect(response.ok()).toBe(true);
+    const initial = await response.json();
+    await page.goto('/#research?company=AMD&view=watchlist');
+    await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My initial history thesis');
+    await page.getByLabel('My investment thesis', { exact: true }).fill('My revised history thesis');
+    await page.getByRole('checkbox', { name: /^I reviewed the latest filing/ }).check();
+    await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+    await expect(page.locator('.save-status').first()).toContainText('Saved to the shared watchlist');
+    const history = page.getByRole('region', { name: 'Research revision history · AMD', exact: true });
+    await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+    await history.locator('summary').first().click();
+    await expect(history.locator('details').first()).toContainText('My revised history thesis');
+    await expect(history.locator('details').first()).toContainText('1 of 5 checks marked reviewed');
+    await history.locator('summary').nth(1).click();
+    await expect(history.locator('details').nth(1)).toContainText('My initial history thesis');
+    await page.getByRole('button', { name: 'Remove AMD from watchlist' }).click();
+    await expect(page.locator('.save-status').first()).toContainText('Removed from the shared watchlist');
+    await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+    await expect(history.locator('summary').first()).toContainText('Removed from watchlist');
+    await page.getByLabel('My investment thesis', { exact: true }).fill('My recreated history thesis');
+    await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+    await expect(page.locator('.save-status').first()).toContainText('Saved to the shared watchlist');
+    const recreated = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
+    expect(recreated.version).toBe(1); expect(recreated.entryId).not.toBe(initial.entryId);
+    await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+    await expect(history.locator('summary').first()).toContainText('Saved revision · Version 1');
+    await history.locator('summary').nth(1).click();
+    await expect(history.locator('details').nth(1)).toContainText(initial.entryId);
+    await expect(history.locator('details').nth(1)).toContainText('My revised history thesis');
+  } finally {
+    const current = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
+    if (original) await page.request.put(`/api/watchlist/${ticker}`, { data: { ...original, entryId: current?.entryId || null, version: current?.version || 0 } });
+    else if (current) await page.request.delete(`/api/watchlist/${ticker}?version=${current.version}&entryId=${current.entryId}`);
+  }
+});
