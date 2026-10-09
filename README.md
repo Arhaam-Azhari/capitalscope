@@ -83,6 +83,7 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | `PUT /api/watchlist/{ticker}` | Save thesis, risks, status, optional review date, and expected version and entry ID |
 | `DELETE /api/watchlist/{ticker}?version=…&entryId=…` | Remove the active entry using its saved version; retain revision history |
 | `GET /api/watchlist/{ticker}/history?before=…` | Read 20 saved revisions at a time with an optional cursor |
+| `GET /api/watchlist/{ticker}/history/export.csv` | Export all recorded revisions for one company, oldest record first |
 | `GET /api/portfolios/{id}/stress-scenarios/{scenarioId}/export.csv` | I download the saved assumptions, results, and price evidence without recalculating |
 | `GET /api/portfolios/{id}/stress-scenarios` | I review saved stress snapshots for this portfolio |
 | `POST /api/portfolios/{id}/stress-scenarios` | I save `{name, assumptions}` after calculating the current server baseline |
@@ -321,3 +322,6 @@ I write the snapshot and active record in one transaction, so a history failure 
 I can select any two loaded revision records to compare exact saved values for the thesis, risks, research status, review date, and five manual checklist marks. I highlight changed fields and can hide unchanged fields. I keep event labels, record sequence, entry IDs, and versions alongside the comparison so a removal with unchanged notes or a recreated version 1 is not mistaken for a thesis edit. I can compare records from different history pages; reloading history clears the selection, and viewing a comparison leaves my current draft untouched.
 
 I can prepare any loaded historical record as an editor draft. I preview its saved fields and explicitly replace the editor draft before anything changes. I keep the editor's original entry ID and expected version, so copying an older record does not bypass conflict checks or silently rebase a stale draft. I revisit old archived status, review dates, and manual marks before saving. Saving writes a new revision; it never modifies the source snapshot. If no active entry exists, saving creates a new entry ID. Canceling the preview leaves my draft untouched.
+
+
+I can download all recorded research revisions for the editor's company as CSV, regardless of the history pages or comparison records I have loaded. I include saved snapshots, removals, and legacy baselines in recorded order, oldest first. I keep entry IDs, versions, capture times, original save times, exported time, and manual checklist marks in separate columns. I label company names and sectors as current catalog metadata, exclude drafts, and leave my open editor unchanged. I escape commas, quotes, line breaks, and formula-like text using the same CSV rules as my other exports. The file contains only recorded history; it cannot reconstruct earlier legacy edits or verify an editor's identity.

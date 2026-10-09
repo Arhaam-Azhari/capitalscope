@@ -40,6 +40,20 @@ public final class CsvExport {
         });
         return csv.toString();
     }
+    public static String researchHistory(java.util.List<WatchlistStore.Revision> revisions, java.time.Instant exportedAt) {
+        StringBuilder csv = new StringBuilder(row("revision_id", "action", "recorded_at", "entry_id", "ticker", "catalog_company", "catalog_sector", "instrument_mode",
+            "research_status", "thesis", "risks", "review_date", "version", "created_at", "updated_at", "exported_at", "notes_origin", "history_scope",
+            "user_reviewed_filings", "user_reviewed_cash_flow", "user_reviewed_leverage", "user_reviewed_share_basis", "user_reviewed_risks"));
+        revisions.stream().sorted(java.util.Comparator.comparingLong(WatchlistStore.Revision::id)).forEach(revision -> {
+            var entry = revision.entry(); boolean example = entry.ticker().equals("DEMO");
+            var company = example ? new CompanyCatalog.Company("DEMO", "Example Manufacturing", "Fictional") : CompanyCatalog.find(entry.ticker());
+            csv.append(row(revision.id(), revision.action(), revision.recordedAt(), entry.entryId(), entry.ticker(), company.name(), company.sector(), example ? "example" : "market",
+                entry.status(), entry.thesis(), entry.risks(), entry.reviewDate(), entry.version(), entry.createdAt(), entry.updatedAt(), exportedAt,
+                "User-entered research; manual checks; no verified editor identity", "Recorded snapshots only; legacy baselines do not reconstruct earlier edits",
+                entry.checks().contains("filings"), entry.checks().contains("cash_flow"), entry.checks().contains("leverage"), entry.checks().contains("share_basis"), entry.checks().contains("risks")));
+        });
+        return csv.toString();
+    }
     public static String portfolio(PaperPortfolio.Summary summary) {
         StringBuilder csv = new StringBuilder(row("portfolio_id", "portfolio_name", "instrument_mode", "simulated", "event_index", "recorded_at", "type", "ticker", "side", "shares", "manual_price", "fee", "new_shares", "old_shares", "dividend_per_share", "initial_cash", "currency"));
         var portfolio = summary.portfolio();

@@ -49,6 +49,11 @@ public class WatchlistStore {
             ticker, before == null ? Long.MAX_VALUE : before);
         return new History(List.copyOf(rows.subList(0, Math.min(20, rows.size()))), rows.size() > 20 ? rows.get(19).id() : null);
     }
+    public List<Revision> historyForExport(String symbol) {
+        // I read all recorded snapshots in one query, independent of the browser's loaded history pages.
+        return jdbc.query("SELECT * FROM research_revisions WHERE ticker = ? ORDER BY id ASC",
+            (rs, i) -> new Revision(rs.getLong("id"), rs.getString("action"), Instant.parse(rs.getString("recorded_at")), entry(rs)), ticker(symbol));
+    }
     private Entry current(String ticker) {
         // I lock the saved row before capturing it so a concurrent edit cannot give my history the wrong baseline.
         return jdbc.query("SELECT * FROM research_watchlist WHERE ticker = ? FOR UPDATE", (rs, i) -> entry(rs), ticker).stream().findFirst().orElse(null);

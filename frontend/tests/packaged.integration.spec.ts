@@ -846,6 +846,17 @@ test('I revisit saved research revisions after editing removing and recreating a
     const afterRestore = await (await page.request.get(`/api/watchlist/${ticker}/history`)).json();
     expect(afterRestore.items[0].action).toBe('saved');
     expect(afterRestore.items.find((item: { id: number }) => item.id === source.id)).toEqual(source);
+    await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved history export draft');
+    const downloadPromise = page.waitForEvent('download');
+    await history.getByRole('button', { name: 'Download all AMD research revisions CSV' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toBe('AMD-research-history.csv');
+    const csv = await readFile((await download.path())!, 'utf8');
+    expect(csv).toContain('"revision_id","action","recorded_at"');
+    expect(csv).toContain('My initial history thesis'); expect(csv).toContain('My revised history thesis');
+    expect(csv).toContain('"removed"'); expect(csv).toContain(initial.entryId); expect(csv).toContain(recreated.entryId);
+    expect(csv).not.toContain('My unsaved history export draft');
+    await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved history export draft');
   } finally {
     const current = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
     if (original) await page.request.put(`/api/watchlist/${ticker}`, { data: { ...original, entryId: current?.entryId || null, version: current?.version || 0 } });
