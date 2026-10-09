@@ -1,3 +1,4 @@
+import { useDraftExitWarning } from './researchDrafts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { request } from './api';
 import { readResearchRoute, researchLink, tabs, type Section } from './researchNavigation';
@@ -14,6 +15,7 @@ import ResearchSummary from './ResearchSummary';
 const demo: Company = { ticker: 'DEMO', name: 'Example Manufacturing', sector: 'Industrials' };
 
 export default function App() {
+  useDraftExitWarning();
   const [routeWaiting, setRouteWaiting] = useState(() => readResearchRoute().ticker !== 'DEMO');
   const [routeError, setRouteError] = useState(() => readResearchRoute().error);
   const [companies, setCompanies] = useState<Company[]>([]);

@@ -629,3 +629,57 @@ test('I validate linked companies before loading evidence and explain invalid li
   await page.goto('/?test=empty-catalog#research?company=AAPL&view=summary');
   await expect(page.locator('.main-content > .notice.warning')).toContainText('This company is not in the catalog');
 });
+
+
+test('I keep separate note and watchlist drafts when moving between research views', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  await page.getByRole('button', { name: 'Research notes', exact: true }).click();
+  await page.getByLabel('Your notes for Example Manufacturing').fill('My unsaved example thesis');
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('button', { name: 'Research notes', exact: true }).click();
+  await expect(page.getByLabel('Your notes for Example Manufacturing')).toHaveValue('My unsaved example thesis');
+  await page.getByRole('button', { name: 'Discard note draft' }).click();
+  await expect(page.getByLabel('Your notes for Example Manufacturing')).toHaveValue('');
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByLabel('My investment thesis').fill('My draft for DEMO');
+  await page.getByLabel('Watchlist company').selectOption('AAPL');
+  await page.getByLabel('My investment thesis').fill('My draft for Apple');
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await expect(page.getByLabel('My investment thesis')).toHaveValue('My draft for DEMO');
+  await page.getByLabel('Watchlist company').selectOption('AAPL');
+  await expect(page.getByLabel('My investment thesis')).toHaveValue('My draft for Apple');
+  await page.getByRole('button', { name: 'Reload watchlist' }).click();
+  await expect(page.getByLabel('My investment thesis')).toHaveValue('');
+});
+
+test('I retain the original watchlist version when restoring an unsaved draft', async ({ page }) => {
+  await installApi(page);
+  let version = 1;
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [{ ticker: 'DEMO', entryId: 'original', version,
+    status: 'watching', thesis: 'Saved thesis', risks: '', checks: [], reviewDate: null, updatedAt: '2026-10-08T00:00:00Z' }] }));
+  await page.route('**/api/watchlist/DEMO', async route => {
+    expect(route.request().postDataJSON()).toMatchObject({ version: 1, entryId: 'original', thesis: 'My older draft' });
+    await route.fulfill({ status: 409, json: { error: 'Research changed elsewhere. Reload before saving.' } });
+  });
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByLabel('My investment thesis').fill('My older draft');
+  version = 2;
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await expect(page.getByLabel('My investment thesis')).toHaveValue('My older draft');
+  await page.getByRole('button', { name: 'Save watchlist entry', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Research changed elsewhere');
+  await expect(page.getByLabel('My investment thesis')).toHaveValue('My older draft');
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event); return event.defaultPrevented;
+  })).toBe(true);
+  await page.getByRole('button', { name: 'Reload watchlist', exact: true }).click();
+  await expect(page.getByLabel('My investment thesis')).toHaveValue('Saved thesis');
+  expect(await page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event); return event.defaultPrevented;
+  })).toBe(false);
+});
