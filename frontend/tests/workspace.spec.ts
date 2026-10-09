@@ -192,6 +192,7 @@ test('desktop example screenshot', async ({ page }) => {
 
 test('I preserve negative margins, suppress mismatched periods, and keep partial failures visible', async ({ page }) => {
   await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
   await page.route('**/api/companies/AAPL/financials', route => route.fulfill({ json: {
     ...example, company: catalog.find(c => c.ticker === 'AAPL'), dataMode: 'sec',
     metrics: example.metrics.map(m => ({ ...m, annualValues: m.annualValues.map(p => ({ ...p,
@@ -682,4 +683,42 @@ test('I retain the original watchlist version when restoring an unsaved draft', 
     const event = new Event('beforeunload', { cancelable: true });
     window.dispatchEvent(event); return event.defaultPrevented;
   })).toBe(false);
+});
+
+
+test('I compare saved research independently of filings and retry without exposing drafts', async ({ page }) => {
+  await installApi(page);
+  let unavailable = true;
+  let reads = 0;
+  await page.route('**/api/watchlist', route => {
+    reads++;
+    return unavailable ? route.fulfill({ status: 503, json: { error: 'Research storage unavailable' } }) : route.fulfill({ json: [
+      { ticker: 'AAPL', entryId: 'apple', version: 3, status: 'researching', thesis: 'My saved Apple thesis\nSecond line', risks: 'My saved Apple risks', checks: ['filings', 'risks'], reviewDate: '2026-11-01', updatedAt: '2026-10-09T00:00:00Z' },
+      { ticker: 'MSFT', entryId: 'microsoft', version: 2, status: 'archived', thesis: '', risks: '', reviewDate: null, updatedAt: '2026-10-08T00:00:00Z' },
+      { ticker: 'DEMO', entryId: 'example', version: 1, status: 'watching', thesis: 'Fictional research must stay separate', risks: '', checks: [], reviewDate: null, updatedAt: '2026-10-08T00:00:00Z' }
+    ] });
+  });
+  await page.route('**/api/companies/*/financials', route => route.fulfill({ status: 503, json: { error: 'Filings unavailable' } }));
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Compare saved company research' })).toHaveCount(0);
+  expect(reads).toBe(0);
+  await page.getByLabel('Comparison data').selectOption('sec');
+  const saved = page.getByRole('region', { name: 'Compare saved company research' });
+  await expect(saved.getByRole('alert')).toContainText('Research storage unavailable');
+  unavailable = false;
+  await saved.getByRole('button', { name: 'Reload saved research comparison' }).click();
+  await expect(saved.getByRole('row', { name: /Investment thesis/ })).toContainText('My saved Apple thesis');
+  await expect(saved.getByRole('row', { name: /Saved status/ })).toContainText('Archived research');
+  await expect(saved.getByRole('row', { name: /Manual research progress/ })).toContainText('2 of 5 marked reviewed');
+  await expect(saved.getByRole('row', { name: /Manual research progress/ })).toContainText('0 of 5 marked reviewed');
+  await expect(saved).not.toContainText('Fictional research must stay separate');
+  await page.getByRole('combobox', { name: 'Company 1', exact: true }).selectOption('NVDA');
+  await expect(saved.getByRole('row', { name: /Saved status/ })).toContainText('No saved watchlist entry');
+  await expect(saved).not.toContainText('My saved Apple thesis');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await saved.screenshot({ path: 'test-results/saved-research-comparison-mobile.png' });
+  await saved.getByRole('button', { name: 'Open research for MSFT' }).click();
+  await expect(page).toHaveURL(/company=MSFT&view=summary/);
+  await expect(page.getByRole('region', { name: 'Saved company thesis', exact: true })).toContainText('archived');
 });

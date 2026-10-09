@@ -125,7 +125,7 @@ export default function App() {
           {report && !loading && <FinancialOverview key={selected} report={report} />}
         </>}
         {section === 'Valuation' && <ValuationPanel key={selected} company={company} />}
-        {section === 'Compare companies' && <CompanyComparison companies={companies} />}
+        {section === 'Compare companies' && <CompanyComparison companies={companies} onOpen={ticker => navigate(ticker, 'Research summary')} />}
         {section === 'Prices' && <PricePanel key={selected} company={company} />}
         {section === 'Portfolios' && <PortfolioPanel companies={companies} />}
         {section === 'Watchlist' && <WatchlistPanel companies={companies} currentTicker={selected} onOpen={(ticker, target) => { navigate(ticker, target); }} />}
