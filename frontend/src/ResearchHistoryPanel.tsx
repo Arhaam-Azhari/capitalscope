@@ -1,3 +1,4 @@
+import ResearchRevisionComparison, { revisionAction } from './ResearchRevisionComparison';
 import { useEffect, useRef, useState } from 'react';
 import { request } from './api';
 import { researchChecks, reviewedCount } from './researchChecklist';
@@ -5,6 +6,7 @@ import type { ResearchHistory, ResearchRevision } from './types';
 
 export default function ResearchHistoryPanel({ ticker }: { ticker: string }) {
   const [items, setItems] = useState<ResearchRevision[]>([]);
+  const [selected, setSelected] = useState<number[]>([]);
   const [before, setBefore] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -14,7 +16,7 @@ export default function ResearchHistoryPanel({ ticker }: { ticker: string }) {
   async function load(older = false) {
     const controller = new AbortController(); active.current?.abort(); active.current = controller;
     setBusy(true); setError('');
-    if (!older) { setItems([]); setLoaded(false); setBefore(null); }
+    if (!older) { setSelected([]); setItems([]); setLoaded(false); setBefore(null); }
     try {
       const history = await request<ResearchHistory>(`/api/watchlist/${ticker}/history${older && before ? `?before=${before}` : ''}`, { signal: controller.signal });
       if (!controller.signal.aborted) { setItems(previous => older ? [...previous, ...history.items] : history.items); setBefore(history.nextBefore); setLoaded(true); }
@@ -27,13 +29,15 @@ export default function ResearchHistoryPanel({ ticker }: { ticker: string }) {
     {busy && <p role="status">Loading research history…</p>}
     {error && <p role="alert" className="notice error">{error}</p>}
     {loaded && !items.length && <p className="muted">No recorded revisions for {ticker}. Existing legacy notes appear as a baseline when next saved or removed.</p>}
-    <div className="research-history-items">{items.map(item => <details key={item.id}><summary>{item.action === 'removed' ? 'Removed from watchlist' : item.action === 'baseline' ? 'Legacy baseline captured' : 'Saved revision'} · Version {item.entry.version} · {new Date(item.recordedAt).toLocaleString()}</summary>
+    {loaded && items.length > 0 && <><p className="muted small">Select any two loaded records to compare their saved fields. Load older pages to reach earlier research.</p>{selected.length > 0 && <button className="secondary" type="button" onClick={() => setSelected([])}>Clear revision comparison</button>}{selected.length === 1 && <p className="muted small">Select one more revision to compare.</p>}</>}
+    {selected.length === 2 && <ResearchRevisionComparison key={selected.slice().sort((a, b) => a - b).join(':')} revisions={items.filter(item => selected.includes(item.id))} />}
+    <div className="research-history-items">{items.map(item => <article key={item.id}><label className="revision-selection"><input type="checkbox" checked={selected.includes(item.id)} disabled={busy || (selected.length === 2 && !selected.includes(item.id))} onChange={event => setSelected(current => event.target.checked ? [...current, item.id] : current.filter(id => id !== item.id))} />Compare record {item.id} · {revisionAction(item)} · Version {item.entry.version}</label><details><summary>{revisionAction(item)} · Version {item.entry.version} · {new Date(item.recordedAt).toLocaleString()}</summary>
       <p className="muted small">Entry ID: {item.entry.entryId}<br />Record last saved: {new Date(item.entry.updatedAt).toLocaleString()} · {item.entry.status} · Review date: {item.entry.reviewDate || 'Not set'}</p>
       <h4>Investment thesis</h4><p className="summary-notes">{item.entry.thesis || 'No thesis recorded.'}</p>
       <h4>Risks and evidence to check</h4><p className="summary-notes">{item.entry.risks || 'No risks recorded.'}</p>
       <p className="muted small">{reviewedCount(item.entry.checks)} of {researchChecks.length} checks marked reviewed · self-reported</p>
       <ul className="summary-checklist">{researchChecks.map(check => <li key={check.id}>{check.label}: {item.entry.checks?.includes(check.id) ? 'Marked reviewed' : 'Not marked reviewed'}</li>)}</ul>
-    </details>)}</div>
+    </details></article>)}</div>
     {loaded && before !== null && <button type="button" className="secondary" disabled={busy} onClick={() => load(true)}>Load older research revisions</button>}
   </section>;
 }

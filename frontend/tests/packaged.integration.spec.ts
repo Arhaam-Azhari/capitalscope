@@ -806,6 +806,12 @@ test('I revisit saved research revisions after editing removing and recreating a
     await expect(history.locator('details').first()).toContainText('1 of 5 checks marked reviewed');
     await history.locator('summary').nth(1).click();
     await expect(history.locator('details').nth(1)).toContainText('My initial history thesis');
+    await history.getByRole('checkbox', { name: /^Compare record / }).first().check();
+    await history.getByRole('checkbox', { name: /^Compare record / }).nth(1).check();
+    const comparison = history.getByRole('region', { name: 'Changes between saved research records', exact: true });
+    await expect(comparison).toContainText('2 of 9 research fields changed');
+    await expect(comparison.getByRole('row', { name: /Investment thesis/ }).locator('td').first()).toHaveText('My initial history thesis');
+    await expect(comparison.getByRole('row', { name: /Investment thesis/ }).locator('td').last()).toHaveText('My revised history thesis');
     await page.getByRole('button', { name: 'Remove AMD from watchlist' }).click();
     await expect(page.locator('.save-status').first()).toContainText('Removed from the shared watchlist');
     await history.getByRole('button', { name: 'Load research history', exact: true }).click();
@@ -820,6 +826,9 @@ test('I revisit saved research revisions after editing removing and recreating a
     await history.locator('summary').nth(1).click();
     await expect(history.locator('details').nth(1)).toContainText(initial.entryId);
     await expect(history.locator('details').nth(1)).toContainText('My revised history thesis');
+    await history.getByRole('checkbox', { name: /^Compare record / }).first().check();
+    await history.getByRole('checkbox', { name: /^Compare record / }).nth(1).check();
+    await expect(comparison).toContainText('These records belong to different entry IDs');
   } finally {
     const current = (await (await page.request.get('/api/watchlist')).json()).find((entry: { ticker: string }) => entry.ticker === ticker);
     if (original) await page.request.put(`/api/watchlist/${ticker}`, { data: { ...original, entryId: current?.entryId || null, version: current?.version || 0 } });
