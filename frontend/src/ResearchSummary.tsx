@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { researchChecks, reviewedCount } from './researchChecklist';
+import { researchLink } from './researchNavigation';
 import { flushSync } from 'react-dom';
 import { money, request } from './api';
 import type { Company, FinancialReport, ValuationPriceEvidence, WatchlistEntry } from './types';
@@ -17,6 +18,8 @@ export default function ResearchSummary({ company, report, financialLoading, fin
   const [attempt, setAttempt] = useState(0);
   const [preparedAt, setPreparedAt] = useState(() => new Date().toISOString());
   const [printError, setPrintError] = useState('');
+  const [copyMessage, setCopyMessage] = useState(''); const [copying, setCopying] = useState(false);
+  const link = researchLink(company.ticker, 'Research summary');
   const example = company.ticker === 'DEMO';
   const financials = report?.company.ticker === company.ticker && report.dataMode === (example ? 'example' : 'sec') ? report : null;
   const financialMessage = financialError.includes('SEC_USER_AGENT') ? 'Live SEC access has not been configured for this workspace. Financial facts are unavailable.' : financialError;
@@ -35,6 +38,12 @@ export default function ResearchSummary({ company, report, financialLoading, fin
     try { window.print(); }
     catch { setPrintError('The browser could not open printing. Try its Print command once the summary has loaded.'); }
     finally { document.title = originalTitle; }
+  }
+  async function copyResearchLink() {
+    setCopyMessage(''); setCopying(true);
+    try { await navigator.clipboard.writeText(link); setCopyMessage('Research link copied.'); }
+    catch { setCopyMessage('Copy is unavailable. Select and copy the link below.'); }
+    finally { setCopying(false); }
   }
   useEffect(() => {
     const controller = new AbortController();
@@ -58,6 +67,7 @@ export default function ResearchSummary({ company, report, financialLoading, fin
       <p className="muted small">A read-only view of saved watchlist research, loaded financial facts, valuation cases, and dated closes. Sections can reflect different dates and are not an atomic snapshot. Reloading here reads saved notes, models, and stored prices; it does not import new prices or refresh financial facts. Unsaved drafts and browser-only research notes are excluded.</p>
       <div className="summary-print-actions"><button className="secondary" type="button" disabled={pending} onClick={printResearch}>Print research summary</button><span className="muted small">Opens your browser's print dialog. Choose Save as PDF if available. Prints the displayed evidence, including unavailable sections, without fetching fresh data.</span></div>
       {printError && <p className="notice error" role="alert">{printError}</p>}
+      <div className="summary-share"><button className="secondary" type="button" disabled={copying} onClick={copyResearchLink}>Copy company research link</button><label>Company research link<input readOnly value={link} onFocus={event => event.target.select()} /></label><p className="muted small">Opens this company's summary on the same app instance. The link points to the latest saved evidence, not a frozen report, and does not grant access. Localhost links work only on your computer.</p>{copyMessage && <p role="status" className="save-status">{copyMessage}</p>}</div>
     </div>
     <div className="summary-grid">
       <section className="panel" aria-label="Saved company thesis"><div className="panel-title"><h3>My saved thesis and risks</h3><button className="secondary" onClick={() => onOpen('Watchlist')}>Open watchlist</button></div>

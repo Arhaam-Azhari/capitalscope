@@ -707,3 +707,24 @@ test('I save manual research checks and carry them into my summary and CSV', asy
     if (entry) await page.request.delete(`/api/watchlist/DEMO?version=${entry.version}&entryId=${entry.entryId}`);
   }
 });
+
+
+test('I reopen a company summary from its share link without exposing saved notes in the URL', async ({ page }) => {
+  await page.goto('/#research?company=BRK-B&view=summary');
+  await expect(page.getByRole('region', { name: 'Research summary for BRK-B', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Berkshire Hathaway', exact: true })).toBeVisible();
+  const input = page.getByRole('textbox', { name: 'Company research link', exact: true });
+  const link = await input.inputValue(); expect(link).toContain('#research?company=BRK-B&view=summary');
+  await page.goto(link);
+  await expect(page.getByRole('region', { name: 'Research summary for BRK-B', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await expect(page).toHaveURL(/company=BRK-B&view=financials$/);
+  await page.goBack();
+  await expect(page.getByRole('region', { name: 'Research summary for BRK-B', exact: true })).toBeVisible();
+  await page.locator('.company-browser summary').click();
+  await page.getByRole('button', { name: /Example workspace/ }).click();
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  await expect(input).toHaveValue(/company=DEMO&view=summary$/);
+  await page.reload();
+  await expect(page.getByRole('region', { name: 'Research summary for DEMO', exact: true })).toBeVisible();
+});
