@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { request } from './api';
 import { localReviewDay, reviewState } from './watchlistReview';
 import { researchChecks, reviewedCount } from './researchChecklist';
-import { portfolioResearchCsv, portfolioResearchQueue, portfolioResearchRows } from './portfolioResearch';
+import { filterPortfolioResearch, portfolioResearchCsv, portfolioResearchQueue, portfolioResearchRows } from './portfolioResearch';
 import type { Company, PortfolioSummary, WatchlistEntry } from './types';
 
 export default function PortfolioResearchReview({ summary, companies, onOpen }: {
@@ -16,6 +16,7 @@ export default function PortfolioResearchReview({ summary, companies, onOpen }: 
   const [loadedAt, setLoadedAt] = useState('');
   const [exportError, setExportError] = useState('');
   const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
   const [order, setOrder] = useState('holdings');
   const [today, setToday] = useState(localReviewDay);
   useEffect(() => {
@@ -43,16 +44,18 @@ export default function PortfolioResearchReview({ summary, companies, onOpen }: 
     } catch { setExportError('I could not prepare the research CSV. Please try again.'); }
   }
   const ordered = order === 'queue' ? portfolioResearchQueue(rows) : rows;
-  const visible = filter === 'needs' ? ordered.filter(row => row.needsReview) : ordered;
+  const visible = filterPortfolioResearch(ordered, filter, query);
   return <section className="portfolio-actions" aria-labelledby="portfolio-research-heading">
     <div className="panel-title"><h3 id="portfolio-research-heading">Research review for my holdings</h3><button className="secondary" disabled={loading || !rows.length} onClick={() => setAttempt(value => value + 1)}>{ready ? 'Reload portfolio research' : 'Load portfolio research'}</button></div>
     <p className="muted small">Current simulated positions matched to shared saved watchlist research. Cash and closed positions are excluded. Research is not a recommendation, a coverage score, or evidence supporting past trades. Manual checklist marks are self-reported. Drafts and browser-only notes are excluded; loading here reads saved notes without importing prices or filings.</p>
-    <div className="export-actions"><button className="secondary" disabled={!ready || loading || !rows.length} onClick={download}>Download all holdings research CSV</button><p className="muted small">Exports every current holding, regardless of the filter or queue order, with the last loaded saved notes and their timestamps. Reload research for newer notes. This combines current positions with separately loaded research, not a synchronized database snapshot.</p></div>
+    <div className="export-actions"><button className="secondary" disabled={!ready || loading || !rows.length} onClick={download}>Download all holdings research CSV</button><p className="muted small">Exports every current holding, regardless of the filters, search, or queue order, with the last loaded saved notes and their timestamps. Reload research for newer notes. This combines current positions with separately loaded research, not a synchronized database snapshot.</p></div>
     {exportError && <p className="notice error" role="alert">{exportError}</p>}
     {!rows.length ? <p className="muted">No open positions to review.</p> : loading ? <p role="status">Loading portfolio research…</p> : error ? <p role="alert" className="notice error">{error}</p> : !ready ? <p className="muted">Load saved research to review the current holdings.</p> : <>
       <p className="muted small">{rows.length} holdings · {rows.filter(row => row.supported && !row.entry).length} without a saved entry · {rows.filter(row => row.archived).length} with archived research · {rows.filter(row => row.missingNotes).length} with missing notes · {rows.filter(row => row.openChecks).length} with open manual checks · {rows.filter(row => row.due).length} due for review.</p>
       <p className="muted small">Missing notes, open checks, and due dates count active saved entries only; categories can overlap. Review dates use this browser's local calendar day ({today}), not scheduled alerts. Unsupported holdings remain labeled and cannot open a company view.</p>
-      <label className="watchlist-filter">Portfolio research filter<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All current holdings</option><option value="needs">Research needs review</option></select></label>
+      <label className="watchlist-filter">Portfolio research filter<select value={filter} onChange={event => setFilter(event.target.value)}><option value="all">All current holdings</option><option value="needs">Research needs review</option><option value="due">Overdue or due today</option><option value="missing">No saved research</option><option value="notes">Missing active thesis or risks</option><option value="checks">Open active manual checks</option><option value="archived">Archived research</option><option value="unsupported">Unsupported instruments</option></select></label>
+      <label className="watchlist-filter">Search holdings research<input type="search" maxLength={120} placeholder="Ticker, company, or sector" value={query} onChange={event => setQuery(event.target.value)} /></label>
+      <div className="export-actions"><button className="secondary" disabled={filter === 'all' && !query} onClick={() => { setFilter('all'); setQuery(''); }}>Clear research filters</button><span className="muted small" role="status">Showing {visible.length} of {rows.length} holdings. Summary counts and CSV cover all holdings.</span></div>
       <label className="watchlist-filter">Portfolio research order<select value={order} onChange={event => setOrder(event.target.value)}><option value="holdings">Holdings order</option><option value="queue">Review queue</option></select></label>
       {order === 'queue' && <p className="muted small">Queue order: overdue, due today, no saved research, archived research, missing notes, open manual checks, reviews scheduled within seven days, no current gaps flagged, then unsupported instruments. Within a group, earlier review dates come first, then ticker. This is a workflow order, not an investment ranking.</p>}
       <div className="table-scroll"><table className="comparison-table"><caption>Saved research matched to current simulated holdings</caption><thead><tr><th>Holding / shares</th><th>Saved research</th><th>Notes and manual checks</th><th>Review / saved date</th><th>Company research</th></tr></thead><tbody>{visible.map(({ position, supported, entry, archived, reasons, queueGroup }) => <tr key={position.ticker}>
