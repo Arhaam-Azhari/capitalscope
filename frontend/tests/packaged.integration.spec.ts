@@ -68,7 +68,8 @@ test('I can inspect fictional peer ratios without confusing them with SEC data',
   await expect(page.getByRole('row', { name: /^Cash after capex / }).first()).toContainText('$125M');
   await expect(page.getByRole('link', { name: 'SEC filing ↗' })).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
-  await expect(page.locator('.comparison-table')).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Latest annual fundamentals and matched-period ratios', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('table', { name: 'Saved theses, risks, and self-reported research checks', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('SEC_USER_AGENT');
 });
 
