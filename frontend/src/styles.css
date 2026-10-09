@@ -100,3 +100,7 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 
 .saved-research-comparison { margin-top: 2rem; border-top: 1px solid var(--line); padding-top: 1.5rem; }
 .research-comparison-text { white-space: pre-wrap; overflow-wrap: anywhere; min-width: 200px; max-width: 360px; }
+.research-history { border-top: 1px solid var(--line); margin-top: 2rem; padding-top: 1rem; }
+.research-history-items details { border: 1px solid var(--line); border-radius: 6px; margin: .75rem 0; padding: 1rem; overflow-wrap: anywhere; }
+.research-history-items summary { cursor: pointer; color: var(--accent); line-height: 1.6; }
+.research-history-items details[open] summary { margin-bottom: 1rem; }

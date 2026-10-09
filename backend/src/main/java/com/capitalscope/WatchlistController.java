@@ -18,6 +18,7 @@ public class WatchlistController {
             .contentType(org.springframework.http.MediaType.parseMediaType("text/csv;charset=UTF-8"))
             .body(CsvExport.watchlist(entries, java.time.Instant.now()));
     }
+    @GetMapping("/{ticker}/history") public WatchlistStore.History history(@PathVariable String ticker, @RequestParam(required = false) Long before) { return store.history(ticker, before); }
     @PutMapping("/{ticker}") public WatchlistStore.Entry save(@PathVariable String ticker, @RequestBody WatchlistStore.Draft draft) { return store.save(ticker, draft); }
     @DeleteMapping("/{ticker}") public ResponseEntity<Void> remove(@PathVariable String ticker, @RequestParam long version, @RequestParam String entryId) {
         store.remove(ticker, version, entryId); return ResponseEntity.noContent().build();

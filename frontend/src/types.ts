@@ -48,3 +48,6 @@ export type ValuationPriceEvidence = { ticker: string; dataMode: string; evaluat
   quote: { close: number; priceDate: string; priceAgeDays: number; source: string; sourceUrl: string | null; retrievedAt: string | null } | null;
   quoteError: string | null; scenarios: { id: string; name: string; createdAt: string; modelVersion: string; modeledShares: number | null;
     valuePerShare: number | null; valueMinusClose: number | null; relativeGap: number | null; unavailableReason: string | null }[] };
+
+export type ResearchRevision = { id: number; action: 'saved' | 'removed' | 'baseline'; recordedAt: string; entry: WatchlistEntry };
+export type ResearchHistory = { items: ResearchRevision[]; nextBefore: number | null };

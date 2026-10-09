@@ -764,3 +764,43 @@ test('I reject malformed or unsupported comparison selections before requesting 
   }
   expect(requested).toEqual([]);
 });
+
+test('I inspect saved revisions on demand and keep history separate from my draft', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  const entry = { ticker: 'DEMO', entryId: 'my-original-entry', version: 2, status: 'archived', thesis: 'My historical thesis', risks: 'My historical risk', checks: ['filings'], reviewDate: null, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-02T00:00:00Z' };
+  let unavailable = true; let reads = 0;
+  await page.route('**/api/watchlist/DEMO/history*', route => {
+    reads++;
+    if (unavailable) return route.fulfill({ status: 503, json: { error: 'History storage unavailable' } });
+    const older = new URL(route.request().url()).searchParams.get('before');
+    return route.fulfill({ json: older ? { items: [{ id: 1, action: 'baseline', recordedAt: '2026-10-03T00:00:00Z', entry: { ...entry, version: 1, thesis: 'My surviving baseline' } }], nextBefore: null }
+      : { items: [{ id: 3, action: 'removed', recordedAt: '2026-10-04T00:00:00Z', entry }], nextBefore: 3 } });
+  });
+  await page.route('**/api/watchlist/AAPL/history*', route => route.fulfill({ json: { items: [], nextBefore: null } }));
+  await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  await page.getByLabel('My investment thesis', { exact: true }).fill('My unsaved new draft');
+  expect(reads).toBe(0);
+  const history = page.getByRole('region', { name: 'Research revision history · DEMO', exact: true });
+  await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+  await expect(history.getByRole('alert')).toContainText('History storage unavailable');
+  unavailable = false;
+  await history.getByRole('button', { name: 'Load research history', exact: true }).click();
+  await history.locator('summary').click();
+  await expect(history).toContainText('My historical thesis');
+  await expect(history).not.toContainText('My unsaved new draft');
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My unsaved new draft');
+  await history.getByRole('button', { name: 'Load older research revisions' }).click();
+  await expect(history.locator('details')).toHaveCount(2);
+  await history.locator('summary').last().click();
+  await expect(history).toContainText('My surviving baseline');
+  await expect(history.getByRole('button', { name: 'Load older research revisions' })).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await history.screenshot({ path: 'test-results/research-history-mobile.png' });
+  await page.getByRole('combobox', { name: 'Watchlist company', exact: true }).selectOption('AAPL');
+  const apple = page.getByRole('region', { name: 'Research revision history · AAPL', exact: true });
+  await expect(apple).not.toContainText('My historical thesis');
+  await apple.getByRole('button', { name: 'Load research history', exact: true }).click();
+  await expect(apple).toContainText('No recorded revisions for AAPL');
+});

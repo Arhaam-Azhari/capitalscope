@@ -1,3 +1,4 @@
+import ResearchHistoryPanel from './ResearchHistoryPanel';
 import { watchlistDrafts, type WatchlistDraft } from './researchDrafts';
 import { researchChecks, reviewedCount } from './researchChecklist';
 import { localReviewDay, reviewQueue, reviewState } from './watchlistReview';
@@ -95,7 +96,7 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
   });
   return <section className="panel" aria-labelledby="watchlist-heading">
     <div className="panel-title"><div><span className="eyebrow">RESEARCH SHORTLIST</span><h2 id="watchlist-heading">My watchlist</h2></div><button className="secondary" disabled={busy || loading} onClick={() => { watchlistDrafts.delete(ticker); setAttempt(n => n + 1); }}>Reload watchlist</button></div>
-    <p className="muted small">A shared shortlist without accounts. Everyone with app access can read and edit these theses. Research status and review dates are your notes, not trade recommendations or scheduled notifications. Unsaved drafts stay available when switching companies or views while this app is open. Closing or refreshing can lose drafts. Reloading replaces the open draft with saved research.</p>
+    <p className="muted small">A shared shortlist without accounts. Everyone with app access can read and edit these theses. Research status and review dates are your notes, not trade recommendations or scheduled notifications. Unsaved drafts stay available when switching companies or views while this app is open. Closing or refreshing can lose drafts. Saved revision history is shared too; removing an entry retains its historical notes. Reloading replaces the open draft with saved research.</p>
     {error && <p className="notice error" role="alert">{error}</p>}{saved && <p className="save-status" role="status">{saved}</p>}
     <div className="export-actions"><button className="secondary" type="button" disabled={!ready || loading || busy || exporting} onClick={downloadResearch}>{exporting ? 'Downloading research…' : 'Download all saved research CSV'}</button><span className="muted small">Includes archived entries and saved notes from storage at download time. Search, filters, and unsaved drafts are excluded.</span></div>
     {exportError && <p className="notice error" role="alert">{exportError}</p>}
@@ -122,5 +123,6 @@ export default function WatchlistPanel({ companies, currentTicker, onOpen }: {
       <div className="model-actions"><button className="primary" disabled={busy || loading || !ready} type="submit">{busy ? 'Saving…' : 'Save watchlist entry'}</button>{entry && <button className="text-button" disabled={busy || loading || !ready} type="button" onClick={remove}>Remove {ticker} from watchlist</button>}</div>
       {entry && <p className="muted small">Version {entry.version} · Updated {new Date(entry.updatedAt).toLocaleString()}</p>}
     </form></div>
+    <ResearchHistoryPanel key={`${ticker}:${entry?.entryId || 'none'}:${entry?.version || 0}`} ticker={ticker} />
   </section>;
 }

@@ -31,12 +31,39 @@ public class WatchlistStore {
     public WatchlistStore(JdbcTemplate jdbc) { this.jdbc = jdbc; }
     private String ticker(String value) { return "DEMO".equalsIgnoreCase(value) ? "DEMO" : CompanyCatalog.find(value).ticker(); }
     public List<Entry> list() {
-        return jdbc.query("SELECT * FROM research_watchlist ORDER BY updated_at DESC, ticker", (rs, i) -> new Entry(
-            rs.getString("entry_id"), rs.getString("ticker"), rs.getString("status"), rs.getString("thesis"), rs.getString("risks"),
+        return jdbc.query("SELECT * FROM research_watchlist ORDER BY updated_at DESC, ticker", (rs, i) -> entry(rs));
+    }
+    private Entry entry(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new Entry(rs.getString("entry_id"), rs.getString("ticker"), rs.getString("status"), rs.getString("thesis"), rs.getString("risks"),
             rs.getString("review_date") == null ? null : LocalDate.parse(rs.getString("review_date")), rs.getLong("version"),
             Instant.parse(rs.getString("created_at")), Instant.parse(rs.getString("updated_at")),
-            rs.getString("research_checks").isEmpty() ? List.of() : List.of(rs.getString("research_checks").split(","))));
+            rs.getString("research_checks").isEmpty() ? List.of() : List.of(rs.getString("research_checks").split(",")));
     }
+    public record Revision(long id, String action, Instant recordedAt, Entry entry) {}
+    public record History(List<Revision> items, Long nextBefore) {}
+    public History history(String symbol, Long before) {
+        String ticker = ticker(symbol);
+        if (before != null && before <= 0) throw new IllegalArgumentException("Provide a positive history cursor.");
+        var rows = jdbc.query("SELECT * FROM research_revisions WHERE ticker = ? AND id < ? ORDER BY id DESC LIMIT 21",
+            (rs, i) -> new Revision(rs.getLong("id"), rs.getString("action"), Instant.parse(rs.getString("recorded_at")), entry(rs)),
+            ticker, before == null ? Long.MAX_VALUE : before);
+        return new History(List.copyOf(rows.subList(0, Math.min(20, rows.size()))), rows.size() > 20 ? rows.get(19).id() : null);
+    }
+    private Entry current(String ticker) {
+        // I lock the saved row before capturing it so a concurrent edit cannot give my history the wrong baseline.
+        return jdbc.query("SELECT * FROM research_watchlist WHERE ticker = ? FOR UPDATE", (rs, i) -> entry(rs), ticker).stream().findFirst().orElse(null);
+    }
+    private void record(Entry entry, String action) {
+        jdbc.update("INSERT INTO research_revisions(ticker, entry_id, action, recorded_at, status, thesis, risks, review_date, version, created_at, updated_at, research_checks) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            entry.ticker(), entry.entryId(), action, Instant.now().toString(), entry.status(), entry.thesis(), entry.risks(),
+            entry.reviewDate() == null ? null : entry.reviewDate().toString(), entry.version(), entry.createdAt().toString(), entry.updatedAt().toString(), String.join(",", entry.checks()));
+    }
+    private void baseline(Entry previous) {
+        // I capture the surviving legacy record when I first change it; I cannot reconstruct earlier edits.
+        if (previous != null && jdbc.queryForObject("SELECT COUNT(*) FROM research_revisions WHERE entry_id = ?", Long.class, previous.entryId()) == 0)
+            record(previous, "baseline");
+    }
+
     @Transactional
     public Entry save(String symbol, Draft draft) {
         String ticker = ticker(symbol);
@@ -56,6 +83,7 @@ public class WatchlistStore {
                 throw new IllegalArgumentException("Choose each supported research check at most once.");
             checks = String.join(",", CHECKS.stream().filter(draft.checks()::contains).toList());
         }
+        Entry previous = current(ticker);
         String now = Instant.now().toString(), review = draft.reviewDate() == null ? null : draft.reviewDate().toString();
         if (draft.version() == 0) {
             try { jdbc.update("INSERT INTO research_watchlist(ticker, entry_id, status, thesis, risks, review_date, version, created_at, updated_at, research_checks) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
@@ -68,11 +96,16 @@ public class WatchlistStore {
                 draft.status(), thesis, risks, review, checks, now, ticker, draft.version(), draft.entryId());
             if (changed == 0) throw new Conflict();
         }
-        return list().stream().filter(entry -> entry.ticker().equals(ticker)).findFirst().orElseThrow();
+        Entry saved = list().stream().filter(entry -> entry.ticker().equals(ticker)).findFirst().orElseThrow();
+        baseline(previous); record(saved, "saved");
+        return saved;
     }
     @Transactional
     public void remove(String symbol, long version, String entryId) {
         if (version <= 0) throw new IllegalArgumentException("Provide the saved version to remove this entry.");
-        if (jdbc.update("DELETE FROM research_watchlist WHERE ticker = ? AND version = ? AND entry_id = ?", ticker(symbol), version, entryId) == 0) throw new Conflict();
+        String ticker = ticker(symbol);
+        Entry previous = current(ticker);
+        if (jdbc.update("DELETE FROM research_watchlist WHERE ticker = ? AND version = ? AND entry_id = ?", ticker, version, entryId) == 0) throw new Conflict();
+        baseline(previous); record(previous, "removed");
     }
 }
