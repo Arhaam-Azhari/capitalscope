@@ -1,12 +1,14 @@
+import SavedAllocationComparison from './SavedAllocationComparison';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { request } from './api';
 import { savedAllocationInputs, type SavedAllocationTarget } from './savedAllocationTargets';
-import type { PortfolioMarks } from './types';
+import type { Company, PortfolioMarks } from './types';
 
-export default function SavedAllocationTargets({ marks, targets, calculated, onLoad }: {
-  marks: PortfolioMarks; targets: string[]; calculated: boolean; onLoad: (targets: string[]) => void;
+export default function SavedAllocationTargets({ marks, companies, targets, calculated, onLoad }: {
+  marks: PortfolioMarks; companies: Company[]; targets: string[]; calculated: boolean; onLoad: (targets: string[]) => void;
 }) {
   const [items, setItems] = useState<SavedAllocationTarget[]>([]);
+  const [compared, setCompared] = useState<string[]>([]);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -16,7 +18,7 @@ export default function SavedAllocationTargets({ marks, targets, calculated, onL
   const pending = useRef<AbortController | null>(null);
   const path = `/api/portfolios/${marks.portfolioId}/allocation-targets`;
   useEffect(() => {
-    const controller = new AbortController(); setLoading(true); setError(''); setItems([]);
+    const controller = new AbortController(); setLoading(true); setError(''); setItems([]); setCompared([]);
     request<SavedAllocationTarget[]>(path, { signal: controller.signal })
       .then(data => { if (!controller.signal.aborted) setItems(data); })
       .catch(e => { if (!controller.signal.aborted) setError(e.message); })
@@ -40,7 +42,7 @@ export default function SavedAllocationTargets({ marks, targets, calculated, onL
     try {
       const response = await fetch(`${path}/${id}`, { method: 'DELETE', signal: controller.signal });
       if (!response.ok && response.status !== 404) throw new Error('Could not delete these saved targets.');
-      if (!controller.signal.aborted) setItems(current => current.filter(item => item.id !== id));
+      if (!controller.signal.aborted) { setItems(current => current.filter(item => item.id !== id)); setCompared(current => current.filter(value => value !== id)); }
     } catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
@@ -54,9 +56,10 @@ export default function SavedAllocationTargets({ marks, targets, calculated, onL
     {loading ? <p role="status">Loading saved allocation targets…</p> : !items.length ? <p className="muted small">No saved allocation targets for this portfolio.</p> : <ul className="scenario-list">{items.map(item => {
       let inputs: string[] | null = null, reason = '';
       try { inputs = savedAllocationInputs(marks, item); } catch (e) { reason = (e as Error).message; }
-      return <li key={item.id}><div><strong>{item.name}</strong><span className="muted small">Saved {new Date(item.createdAt).toLocaleString()} · {Object.entries(item.targets).map(([asset, value]) => `${asset} ${value}%`).join(' · ')}</span>{reason && <span className="muted small">{reason}</span>}</div>
+      return <li key={item.id}><label className="scenario-pick"><input type="checkbox" checked={compared.includes(item.id)} disabled={busy || !inputs || (!compared.includes(item.id) && compared.length >= 4)} onChange={event => setCompared(current => event.target.checked ? [...current, item.id].slice(0, 4) : current.filter(id => id !== item.id))} />Compare targets {item.name}</label><div><strong>{item.name}</strong><span className="muted small">Saved {new Date(item.createdAt).toLocaleString()} · {Object.entries(item.targets).map(([asset, value]) => `${asset} ${value}%`).join(' · ')}</span>{reason && <span className="muted small">{reason}</span>}</div>
         <button className="secondary" disabled={busy || !inputs} onClick={() => { if (inputs) { onLoad(inputs); setNotice(`Loaded targets: ${item.name}. Review the inputs, then calculate again.`); setError(''); } }}>Load targets from {item.name}</button>
         <button className="secondary" disabled={busy} onClick={() => remove(item.id)}>Delete targets {item.name}</button></li>;
     })}</ul>}
+    {!loading && <SavedAllocationComparison marks={marks} companies={companies} selected={compared.map(id => items.find(item => item.id === id)).filter((item): item is SavedAllocationTarget => !!item)} />}
   </section>;
 }
