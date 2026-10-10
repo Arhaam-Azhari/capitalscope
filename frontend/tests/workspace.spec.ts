@@ -1,3 +1,5 @@
+import { allocationShock } from '../src/allocationShock';
+import { allocationShockCsv } from '../src/allocationShockCsv';
 import { allocationConcentrationCsv } from '../src/allocationConcentrationCsv';
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
@@ -1239,6 +1241,27 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   expect(concentrationRows[1]).toMatchObject({ current_members: 'Technology', target_members: 'Technology', target_weight_percent: '90' });
   expect(concentrationRows[2]).toMatchObject({ current_members: 'MSFT; AAPL', target_members: 'MSFT; AAPL', target_weight_percent: '90' });
   expect(concentrationRows[2].scope).toContain('no orders or recorded fills');
+  const shocks = planner.getByRole('region', { name: 'Current vs target shock comparison', exact: true });
+  await expect(shocks.getByLabel('Plan default price change (%)')).toHaveValue('');
+  await shocks.getByLabel('Plan default price change (%)').fill('-20');
+  await shocks.getByRole('button', { name: 'Compare allocation shocks' }).click();
+  const shockedTotals = shocks.getByRole('table', { name: 'Current and target shocked totals' });
+  await expect(shockedTotals.getByRole('row', { name: /^Current mix/ })).toContainText('$500.00');
+  await expect(shockedTotals.getByRole('row', { name: /^Target mix/ })).toContainText('$492.00');
+  await expect(shocks).toContainText('Target minus current shocked value: -$8.00');
+  const shockDownload = page.waitForEvent('download');
+  await shocks.getByRole('button', { name: 'Download allocation shock CSV' }).click();
+  const shockFile = await shockDownload;
+  expect(shockFile.suggestedFilename()).toBe('allocation-shock-comparison.csv');
+  const shockRows = readCsv(await readFile((await shockFile.path())!, 'utf8'));
+  expect(shockRows).toHaveLength(2);
+  expect(shockRows[0]).toMatchObject({ model_version: 'allocation-shock-v1', bucket_kind: 'cash', applied_shock_percent: '0', current_stressed_value_usd: '100', target_stressed_value_usd: '60', current_stressed_total_usd: '500', target_stressed_total_usd: '492', target_minus_current_stressed_usd: '-8', plan_calculated_at: records[1].plan_calculated_at });
+  expect(shockRows[1]).toMatchObject({ bucket: 'Technology', default_shock_percent: '-20', applied_shock_percent: '-20', current_stressed_value_usd: '400', target_stressed_value_usd: '432' });
+  await shocks.getByLabel('Plan Technology override (%)').fill('0');
+  await expect(shockedTotals).toHaveCount(0);
+  await expect(shocks.getByRole('button', { name: 'Download allocation shock CSV' })).toHaveCount(0);
+  await shocks.getByRole('button', { name: 'Compare allocation shocks' }).click();
+  await expect(shockedTotals.getByRole('row', { name: /^Target mix/ })).toContainText('$600.00');
 
   expect(records[1]).toMatchObject({ user_share_basis_acknowledged: 'false', estimated_target_shares: '', estimated_share_change: '', share_estimate_unavailable_reason: 'Share basis not checked' });
   const basis = planner.getByLabel('I checked the recorded-share and stored-price basis');
@@ -1261,6 +1284,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await expect(movement).toHaveCount(0);
   await expect(sectorTable).toHaveCount(0);
   await expect(concentrationTable).toHaveCount(0);
+  await expect(shocks).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download concentration CSV' })).toHaveCount(0);
   await expect(result).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
@@ -1269,6 +1293,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   for (const [asset, value] of [['Cash', '33.33'], ['AAPL', '33.33'], ['MSFT', '33.34']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   await expect(result.getByRole('row', { name: /^MSFT/ })).toContainText('$200.04');
+  await expect(shocks.getByLabel('Plan default price change (%)')).toHaveValue('');
   await planner.getByRole('button', { name: 'Use current weights' }).click();
   await expect(result).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
@@ -1299,6 +1324,9 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await expect(sectorTable.getByRole('row', { name: /^Cash reserve/ })).toContainText('100.00%');
   await expect(concentrationTable.getByRole('row', { name: /^Largest holding/ })).toContainText('None');
   await expect(concentrationTable.getByRole('row', { name: /^Top three holdings/ })).toContainText('0.00%');
+  await shocks.getByLabel('Plan default price change (%)').fill('-100');
+  await shocks.getByRole('button', { name: 'Compare allocation shocks' }).click();
+  await expect(shockedTotals.getByRole('row', { name: /^Target mix/ })).toContainText('$100.00');
   expect(writes).toEqual([]);
 });
 
@@ -1365,6 +1393,20 @@ test('I rerank concentration when targets change the leading holdings', () => {
     allocation: { available: true, unavailableReason: null, cashWeight: 0.5, largestHolding: null, largestSector: null, topThreeHoldingsWeight: 0.45, companies: [], sectors: [] } };
   const companies = marks.holdings.map((holding, i) => ({ ticker: holding.ticker, name: holding.ticker, sector: i < 2 ? 'Technology' : 'Financials' }));
   const targets = ['20', '0', '0', '20', '60'];
+  const shocked = allocationShock(marks, targets, companies, '-10', { Financials: '-50', Technology: '' });
+  expect(shocked).toMatchObject({ currentTotal: 178, targetTotal: 120, currentChange: -22, targetChange: -80, currentChangePercent: -11, targetChangePercent: -40, targetMinusCurrent: -58 });
+  expect(shocked.rows.find(row => row.kind === 'cash')).toMatchObject({ shockPercent: 0, currentStressedValue: 100, targetStressedValue: 40 });
+  expect(allocationShock(marks, targets, companies, '-100', { Financials: '0', Technology: '0' })).toMatchObject({ currentTotal: 200, targetTotal: 200, targetMinusCurrent: 0 });
+  expect(allocationShock(marks, targets, companies, '-100', {})).toMatchObject({ currentTotal: 100, targetTotal: 40 });
+  expect(allocationShock(marks, ['100', '0', '0', '0', '0'], companies, '-100', {})).toMatchObject({ currentTotal: 100, targetTotal: 200, targetMinusCurrent: 100 });
+  expect(allocationShock(marks, targets, companies, '100', {})).toMatchObject({ currentTotal: 300, targetTotal: 360 });
+  const shockCsv = readCsv(allocationShockCsv(shocked, marks, marks.evaluatedAt, marks.evaluatedAt, marks.evaluatedAt));
+  expect(shockCsv).toHaveLength(3);
+  expect(shockCsv.find(row => row.bucket === 'Financials')).toMatchObject({ default_shock_percent: '-10', applied_shock_percent: '-50', current_value_usd: '30', target_value_usd: '160', current_stressed_value_usd: '15', target_stressed_value_usd: '80' });
+  for (const invalid of ['', 'NaN', 'Infinity', '-100.01', '100.01', '1.234']) expect(() => allocationShock(marks, targets, companies, invalid, {})).toThrow('price changes');
+  expect(() => allocationShock(marks, targets, companies, '0', { Financials: '101' })).toThrow('price changes');
+  expect(() => allocationShock(marks, targets, companies, '0', { Missing: '-10' })).toThrow('does not match');
+  expect(() => allocationShock({ ...marks, complete: false }, targets, companies, '0', {})).toThrow('complete, positive');
   const summary = allocationConcentration(marks, targets, companies);
   expect(summary[0]).toMatchObject({ currentMembers: ['AAPL'], currentWeightPercent: 20, targetMembers: ['V'], targetWeightPercent: 60, weightChangePoints: 40 });
   expect(summary[1]).toMatchObject({ currentMembers: ['Technology'], currentWeightPercent: 35, targetMembers: ['Financials'], targetWeightPercent: 80 });
