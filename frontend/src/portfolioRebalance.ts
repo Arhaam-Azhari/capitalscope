@@ -24,3 +24,18 @@ export function rebalancePlan(marks: PortfolioMarks, targets: string[]) {
     return { ...asset, currentWeight: asset.value / total, targetWeight, targetValue, change: targetValue - asset.value };
   });
 }
+
+export function currentAllocationTargets(marks: PortfolioMarks) {
+  if (!rebalanceAvailable(marks)) throw new Error('A complete, positive portfolio valuation is required.');
+  const values = [marks.cash, ...marks.holdings.map(holding => holding.value!)];
+  const sum = values.reduce((total, value) => total + value, 0);
+  const quotas = values.map(value => value / sum * 10000);
+  const points = quotas.map(Math.floor);
+  const remaining = 10000 - points.reduce((total, value) => total + value, 0);
+  if (remaining < 0 || remaining > points.length) throw new Error('Current weights could not be rounded to 100%.');
+  // I distribute leftover basis points by largest remainder, then cash/holding order for ties.
+  const order = quotas.map((quota, index) => ({ index, remainder: quota - points[index] }))
+    .sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (let i = 0; i < remaining; i++) points[order[i].index]++;
+  return points.map(value => (value / 100).toFixed(2));
+}

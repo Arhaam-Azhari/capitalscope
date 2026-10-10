@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { allocationPlanCsv } from './allocationPlanCsv';
 import { money } from './api';
-import { rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
+import { currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
 import type { PortfolioMarks } from './types';
 
 export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMarks }) {
@@ -15,6 +15,11 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
     event.preventDefault(); setResult(null); setError('');
     try { setResult(rebalancePlan(marks, targets)); setCalculatedAt(new Date().toISOString()); }
     catch (e) { setError(e instanceof Error ? e.message : 'The plan could not be calculated.'); }
+  }
+  function useCurrentWeights() {
+    setResult(null); setError('');
+    try { setTargets(currentAllocationTargets(marks)); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Current weights are unavailable.'); }
   }
   function download() {
     if (!result) return;
@@ -31,6 +36,7 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
     <p className="muted small">Enter your own target percentages for cash and current holdings. Targets must total exactly 100%, with up to two decimal places. The plan holds this snapshot's total value fixed and shows target minus current value. It does not choose allocations, send orders, or record simulated fills.</p>
     <p className="muted small">Uses the dated prices above, which may differ across holdings. No fees, taxes, slippage, deposits, withdrawals, or share rounding are modeled. Dollar changes are rounded for display and may have a small rounding residual. Targets and results stay in this view only and reset when stored valuation is refreshed or the portfolio changes.</p>
     {!available ? <p className="notice warning">Planning is unavailable until every holding is priced and total value is positive. A priced subtotal is not enough.</p> : <>
+      <div className="export-actions"><button className="secondary" onClick={useCurrentWeights}>Use current weights</button><p className="muted small">Replaces entered targets with this snapshot's mix, rounded to two decimal places while keeping the total at 100%. Small dollar changes can result from rounding. Review or edit the targets, then calculate; nothing is saved or traded.</p></div>
       <form onSubmit={calculate}><div className="model-fields">{assets.map((ticker, i) => <label key={ticker}>Target {ticker} allocation (%)<input type="number" min="0" max="100" step="0.01" required value={targets[i]} onChange={event => { setTargets(current => current.map((value, index) => index === i ? event.target.value : value)); setResult(null); setError(''); }} /></label>)}</div>
         <div className="comparison-controls"><button className="secondary" type="submit">Calculate allocation changes</button><button className="text-button" type="button" onClick={() => { setTargets(assets.map(() => '')); setResult(null); setError(''); }}>Clear allocation targets</button></div></form>
       <div className="export-actions"><button className="secondary" disabled={!result} onClick={download}>Download allocation plan CSV</button><p className="muted small">Exports the calculated plan with unrounded dollar values, entered target percentages, baseline dates, and each holding's price evidence. Cash has no price evidence. Calculate again after changing targets.</p></div>

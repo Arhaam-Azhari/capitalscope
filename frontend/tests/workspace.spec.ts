@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
 import { readCsv } from './readCsv';
+import { currentAllocationTargets } from '../src/portfolioRebalance';
+import type { PortfolioMarks } from '../src/types';
 import { portfolioResearchRows, portfolioResearchQueue } from '../src/portfolioResearch';
 
 // I use invented financial values and stub the API so these checks don't hit the SEC.
@@ -1174,6 +1176,12 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
   const planner = page.getByRole('region', { name: 'Target allocation planner', exact: true });
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
+  await planner.getByRole('button', { name: 'Use current weights' }).click();
+  await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('16.67');
+  await expect(planner.getByLabel('Target AAPL allocation (%)')).toHaveValue('33.33');
+  await expect(planner.getByLabel('Target MSFT allocation (%)')).toHaveValue('50.00');
+  await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
+
   for (const [asset, value] of [['Cash', '10'], ['AAPL', '40'], ['MSFT', '50']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   const result = planner.getByRole('table', { name: 'Target allocation dollar changes' });
@@ -1204,6 +1212,12 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   for (const [asset, value] of [['Cash', '33.33'], ['AAPL', '33.33'], ['MSFT', '33.34']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   await expect(result.getByRole('row', { name: /^MSFT/ })).toContainText('$200.04');
+  await planner.getByRole('button', { name: 'Use current weights' }).click();
+  await expect(result).toHaveCount(0);
+  await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
+  await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('$100.02');
+
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await planner.getByRole('button', { name: 'Clear allocation targets' }).click();
@@ -1212,12 +1226,30 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   mode = 'partial';
   await page.getByRole('button', { name: 'Recheck stored prices' }).click();
   await expect(planner).toContainText('Planning is unavailable');
+  await expect(planner.getByRole('button', { name: 'Use current weights' })).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Calculate allocation changes' })).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toHaveCount(0);
   mode = 'cash';
   await page.getByRole('button', { name: 'Recheck stored prices' }).click();
-  await planner.getByLabel('Target Cash allocation (%)').fill('100');
+  await planner.getByRole('button', { name: 'Use current weights' }).click();
+  await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('100.00');
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('$0.00');
   expect(writes).toEqual([]);
+});
+
+
+test('I round current allocations to exactly 100% without assigning weight to zero cash', () => {
+  const marks: PortfolioMarks = { portfolioId: 'rounding', dataMode: 'market', evaluatedAt: '2026-10-10T00:00:00Z', cash: 1,
+    pricedPositions: 2, totalPositions: 2, complete: true, pricedHoldingsValue: 2, totalValue: 3, unrealizedPnl: 0,
+    holdings: ['AAPL', 'MSFT'].map(ticker => ({ ticker, quantity: 1, costBasis: 1, close: 1, priceDate: '2026-10-09', priceAgeDays: 1,
+      source: 'My rounding fixture', sourceUrl: null, retrievedAt: null, value: 1, unrealizedPnl: 0, error: null })),
+    allocation: { available: true, unavailableReason: null, cashWeight: 1 / 3, largestHolding: null, largestSector: null, topThreeHoldingsWeight: 2 / 3, companies: [], sectors: [] } };
+  expect(currentAllocationTargets(marks)).toEqual(['33.34', '33.33', '33.33']);
+  marks.cash = 0; marks.totalValue = 2;
+  expect(currentAllocationTargets(marks)).toEqual(['0.00', '50.00', '50.00']);
+  marks.holdings[0].value = 0.000001; marks.totalValue = 1.000001;
+  expect(currentAllocationTargets(marks)).toEqual(['0.00', '0.00', '100.00']);
+  marks.complete = false;
+  expect(() => currentAllocationTargets(marks)).toThrow('complete, positive');
 });
