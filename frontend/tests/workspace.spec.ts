@@ -992,9 +992,9 @@ test('I review saved research for current holdings and reset it when I switch po
   await review.getByLabel('Portfolio research order').selectOption('queue');
   const tickers = review.locator('tbody th[scope="row"]');
   await expect(tickers).toHaveText([/^MSFT/, /^NVDA/, /^AMZN/, /^AAPL/, /^DEMO/]);
-  await expect(review.getByRole('row', { name: /^MSFT/ })).toContainText('Review overdue · Missing thesis · Open manual checks');
-  await expect(review.getByRole('row', { name: /^NVDA/ })).toContainText('No saved research');
-  await expect(review.getByRole('row', { name: /^DEMO/ })).toContainText('Unsupported instrument');
+  await expect(review.getByRole('row', { name: /^Compare holding MSFT/ })).toContainText('Review overdue · Missing thesis · Open manual checks');
+  await expect(review.getByRole('row', { name: /^Compare holding NVDA/ })).toContainText('No saved research');
+  await expect(review.getByRole('row', { name: /^Compare holding DEMO/ })).toContainText('Unsupported instrument');
   const gapFilter = review.getByLabel('Portfolio research filter');
   for (const [filter, expected] of [['due', 'MSFT'], ['notes', 'MSFT'], ['checks', 'MSFT'], ['missing', 'NVDA'], ['archived', 'AMZN'], ['unsupported', 'DEMO']]) {
     await gapFilter.selectOption(filter);
@@ -1090,4 +1090,59 @@ test('I order due research by local calendar dates without elevating old archive
   expect(rows.map(row => row.position.ticker)).toEqual(tickers);
   const nextDay = portfolioResearchQueue(portfolioResearchRows(summary, catalog, entries, '2026-10-10'));
   expect(nextDay.find(row => row.position.ticker === 'GOOG')?.reasons).toEqual(['Review due today']);
+});
+
+test('I select current real holdings for a linked company research comparison', async ({ page }) => {
+  await installApi(page);
+  const portfolio = { id: 'compare-holdings', name: 'My comparison portfolio', mode: 'market', initialCash: 1000, createdAt: '2026-10-01T00:00:00Z' };
+  const examplePortfolio = { ...portfolio, id: 'example-holdings', mode: 'example', name: 'My fictional portfolio' };
+  const checks = ['filings'];
+  const entries = ['AAPL', 'MSFT'].map(ticker => ({ ticker, entryId: ticker, status: 'researching', thesis: `My ${ticker} holdings thesis`, risks: `My ${ticker} risk`,
+    checks, reviewDate: null, version: 1, createdAt: portfolio.createdAt, updatedAt: portfolio.createdAt }));
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path === '/api/watchlist') return route.fulfill({ json: entries });
+    if (path === '/api/portfolios') return route.fulfill({ json: [portfolio, examplePortfolio] });
+    if (path === '/api/portfolios/compare-holdings' || path === '/api/portfolios/example-holdings') return route.fulfill({ json: {
+      portfolio: path.endsWith('example-holdings') ? examplePortfolio : portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, events: [], trades: [],
+      positions: (path.endsWith('example-holdings') ? ['DEMO'] : ['AAPL', 'MSFT', 'AMZN', 'NVDA', 'GOOG', 'DEMO']).map(ticker => ({ ticker, quantity: 2, costBasis: 100, averageCost: 50 }))
+    } });
+    return route.fallback();
+  });
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  const review = page.getByRole('region', { name: 'Research review for my holdings', exact: true });
+  await review.getByRole('button', { name: 'Load portfolio research' }).click();
+  await expect(review.getByRole('button', { name: 'Compare selected holdings', exact: true })).toBeDisabled();
+  await expect(review.getByRole('checkbox', { name: 'Compare holding DEMO', exact: true })).toBeDisabled();
+  for (const ticker of ['AAPL', 'MSFT', 'AMZN', 'NVDA']) await review.getByRole('checkbox', { name: `Compare holding ${ticker}`, exact: true }).check();
+  await expect(review.getByRole('checkbox', { name: 'Compare holding GOOG', exact: true })).toBeDisabled();
+  await review.getByLabel('Search holdings research').fill('apple');
+  await expect(review.getByRole('checkbox')).toHaveCount(1);
+  await expect(review.getByRole('button', { name: 'Remove MSFT from comparison' })).toBeVisible();
+  await review.getByRole('button', { name: 'Remove AMZN from comparison' }).click();
+  await review.getByRole('button', { name: 'Remove NVDA from comparison' }).click();
+  await expect(review).toContainText('2 of 4 selected');
+  await review.getByRole('button', { name: 'Clear comparison selection' }).click();
+  await expect(review.getByRole('button', { name: 'Compare selected holdings', exact: true })).toBeDisabled();
+  await review.getByRole('button', { name: 'Clear research filters' }).click();
+  await review.getByRole('checkbox', { name: 'Compare holding AAPL', exact: true }).check();
+  await page.getByLabel('Open portfolio').selectOption(examplePortfolio.id);
+  await review.getByRole('button', { name: 'Load portfolio research' }).click();
+  await expect(review.getByRole('checkbox', { name: 'Compare holding DEMO', exact: true })).toBeDisabled();
+  await expect(review).toContainText('0 of 4 selected');
+  await page.getByLabel('Open portfolio').selectOption(portfolio.id);
+  await review.getByRole('button', { name: 'Load portfolio research' }).click();
+  await expect(review).toContainText('0 of 4 selected');
+  for (const ticker of ['AAPL', 'MSFT']) await review.getByRole('checkbox', { name: `Compare holding ${ticker}`, exact: true }).check();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await review.getByRole('button', { name: 'Compare selected holdings', exact: true }).click();
+  await expect(page).toHaveURL(/company=AAPL&view=compare&peers=AAPL%2CMSFT/);
+  const comparison = page.getByRole('region', { name: 'Compare saved company research', exact: true });
+  await expect(comparison).toContainText('My AAPL holdings thesis');
+  await expect(comparison).toContainText('My MSFT holdings thesis');
+  await expect(page.getByRole('combobox', { name: 'Company 1', exact: true })).toHaveValue('AAPL');
+  await expect(page.getByRole('combobox', { name: 'Company 2', exact: true })).toHaveValue('MSFT');
+  await page.reload();
+  await expect(comparison).toContainText('My MSFT holdings thesis');
 });
