@@ -1,4 +1,5 @@
 import { compareSavedAllocations, savedAllocationComparisonCsv } from '../src/savedAllocationComparison';
+import { priceDrawdown, priceDrawdownCsv } from '../src/priceDrawdown';
 import { compareSavedAllocationShocks, savedAllocationShockCsv } from '../src/savedAllocationShocks';
 import { savedAllocationInputs, type SavedAllocationTarget } from '../src/savedAllocationTargets';
 import { allocationShock } from '../src/allocationShock';
@@ -8,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
 import { readCsv } from './readCsv';
 import { allocationConcentration, allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
-import type { PortfolioMarks } from '../src/types';
+import type { PortfolioMarks, PriceHistory } from '../src/types';
 import { portfolioResearchRows, portfolioResearchQueue } from '../src/portfolioResearch';
 
 // I use invented financial values and stub the API so these checks don't hit the SEC.
@@ -1543,4 +1544,83 @@ test('I rerank concentration when targets change the leading holdings', () => {
   expect(csv[1].target_members).toBe("'=My, \"sector\"\nlabel");
   expect(() => allocationConcentration({ ...marks, complete: false }, targets, companies)).toThrow('complete, positive');
   expect(() => allocationConcentration(marks, ['10', '0', '0', '0', '0'], companies)).toThrow('exactly 100%');
+});
+
+function myDrawdownHistory(closes = [100, 120, 90, 96, 120, 110]): PriceHistory {
+  return { ticker: 'DEMO', currency: 'USD', adjusted: false, dataMode: 'example', source: '=My, "raw"\nfixture', sourceUrl: 'https://example.com/prices', retrievedAt: '2026-10-09T00:00:00Z',
+    days: closes.map((close, i) => ({ date: `2026-10-${String(i + 1).padStart(2, '0')}`, open: close, high: close, low: close, close, volume: 100 })).reverse() };
+}
+
+test('I locate raw-close drawdown episodes within the chosen observations', () => {
+  const history = myDrawdownHistory();
+  const result = priceDrawdown(history, '2026-10-01', '2026-10-06');
+  expect(result).toMatchObject({ maximumDeclinePercent: 25, peak: { date: '2026-10-02', close: 120 }, trough: { date: '2026-10-03', close: 90 }, recovery: { date: '2026-10-05' }, peakToTroughIntervals: 1, troughToRecoveryIntervals: 2 });
+  expect(result.latestDeclinePercent).toBeCloseTo(100 / 12);
+  expect(result.rows[5].runningPeakDate).toBe('2026-10-05');
+  const truncated = priceDrawdown(history, '2026-10-03', '2026-10-06');
+  expect(truncated.maximumDeclinePercent).toBeCloseTo(100 / 12);
+  expect(truncated.peak?.date).toBe('2026-10-05');
+  expect(truncated.recovery).toBeNull();
+  const unrecovered = priceDrawdown(history, '2026-10-01', '2026-10-04');
+  expect(unrecovered.recovery).toBeNull();
+  const ties = priceDrawdown(myDrawdownHistory([100, 80, 100, 80, 100]), '2026-10-01', '2026-10-05');
+  expect(ties.trough?.date).toBe('2026-10-02');
+  expect(ties.recovery?.date).toBe('2026-10-03');
+  const rising = priceDrawdown(myDrawdownHistory([100, 100, 110]), '2026-10-01', '2026-10-03');
+  expect(rising).toMatchObject({ maximumDeclinePercent: 0, latestDeclinePercent: 0, peak: null, trough: null, recovery: null, peakToTroughIntervals: null });
+  const gaps = { ...history, days: history.days.filter(day => day.date !== '2026-10-04') };
+  expect(priceDrawdown(gaps, '2026-10-01', '2026-10-06').troughToRecoveryIntervals).toBe(1);
+  const csv = readCsv(priceDrawdownCsv(history, result, '2026-10-10T01:00:00Z', '2026-10-10T02:00:00Z'));
+  expect(csv).toHaveLength(6);
+  expect(csv[0]).toMatchObject({ source: "'=My, \"raw\"\nfixture", observation_date: '2026-10-01', raw_close_usd: '100', maximum_decline_percent: '25', recovery_date: '2026-10-05', calculated_at: '2026-10-10T01:00:00Z', exported_at: '2026-10-10T02:00:00Z', data_mode: 'example' });
+  expect(csv[5].decline_from_peak_percent).toBe(String(result.latestDeclinePercent));
+  for (const close of [0, -1, NaN, Infinity]) expect(() => priceDrawdown(myDrawdownHistory([100, close]), '2026-10-01', '2026-10-02')).toThrow('finite positive');
+  for (const days of [[], history.days.slice(0, 1)]) expect(() => priceDrawdown({ ...history, days }, '2026-10-01', '2026-10-06')).toThrow('at least two');
+  expect(() => priceDrawdown({ ...history, days: [...history.days, history.days[0]] }, '2026-10-01', '2026-10-06')).toThrow('unique');
+  expect(() => priceDrawdown({ ...history, adjusted: true }, '2026-10-01', '2026-10-06')).toThrow('unadjusted USD');
+  expect(() => priceDrawdown({ ...history, currency: 'EUR' }, '2026-10-01', '2026-10-06')).toThrow('unadjusted USD');
+  for (const start of ['2026-02-30', 'bad', '2026-10-07']) expect(() => priceDrawdown(history, start, '2026-10-06')).toThrow('valid start');
+});
+
+test('I choose a raw-close window and export its drawdown evidence', async ({ page }) => {
+  await installApi(page);
+  let reads = 0;
+  await page.route('**/api/examples/prices', route => { reads++; return route.fulfill({ json: myDrawdownHistory() }); });
+  await page.route('**/api/companies/AAPL/prices', route => route.fulfill({ json: { ...myDrawdownHistory([100]), ticker: 'AAPL', dataMode: 'market' } }));
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Raw-close drawdown analysis' });
+  await expect(panel.getByLabel('Drawdown start date')).toHaveValue('2026-10-01');
+  const initialReads = reads;
+  await panel.getByRole('button', { name: 'Analyze price drawdown' }).click();
+  await expect(panel).toContainText('25.00%');
+  await expect(panel).toContainText('Recovery: 2026-10-05');
+  const table = panel.getByRole('table', { name: 'Window drawdown observations, oldest first' });
+  await expect(table.getByRole('row')).toHaveCount(7);
+  const pending = page.waitForEvent('download');
+  await panel.getByRole('button', { name: 'Download drawdown CSV' }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('DEMO-raw-close-drawdown.csv');
+  const { readFile } = await import('node:fs/promises');
+  const rows = readCsv(await readFile((await file.path())!, 'utf8'));
+  expect(rows[2]).toMatchObject({ raw_close_usd: '90', decline_from_peak_percent: '25', running_peak_date: '2026-10-02' });
+  await panel.getByLabel('Drawdown end date').selectOption('2026-10-04');
+  await expect(table).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Download drawdown CSV' })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Analyze price drawdown' }).click();
+  await expect(panel).toContainText('Recovery not observed within this window');
+  await panel.getByLabel('Drawdown start date').selectOption('2026-10-06');
+  await panel.getByRole('button', { name: 'Analyze price drawdown' }).click();
+  await expect(panel.getByRole('alert')).toContainText('valid start date');
+  await panel.getByLabel('Drawdown start date').selectOption('2026-10-04');
+  await panel.getByRole('button', { name: 'Analyze price drawdown' }).click();
+  await expect(panel.getByRole('alert')).toContainText('at least two');
+  expect(reads).toBe(initialReads);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await openCatalog(page);
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  await expect(panel.getByRole('button', { name: 'Analyze price drawdown' })).toBeDisabled();
+  await expect(panel).toContainText('At least two stored observations');
+  await expect(table).toHaveCount(0);
 });

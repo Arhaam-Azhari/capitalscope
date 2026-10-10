@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { money, request } from './api';
 import type { Company, PriceHistory } from './types';
+import PriceDrawdownPanel from './PriceDrawdownPanel';
 
 export default function PricePanel({ company }: { company: Company }) {
   const [history, setHistory] = useState<PriceHistory | null>(null);
@@ -23,6 +24,7 @@ export default function PricePanel({ company }: { company: Company }) {
     {error ? <div className="notice error" role="alert">{error}<button className="secondary" onClick={() => setAttempt(n => n + 1)}>Retry prices</button></div> : !history ? <p role="status">Loading daily prices…</p> : <>
       {history.dataMode === 'example' && <p className="notice example">These prices are invented for the fictional example company. Dates include calendar days and do not represent an exchange trading calendar.</p>}
       <p className="muted small">{history.source} · {history.days.length} observations{history.retrievedAt && ` · Retrieved ${new Date(history.retrievedAt).toLocaleString()}`}{history.sourceUrl && <> · <a href={history.sourceUrl} target="_blank" rel="noreferrer">Provider documentation ↗</a></>}</p>
+      <PriceDrawdownPanel key={JSON.stringify(history)} history={history} />
       {days.length > 0 && <div className="trend"><svg viewBox="0 0 520 220" role="img" aria-label="Daily closing price trend; exact prices are in the table below">
         <text x="45" y="25">{money(high, false)}</text><text x="45" y="195">{money(low, false)}</text>
         <polyline fill="none" stroke="var(--accent)" strokeWidth="3" points={days.map((d, i) => `${x(i)},${y(d.close)}`).join(' ')} />
