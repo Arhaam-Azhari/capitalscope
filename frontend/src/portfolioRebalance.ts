@@ -87,3 +87,24 @@ export function allocationSectorPlan(marks: PortfolioMarks, targets: string[], c
   return [...groups.values()].sort((a, b) => a.kind === b.kind ? a.label.localeCompare(b.label) : a.kind === 'cash' ? -1 : 1)
     .map(group => ({ ...group, weightChangePoints: group.targetWeightPercent - group.currentWeightPercent }));
 }
+
+export function allocationConcentration(marks: PortfolioMarks, targets: string[], companies: Company[]) {
+  const holdings = rebalancePlan(marks, targets).slice(1);
+  const sectors = allocationSectorPlan(marks, targets, companies).filter(group => group.kind === 'sector');
+  type Ranked = { label: string; weight: number };
+  // I rank each side independently, exclude zero weights, and break ties alphabetically.
+  const rank = (rows: Ranked[]) => rows.filter(row => row.weight > 0).sort((a, b) => b.weight - a.weight || a.label.localeCompare(b.label));
+  const currentHoldings = rank(holdings.map(row => ({ label: row.ticker, weight: row.currentWeight * 100 })));
+  const targetHoldings = rank(holdings.map(row => ({ label: row.ticker, weight: row.targetWeight * 100 })));
+  const currentSectors = rank(sectors.map(row => ({ label: row.label, weight: row.currentWeightPercent })));
+  const targetSectors = rank(sectors.map(row => ({ label: row.label, weight: row.targetWeightPercent })));
+  const summary = (metric: string, current: Ranked[], target: Ranked[]) => {
+    const currentWeightPercent = current.reduce((sum, row) => sum + row.weight, 0);
+    const targetWeightPercent = target.reduce((sum, row) => sum + row.weight, 0);
+    return { metric, currentMembers: current.map(row => row.label), targetMembers: target.map(row => row.label),
+      currentWeightPercent, targetWeightPercent, weightChangePoints: targetWeightPercent - currentWeightPercent };
+  };
+  return [summary('Largest holding', currentHoldings.slice(0, 1), targetHoldings.slice(0, 1)),
+    summary('Largest sector bucket', currentSectors.slice(0, 1), targetSectors.slice(0, 1)),
+    summary('Top three holdings', currentHoldings.slice(0, 3), targetHoldings.slice(0, 3))];
+}

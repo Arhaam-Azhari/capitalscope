@@ -1,13 +1,7 @@
+import { csvCell } from './csvCell';
 import { allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, rebalancePlan } from './portfolioRebalance';
 import type { Company, PortfolioMarks } from './types';
 
-function cell(value: string | number | null | undefined) {
-  if (value == null) return '';
-  if (typeof value === 'number') return String(value);
-  // I quote text and protect formula-like fields while leaving signed dollar changes numeric.
-  const safe = /^[=+@-]/.test(value.trimStart()) || /^[\t\r\n]/.test(value) ? `'${value}` : value;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
 
 export function allocationPlanCsv(marks: PortfolioMarks, targets: string[], calculatedAt: string, exportedAt: string, basisChecked = false, companies: Company[] = []) {
   const plan = rebalancePlan(marks, targets);
@@ -30,5 +24,5 @@ export function allocationPlanCsv(marks: PortfolioMarks, targets: string[], calc
       'allocation-sectors-v1', sector.label, sector.kind, sector.currentWeightPercent, sector.targetWeightPercent, sector.weightChangePoints, sector.currentValue, sector.targetValue,
       'User-entered targets; complete dated stored valuation; fixed total value; unrounded dollar arithmetic; cash is a reserve, not a trade; excludes fees, taxes, slippage, external cash flows and share rounding; optional fractional shares use raw dated closes and a manual share-basis acknowledgment, not verified split history; gross holding movement counts increases plus reductions over baseline total, excludes cash, and is not annual fund turnover; plan summary fields repeat on every asset row; sector groups use the fixed company catalog with Unclassified for missing classifications and Fictional Industrials for DEMO; sector weights include cash in the baseline denominator; bucket fields repeat for assets in the same bucket; percentage-point changes, not returns or correlation estimates; no orders or recorded fills'];
   });
-  return [headers, ...rows].map(row => row.map(cell).join(',')).join('\r\n') + '\r\n';
+  return [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
 }

@@ -1,7 +1,8 @@
+import { allocationConcentrationCsv } from '../src/allocationConcentrationCsv';
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
 import { readCsv } from './readCsv';
-import { allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
+import { allocationConcentration, allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
 import type { PortfolioMarks } from '../src/types';
 import { portfolioResearchRows, portfolioResearchQueue } from '../src/portfolioResearch';
 
@@ -1184,6 +1185,10 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
 
   for (const [asset, value] of [['Cash', '10'], ['AAPL', '40'], ['MSFT', '50']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  const concentrationTable = planner.getByRole('table', { name: 'Current and target allocation concentration' });
+  await expect(concentrationTable.getByRole('row', { name: /^Largest holding/ })).toContainText('MSFT');
+  await expect(concentrationTable.getByRole('row', { name: /^Largest holding/ })).toContainText('50.00%');
+  await expect(concentrationTable.getByRole('row', { name: /^Top three holdings/ })).toContainText('90.00%');
   const sectorTable = planner.getByRole('table', { name: 'Current and target sector allocations' });
   const technology = sectorTable.getByRole('row', { name: /^Technology/ });
   await expect(technology).toContainText('83.33%');
@@ -1224,6 +1229,16 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   expect(records[1].plan_scope).toContain('no orders or recorded fills');
   expect(records[1].plan_calculated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   expect(records[1].exported_at >= records[1].plan_calculated_at).toBe(true);
+  const concentrationDownload = page.waitForEvent('download');
+  await planner.getByRole('button', { name: 'Download concentration CSV' }).click();
+  const concentrationFile = await concentrationDownload;
+  expect(concentrationFile.suggestedFilename()).toBe('allocation-concentration.csv');
+  const concentrationRows = readCsv(await readFile((await concentrationFile.path())!, 'utf8'));
+  expect(concentrationRows).toHaveLength(3);
+  expect(concentrationRows[0]).toMatchObject({ portfolio_id: portfolio.id, model_version: 'allocation-concentration-v1', metric: 'Largest holding', current_members: 'MSFT', current_weight_percent: '50', target_members: 'MSFT', target_weight_percent: '50', weight_change_pp: '0', baseline_total_usd: '600', baseline_evaluated_at: '2026-10-08T00:00:00Z', plan_calculated_at: records[1].plan_calculated_at });
+  expect(concentrationRows[1]).toMatchObject({ current_members: 'Technology', target_members: 'Technology', target_weight_percent: '90' });
+  expect(concentrationRows[2]).toMatchObject({ current_members: 'MSFT; AAPL', target_members: 'MSFT; AAPL', target_weight_percent: '90' });
+  expect(concentrationRows[2].scope).toContain('no orders or recorded fills');
 
   expect(records[1]).toMatchObject({ user_share_basis_acknowledged: 'false', estimated_target_shares: '', estimated_share_change: '', share_estimate_unavailable_reason: 'Share basis not checked' });
   const basis = planner.getByLabel('I checked the recorded-share and stored-price basis');
@@ -1245,6 +1260,8 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
   await expect(movement).toHaveCount(0);
   await expect(sectorTable).toHaveCount(0);
+  await expect(concentrationTable).toHaveCount(0);
+  await expect(planner.getByRole('button', { name: 'Download concentration CSV' })).toHaveCount(0);
   await expect(result).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
@@ -1280,6 +1297,8 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await expect(movement).toContainText('$100.00');
   await expect(sectorTable.getByRole('row')).toHaveCount(2);
   await expect(sectorTable.getByRole('row', { name: /^Cash reserve/ })).toContainText('100.00%');
+  await expect(concentrationTable.getByRole('row', { name: /^Largest holding/ })).toContainText('None');
+  await expect(concentrationTable.getByRole('row', { name: /^Top three holdings/ })).toContainText('0.00%');
   expect(writes).toEqual([]);
 });
 
@@ -1334,4 +1353,34 @@ test('I withhold fractional estimates when the share basis is unusable', () => {
     expect(estimate.targetShares).toBeNull(); expect(estimate.shareChange).toBeNull(); expect(estimate.reason).toBeTruthy();
   }
   expect(allocationShareEstimate(holding, Infinity, true).targetShares).toBeNull();
+});
+
+
+test('I rerank concentration when targets change the leading holdings', () => {
+  const marks: PortfolioMarks = { portfolioId: 'my-concentration', dataMode: 'market', evaluatedAt: '2026-10-10T00:00:00Z', cash: 100,
+    pricedPositions: 4, totalPositions: 4, complete: true, pricedHoldingsValue: 100, totalValue: 200, unrealizedPnl: 0,
+    holdings: ['AAPL', 'MSFT', 'JPM', 'V'].map((ticker, i) => ({ ticker, quantity: 40 - i * 10, costBasis: 40 - i * 10,
+      close: 1, priceDate: '2026-10-09', priceAgeDays: 1, source: 'My concentration fixture', sourceUrl: null, retrievedAt: null,
+      value: 40 - i * 10, unrealizedPnl: 0, error: null })),
+    allocation: { available: true, unavailableReason: null, cashWeight: 0.5, largestHolding: null, largestSector: null, topThreeHoldingsWeight: 0.45, companies: [], sectors: [] } };
+  const companies = marks.holdings.map((holding, i) => ({ ticker: holding.ticker, name: holding.ticker, sector: i < 2 ? 'Technology' : 'Financials' }));
+  const targets = ['20', '0', '0', '20', '60'];
+  const summary = allocationConcentration(marks, targets, companies);
+  expect(summary[0]).toMatchObject({ currentMembers: ['AAPL'], currentWeightPercent: 20, targetMembers: ['V'], targetWeightPercent: 60, weightChangePoints: 40 });
+  expect(summary[1]).toMatchObject({ currentMembers: ['Technology'], currentWeightPercent: 35, targetMembers: ['Financials'], targetWeightPercent: 80 });
+  expect(summary[2]).toMatchObject({ currentMembers: ['AAPL', 'MSFT', 'JPM'], currentWeightPercent: 45, targetMembers: ['V', 'JPM'], targetWeightPercent: 80, weightChangePoints: 35 });
+  const ties = allocationConcentration(marks, ['0', '25', '25', '25', '25'], companies);
+  expect(ties[0].targetMembers).toEqual(['AAPL']);
+  expect(ties[1].targetMembers).toEqual(['Financials']);
+  expect(ties[2].targetMembers).toEqual(['AAPL', 'JPM', 'MSFT']);
+  for (const row of allocationConcentration(marks, ['100', '0', '0', '0', '0'], companies)) {
+    expect(row.targetMembers).toEqual([]); expect(row.targetWeightPercent).toBe(0);
+  }
+  expect(allocationConcentration(marks, targets, [])[1].currentMembers).toEqual(['Unclassified']);
+  const formulaCompanies = companies.map(company => ({ ...company, sector: '=My, "sector"\nlabel' }));
+  const csv = readCsv(allocationConcentrationCsv(marks, targets, formulaCompanies, marks.evaluatedAt, marks.evaluatedAt));
+  expect(csv[1].current_members).toBe("'=My, \"sector\"\nlabel");
+  expect(csv[1].target_members).toBe("'=My, \"sector\"\nlabel");
+  expect(() => allocationConcentration({ ...marks, complete: false }, targets, companies)).toThrow('complete, positive');
+  expect(() => allocationConcentration(marks, ['10', '0', '0', '0', '0'], companies)).toThrow('exactly 100%');
 });
