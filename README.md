@@ -23,6 +23,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
 - Compare two to four saved valuation cases, inspect changed assumptions, and download their comparison as CSV.
 - Download my calculated allocation plan as CSV with unrounded dollar values, entered targets, baseline and calculation dates, and per-holding stored price evidence. I keep cash price fields blank and include the simulation limits in the file.
+- Fill allocation targets from the current stored mix, rounded to exactly 100% using largest remainders. I break rounding ties by cash and then holding order, and keep the targets editable before calculation.
 - Enter my own target allocations for cash and current holdings, then inspect the dollar changes against a complete stored valuation. I require targets to total exactly 100%; this planner does not execute trades or model fees, taxes, or share rounding.
 - Inspect cash, company, and sector weights, largest exposures, and the combined top three holdings.
 - Download all current holdings and their last loaded saved research as CSV, including full notes, manual checks, review flags, entry versions, and load/export dates. I export all holdings regardless of the filter and label the separate positions and research reads.
