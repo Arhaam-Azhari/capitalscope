@@ -1,3 +1,4 @@
+import AllocationShockPanel from './AllocationShockPanel';
 import { allocationConcentrationCsv } from './allocationConcentrationCsv';
 import { useState, type FormEvent } from 'react';
 import { allocationPlanCsv } from './allocationPlanCsv';
@@ -61,6 +62,7 @@ export default function PortfolioRebalancePanel({ marks, companies }: { marks: P
         </dl>
         <p className="muted small">Gross holding changes count increases plus reductions, divided by the baseline total; cash is excluded. This measures this plan's dollar movement, not annual fund turnover. Holding reductions minus increases fund the cash reserve change. Balance residual (six decimals): {movement.balanceResidual.toFixed(6)} USD. Display rounding can leave small differences. No fees, taxes, execution sequence, or trading activity are modeled.</p>
       </section>}
+      {result && <AllocationShockPanel key={calculatedAt} marks={marks} targets={targets} companies={companies} planCalculatedAt={calculatedAt} />}
       {concentration && <section aria-labelledby="allocation-concentration-heading">
         <h4 id="allocation-concentration-heading">Concentration before and after</h4>
         <p className="muted small">Ranks positive holdings and sector buckets independently for the current and target mixes, with alphabetical tie breaks. Cash stays in the weight denominator but is excluded from rankings. Top three uses up to three holdings. Leaders can change, so the difference compares each metric's level rather than the same assets. These weights do not measure returns, correlations, or guarantee diversification.</p>
