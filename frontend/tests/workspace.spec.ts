@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
 import { readCsv } from './readCsv';
-import { allocationPlanSummary, allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
+import { allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
 import type { PortfolioMarks } from '../src/types';
 import { portfolioResearchRows, portfolioResearchQueue } from '../src/portfolioResearch';
 
@@ -1184,6 +1184,13 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
 
   for (const [asset, value] of [['Cash', '10'], ['AAPL', '40'], ['MSFT', '50']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  const sectorTable = planner.getByRole('table', { name: 'Current and target sector allocations' });
+  const technology = sectorTable.getByRole('row', { name: /^Technology/ });
+  await expect(technology).toContainText('83.33%');
+  await expect(technology).toContainText('90.00%');
+  await expect(technology).toContainText('6.67');
+  await expect(technology).toContainText('$540.00');
+  await expect(sectorTable.getByRole('row', { name: /^Cash reserve/ })).toContainText('-6.67');
   const movement = planner.getByRole('region', { name: 'Allocation movement summary', exact: true });
   await expect(movement).toContainText('6.67%');
   await expect(movement).toContainText('$60.00');
@@ -1206,6 +1213,12 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   for (const record of records) {
     expect(record).toMatchObject({ movement_summary_model_version: 'allocation-movement-v1', plan_holding_increases_usd: '40', plan_holding_reductions_usd: '0', plan_target_cash_usd: '60', plan_cash_change_usd: '-40', plan_balance_residual_usd: '0' });
     expect(Number(record.plan_gross_holding_change_percent)).toBeCloseTo(100 / 15);
+  }
+  expect(records[0]).toMatchObject({ sector_model_version: 'allocation-sectors-v1', allocation_bucket: 'Cash reserve', bucket_kind: 'cash', bucket_target_weight_percent: '10', bucket_target_value_usd: '60' });
+  for (const record of records.slice(1)) {
+    expect(record).toMatchObject({ allocation_bucket: 'Technology', bucket_kind: 'sector', bucket_target_weight_percent: '90', bucket_current_value_usd: '500', bucket_target_value_usd: '540' });
+    expect(Number(record.bucket_current_weight_percent)).toBeCloseTo(250 / 3);
+    expect(Number(record.bucket_weight_change_pp)).toBeCloseTo(20 / 3);
   }
   expect(records[1].price_source).toBe("'=My, \"fixture\"\ncloses");
   expect(records[1].plan_scope).toContain('no orders or recorded fills');
@@ -1231,6 +1244,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
 
   await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
   await expect(movement).toHaveCount(0);
+  await expect(sectorTable).toHaveCount(0);
   await expect(result).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
@@ -1264,6 +1278,8 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('$0.00');
   await expect(movement).toContainText('0.00%');
   await expect(movement).toContainText('$100.00');
+  await expect(sectorTable.getByRole('row')).toHaveCount(2);
+  await expect(sectorTable.getByRole('row', { name: /^Cash reserve/ })).toContainText('100.00%');
   expect(writes).toEqual([]);
 });
 
@@ -1275,6 +1291,19 @@ test('I reconcile allocation movement and round current weights without assignin
       source: 'My rounding fixture', sourceUrl: null, retrievedAt: null, value: 1, unrealizedPnl: 0, error: null })),
     allocation: { available: true, unavailableReason: null, cashWeight: 1 / 3, largestHolding: null, largestSector: null, topThreeHoldingsWeight: 2 / 3, companies: [], sectors: [] } };
   expect(currentAllocationTargets(marks)).toEqual(['33.34', '33.33', '33.33']);
+  const sectorTargets = ['50', '50', '0'];
+  const grouped = allocationSectorPlan(marks, sectorTargets, catalog);
+  expect(grouped).toHaveLength(2);
+  expect(grouped[0]).toMatchObject({ kind: 'cash', label: 'Cash reserve', targetWeightPercent: 50, targetValue: 1.5 });
+  expect(grouped[1]).toMatchObject({ label: 'Technology', tickers: ['AAPL', 'MSFT'], currentValue: 2, targetValue: 1.5, targetWeightPercent: 50 });
+  expect(grouped[1].currentWeightPercent).toBeCloseTo(200 / 3);
+  expect(grouped[1].weightChangePoints).toBeCloseTo(-50 / 3);
+  const separate = allocationSectorPlan(marks, sectorTargets, [{ ticker: 'AAPL', name: 'My classified fixture', sector: 'Health care' }]);
+  expect(separate.map(group => group.label)).toEqual(['Cash reserve', 'Health care', 'Unclassified']);
+  expect(separate.reduce((sum, group) => sum + group.currentWeightPercent, 0)).toBeCloseTo(100);
+  expect(separate.reduce((sum, group) => sum + group.targetWeightPercent, 0)).toBe(100);
+  const example = allocationSectorPlan({ ...marks, dataMode: 'example', totalPositions: 1, pricedPositions: 1, holdings: [{ ...marks.holdings[0], ticker: 'DEMO', quantity: 2, value: 2 }] }, ['50', '50'], catalog);
+  expect(example[1]).toMatchObject({ label: 'Fictional Industrials', currentValue: 2, targetWeightPercent: 50 });
   const summary = allocationPlanSummary(marks, ['50', '50', '0']);
   expect(summary).toMatchObject({ holdingIncreases: 0.5, holdingReductions: 1, targetCash: 1.5, cashChange: 0.5, balanceResidual: 0 });
   expect(summary.grossHoldingChangePercent).toBe(50);
@@ -1289,6 +1318,7 @@ test('I reconcile allocation movement and round current weights without assignin
   marks.complete = false;
   expect(() => currentAllocationTargets(marks)).toThrow('complete, positive');
   expect(() => allocationPlanSummary(marks, ['0', '0', '100'])).toThrow('complete, positive');
+  expect(() => allocationSectorPlan(marks, ['0', '0', '100'], catalog)).toThrow('complete, positive');
 });
 
 

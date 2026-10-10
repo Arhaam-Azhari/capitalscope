@@ -3,9 +3,9 @@ import PortfolioStressPanel from './PortfolioStressPanel';
 import PortfolioAllocationPanel from './PortfolioAllocationPanel';
 import { useEffect, useState } from 'react';
 import { money, request } from './api';
-import type { PortfolioSummary, PortfolioMarks } from './types';
+import type { Company, PortfolioSummary, PortfolioMarks } from './types';
 
-export default function PortfolioValuation({ summary }: { summary: PortfolioSummary }) {
+export default function PortfolioValuation({ summary, companies }: { summary: PortfolioSummary; companies: Company[] }) {
   const [marks, setMarks] = useState<PortfolioMarks | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -27,7 +27,7 @@ export default function PortfolioValuation({ summary }: { summary: PortfolioSumm
       <div className="result-summary"><div><span>Priced holdings subtotal</span><strong data-testid="portfolio-priced-value">{money(marks.pricedHoldingsValue, false)}</strong></div><div><span>Cash + all holdings</span><strong data-testid="portfolio-total-value">{marks.totalValue === null ? 'Unavailable' : money(marks.totalValue, false)}</strong></div><div><span>Unrealized P&amp;L · open holdings</span><strong data-testid="portfolio-unrealized">{marks.unrealizedPnl === null ? 'Unavailable' : money(marks.unrealizedPnl, false)}</strong></div></div>
       <div className="table-scroll"><table><caption>Current holdings valued at stored daily closes</caption><thead><tr><th>Ticker / shares</th><th>Raw close</th><th>Price date / age</th><th>Holding value</th><th>Unrealized P&amp;L</th><th>Evidence</th></tr></thead><tbody>{marks.holdings.map(mark => <tr key={mark.ticker}><th scope="row">{mark.ticker}<small className="comparison-evidence">{mark.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })} shares</small></th><td>{mark.close === null ? '—' : money(mark.close, false)}</td><td>{mark.priceDate || '—'}{mark.priceAgeDays !== null && <small className="comparison-evidence">{mark.priceAgeDays} calendar days old</small>}</td><td>{mark.value === null ? 'Unavailable' : money(mark.value, false)}</td><td>{mark.unrealizedPnl === null ? '—' : money(mark.unrealizedPnl, false)}</td><td className="mark-evidence">{mark.error || <>{mark.sourceUrl ? <a href={mark.sourceUrl} target="_blank" rel="noreferrer">{mark.source} ↗</a> : mark.source}<small className="comparison-evidence">{mark.retrievedAt ? `Imported ${new Date(mark.retrievedAt).toLocaleString()}` : 'Fictional data · no market import'}</small></>}</td></tr>)}{!marks.holdings.length && <tr><td colSpan={6}>No open holdings. Total value is available cash.</td></tr>}</tbody></table></div>
       <PortfolioAllocationPanel marks={marks} />
-      <PortfolioRebalancePanel key={`${marks.portfolioId}:${marks.evaluatedAt}:${attempt}`} marks={marks} />
+      <PortfolioRebalancePanel key={`${marks.portfolioId}:${marks.evaluatedAt}:${attempt}`} marks={marks} companies={companies} />
       <PortfolioStressPanel key={marks.evaluatedAt} marks={marks} />
       <p className="muted small">Unrealized P&amp;L compares the marked holdings with their remaining fee-inclusive cost basis. Cash already includes recorded sales, fees, and dividends. Prices can have different dates; price age is measured in calendar days. Estimated selling costs and historical or annualized returns are not included.</p>
     </>}
