@@ -1,7 +1,8 @@
+import { allocationConcentrationCsv } from './allocationConcentrationCsv';
 import { useState, type FormEvent } from 'react';
 import { allocationPlanCsv } from './allocationPlanCsv';
 import { money } from './api';
-import { allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
+import { allocationConcentration, allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
 import type { Company, PortfolioMarks } from './types';
 
 export default function PortfolioRebalancePanel({ marks, companies }: { marks: PortfolioMarks; companies: Company[] }) {
@@ -14,6 +15,7 @@ export default function PortfolioRebalancePanel({ marks, companies }: { marks: P
   const available = rebalanceAvailable(marks);
   const movement = result ? allocationPlanSummary(marks, targets) : null;
   const sectors = result ? allocationSectorPlan(marks, targets, companies) : null;
+  const concentration = result ? allocationConcentration(marks, targets, companies) : null;
   function calculate(event: FormEvent) {
     event.preventDefault(); setResult(null); setError('');
     try { setResult(rebalancePlan(marks, targets)); setCalculatedAt(new Date().toISOString()); }
@@ -24,13 +26,15 @@ export default function PortfolioRebalancePanel({ marks, companies }: { marks: P
     try { setTargets(currentAllocationTargets(marks)); }
     catch (e) { setError(e instanceof Error ? e.message : 'Current weights are unavailable.'); }
   }
-  function download() {
+  function download(concentrationOnly = false) {
     if (!result) return;
     setError('');
     try {
-      const csv = allocationPlanCsv(marks, targets, calculatedAt, new Date().toISOString(), basisChecked, companies);
+      const exportedAt = new Date().toISOString();
+      const csv = concentrationOnly ? allocationConcentrationCsv(marks, targets, companies, calculatedAt, exportedAt)
+        : allocationPlanCsv(marks, targets, calculatedAt, exportedAt, basisChecked, companies);
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-      const link = document.createElement('a'); link.href = url; link.download = 'target-allocation-plan.csv';
+      const link = document.createElement('a'); link.href = url; link.download = concentrationOnly ? 'allocation-concentration.csv' : 'target-allocation-plan.csv';
       try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
     } catch { setError('The allocation CSV could not be prepared. Please try again.'); }
   }
@@ -42,7 +46,7 @@ export default function PortfolioRebalancePanel({ marks, companies }: { marks: P
       <div className="export-actions"><button className="secondary" onClick={useCurrentWeights}>Use current weights</button><p className="muted small">Replaces entered targets with this snapshot's mix, rounded to two decimal places while keeping the total at 100%. Small dollar changes can result from rounding. Review or edit the targets, then calculate; nothing is saved or traded.</p></div>
       <form onSubmit={calculate}><div className="model-fields">{assets.map((ticker, i) => <label key={ticker}>Target {ticker} allocation (%)<input type="number" min="0" max="100" step="0.01" required value={targets[i]} onChange={event => { setTargets(current => current.map((value, index) => index === i ? event.target.value : value)); setResult(null); setError(''); }} /></label>)}</div>
         <div className="comparison-controls"><button className="secondary" type="submit">Calculate allocation changes</button><button className="text-button" type="button" onClick={() => { setTargets(assets.map(() => '')); setResult(null); setError(''); }}>Clear allocation targets</button></div></form>
-      <div className="export-actions"><button className="secondary" disabled={!result} onClick={download}>Download allocation plan CSV</button><p className="muted small">Exports the calculated plan with unrounded dollar values, entered target percentages, baseline dates, and each holding's price evidence. Cash has no price evidence. Calculate again after changing targets.</p></div>
+      <div className="export-actions"><button className="secondary" disabled={!result} onClick={() => download()}>Download allocation plan CSV</button><p className="muted small">Exports the calculated plan with unrounded dollar values, entered target percentages, baseline dates, and each holding's price evidence. Cash has no price evidence. Calculate again after changing targets.</p></div>
       <label><input type="checkbox" checked={basisChecked} onChange={event => setBasisChecked(event.target.checked)} /> I checked the recorded-share and stored-price basis</label>
       <p className="muted small">Optional fractional-share estimates divide target value by each stored raw close, then subtract recorded shares. This manual check does not verify split history or current prices. Estimates use up to six decimals for display, with no whole-share rounding, fees, taxes, or slippage; they are not orders or recorded fills. The CSV includes unrounded estimates and this acknowledgment. Cash has no share estimate.</p>
       {error && <p role="alert" className="notice error">{error}</p>}
@@ -56,6 +60,15 @@ export default function PortfolioRebalancePanel({ marks, companies }: { marks: P
           <div><dt>Cash reserve change</dt><dd>{money(movement.cashChange, false)}</dd></div>
         </dl>
         <p className="muted small">Gross holding changes count increases plus reductions, divided by the baseline total; cash is excluded. This measures this plan's dollar movement, not annual fund turnover. Holding reductions minus increases fund the cash reserve change. Balance residual (six decimals): {movement.balanceResidual.toFixed(6)} USD. Display rounding can leave small differences. No fees, taxes, execution sequence, or trading activity are modeled.</p>
+      </section>}
+      {concentration && <section aria-labelledby="allocation-concentration-heading">
+        <h4 id="allocation-concentration-heading">Concentration before and after</h4>
+        <p className="muted small">Ranks positive holdings and sector buckets independently for the current and target mixes, with alphabetical tie breaks. Cash stays in the weight denominator but is excluded from rankings. Top three uses up to three holdings. Leaders can change, so the difference compares each metric's level rather than the same assets. These weights do not measure returns, correlations, or guarantee diversification.</p>
+        <div className="table-scroll"><table><caption>Current and target allocation concentration</caption>
+          <thead><tr><th>Measure</th><th>Current members</th><th>Current weight</th><th>Target members</th><th>Target weight</th><th>Change (pp)</th></tr></thead>
+          <tbody>{concentration.map(row => <tr key={row.metric}><th scope="row">{row.metric}</th><td>{row.currentMembers.join(', ') || 'None'}</td><td>{row.currentWeightPercent.toFixed(2)}%</td><td>{row.targetMembers.join(', ') || 'None'}</td><td>{row.targetWeightPercent.toFixed(2)}%</td><td>{row.weightChangePoints.toFixed(2)}</td></tr>)}</tbody>
+        </table></div>
+        <div className="export-actions"><button className="secondary" onClick={() => download(true)}>Download concentration CSV</button><p className="muted small">Exports these three measures with unrounded weights, members, baseline dates, and limits. The allocation plan CSV contains per-holding price evidence.</p></div>
       </section>}
       {sectors && <section aria-labelledby="allocation-sector-heading">
         <h4 id="allocation-sector-heading">Sector allocation before and after</h4>
