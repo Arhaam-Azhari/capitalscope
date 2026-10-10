@@ -5,8 +5,8 @@ import { researchChecks, reviewedCount } from './researchChecklist';
 import { filterPortfolioResearch, portfolioResearchCsv, portfolioResearchQueue, portfolioResearchRows } from './portfolioResearch';
 import type { Company, PortfolioSummary, WatchlistEntry } from './types';
 
-export default function PortfolioResearchReview({ summary, companies, onOpen }: {
-  summary: PortfolioSummary; companies: Company[]; onOpen: (ticker: string) => void;
+export default function PortfolioResearchReview({ summary, companies, onOpen, onCompare }: {
+  summary: PortfolioSummary; companies: Company[]; onOpen: (ticker: string) => void; onCompare: (tickers: string[]) => void;
 }) {
   const [entries, setEntries] = useState<WatchlistEntry[]>([]);
   const [attempt, setAttempt] = useState(0);
@@ -18,6 +18,7 @@ export default function PortfolioResearchReview({ summary, companies, onOpen }: 
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [order, setOrder] = useState('holdings');
+  const [selected, setSelected] = useState<string[]>([]);
   const [today, setToday] = useState(localReviewDay);
   useEffect(() => {
     const refresh = () => setToday(localReviewDay());
@@ -34,6 +35,21 @@ export default function PortfolioResearchReview({ summary, companies, onOpen }: 
     return () => controller.abort();
   }, [attempt]);
   const rows = portfolioResearchRows(summary, companies, entries, today);
+  const eligible = rows.filter(row => row.supported && row.position.ticker !== 'DEMO').map(row => row.position.ticker);
+  const eligibility = eligible.join('|');
+  useEffect(() => {
+    setSelected(current => {
+      const next = current.filter(ticker => eligibility.split('|').includes(ticker));
+      return next.length === current.length ? current : next;
+    });
+  }, [eligibility]);
+  const selectedHoldings = selected.filter(ticker => eligible.includes(ticker));
+  function toggle(ticker: string) {
+    setSelected(current => {
+      const active = current.filter(item => eligible.includes(item));
+      return active.includes(ticker) ? active.filter(item => item !== ticker) : active.length < 4 && eligible.includes(ticker) ? [...active, ticker] : active;
+    });
+  }
   function download() {
     setExportError('');
     try {
@@ -58,13 +74,16 @@ export default function PortfolioResearchReview({ summary, companies, onOpen }: 
       <div className="export-actions"><button className="secondary" disabled={filter === 'all' && !query} onClick={() => { setFilter('all'); setQuery(''); }}>Clear research filters</button><span className="muted small" role="status">Showing {visible.length} of {rows.length} holdings. Summary counts and CSV cover all holdings.</span></div>
       <label className="watchlist-filter">Portfolio research order<select value={order} onChange={event => setOrder(event.target.value)}><option value="holdings">Holdings order</option><option value="queue">Review queue</option></select></label>
       {order === 'queue' && <p className="muted small">Queue order: overdue, due today, no saved research, archived research, missing notes, open manual checks, reviews scheduled within seven days, no current gaps flagged, then unsupported instruments. Within a group, earlier review dates come first, then ticker. This is a workflow order, not an investment ranking.</p>}
-      <div className="table-scroll"><table className="comparison-table"><caption>Saved research matched to current simulated holdings</caption><thead><tr><th>Holding / shares</th><th>Saved research</th><th>Notes and manual checks</th><th>Review / saved date</th><th>Company research</th></tr></thead><tbody>{visible.map(({ position, supported, entry, archived, reasons, queueGroup }) => <tr key={position.ticker}>
+      <div className="comparison-controls"><button className="secondary" disabled={selectedHoldings.length < 2} onClick={() => onCompare(selectedHoldings)}>Compare selected holdings</button><button className="secondary" disabled={!selectedHoldings.length} onClick={() => setSelected([])}>Clear comparison selection</button><span className="muted small">{selectedHoldings.length} of 4 selected · selections stay selected when filtered out.</span>{selectedHoldings.map(ticker => <button key={ticker} className="text-button" onClick={() => toggle(ticker)}>Remove {ticker} from comparison</button>)}</div>
+      <p className="muted small">Select two to four current real catalog holdings. The comparison reloads shared saved research and requests company financials; it is not a frozen copy of this review. Fictional and unsupported holdings cannot be selected. Opening a comparison does not save notes or change positions.</p>
+      <div className="table-scroll"><table className="comparison-table"><caption>Saved research matched to current simulated holdings</caption><thead><tr><th>Compare</th><th>Holding / shares</th><th>Saved research</th><th>Notes and manual checks</th><th>Review / saved date</th><th>Company research</th></tr></thead><tbody>{visible.map(({ position, supported, entry, archived, reasons, queueGroup }) => <tr key={position.ticker}>
+        <td><input type="checkbox" aria-label={`Compare holding ${position.ticker}`} checked={selectedHoldings.includes(position.ticker)} disabled={!eligible.includes(position.ticker) || (selectedHoldings.length === 4 && !selectedHoldings.includes(position.ticker))} onChange={() => toggle(position.ticker)} /></td>
         <th scope="row">{position.ticker}<small className="comparison-evidence">{position.ticker === 'DEMO' ? 'Fictional company' : companies.find(c => c.ticker === position.ticker)?.name || 'Outside current catalog'}<span>{position.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })} simulated shares</span></small></th>
         <td>{!supported ? 'Unsupported instrument for this portfolio mode' : !entry ? 'No saved watchlist entry' : archived ? 'Archived research' : entry.status}<small className="comparison-evidence">{queueGroup}<span>{reasons.length ? reasons.join(' · ') : 'No current gaps flagged; research quality is not verified.'}</span></small></td>
         <td>{entry ? <><p className="muted small">Thesis: {entry.thesis.trim() ? 'Recorded' : 'Missing'} · Risks: {entry.risks.trim() ? 'Recorded' : 'Missing'}<br />{reviewedCount(entry.checks)} of {researchChecks.length} marked reviewed</p><details><summary>Read saved notes for {position.ticker}</summary><h4>Investment thesis</h4><p className="summary-notes">{entry.thesis || 'No thesis recorded.'}</p><h4>Risks and evidence to check</h4><p className="summary-notes">{entry.risks || 'No risks recorded.'}</p></details></> : 'Unavailable'}</td>
         <td>{entry ? <>{entry.reviewDate || 'No review date'}{!archived && ['overdue', 'today'].includes(reviewState(entry, today).bucket) && <span> · due</span>}<small className="comparison-evidence">Version {entry.version}<span>Updated {new Date(entry.updatedAt).toLocaleString()}</span></small></> : '—'}</td>
         <td><button className="text-button" disabled={!supported} onClick={() => onOpen(position.ticker)}>Open research for {position.ticker}</button></td>
-      </tr>)}{!visible.length && <tr><td colSpan={5}>No holdings match this research filter. This does not verify research quality.</td></tr>}</tbody></table></div>
+      </tr>)}{!visible.length && <tr><td colSpan={6}>No holdings match this research filter. This does not verify research quality.</td></tr>}</tbody></table></div>
     </>}
   </section>;
 }

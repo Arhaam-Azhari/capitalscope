@@ -93,6 +93,12 @@ export default function App() {
     if (url !== window.location.href) window.history.pushState(null, '', url);
     setComparisonPeers(peers); setRouteError('');
   }
+  function compareHoldings(peers: string[]) {
+    if (peers.length < 2 || peers.length > 4 || new Set(peers).size !== peers.length || peers.some(ticker => !companies.some(company => company.ticker === ticker))) return;
+    const url = comparisonLink(peers[0], peers);
+    if (url !== window.location.href) window.history.pushState(null, '', url);
+    setComparisonPeers(peers); setSelected(peers[0]); setSection('Compare companies'); setRouteWaiting(false); setRouteError(''); closeCatalog();
+  }
   function closeCatalog() { if (catalogDetails.current) catalogDetails.current.open = false; }
   function choose(ticker: string) { navigate(ticker, 'Financials'); catalogSummary.current?.focus(); }
 
@@ -135,7 +141,7 @@ export default function App() {
         {section === 'Valuation' && <ValuationPanel key={selected} company={company} />}
         {section === 'Compare companies' && <CompanyComparison companies={companies} peers={comparisonPeers} onChange={changeComparison} contextTicker={selected} onOpen={ticker => navigate(ticker, 'Research summary')} />}
         {section === 'Prices' && <PricePanel key={selected} company={company} />}
-        {section === 'Portfolios' && <PortfolioPanel companies={companies} onOpen={ticker => navigate(ticker, 'Research summary')} />}
+        {section === 'Portfolios' && <PortfolioPanel companies={companies} onCompare={compareHoldings} onOpen={ticker => navigate(ticker, 'Research summary')} />}
         {section === 'Watchlist' && <WatchlistPanel companies={companies} currentTicker={selected} onOpen={(ticker, target) => { navigate(ticker, target); }} />}
         {section === 'Research summary' && <ResearchSummary key={selected} company={company} report={report} financialLoading={loading} financialError={reportError} onOpen={target => navigate(selected, target)} />}
         {section === 'Research notes' && <ResearchNotes key={selected} company={company} />}
