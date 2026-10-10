@@ -23,6 +23,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
 - Compare two to four saved valuation cases, inspect changed assumptions, and download their comparison as CSV.
 - Download my calculated allocation plan as CSV with unrounded dollar values, entered targets, baseline and calculation dates, and per-holding stored price evidence. I keep cash price fields blank and include the simulation limits in the file.
+- Save named allocation percentages in the shared database and load them into a new calculation. I reject changed holding sets instead of silently reallocating targets; saves contain no prices, recorded trades, or share-basis acknowledgment.
 - Apply my own default and sector price shocks to current and target dollar allocations at the same stored baseline. I keep each mix’s cash fixed, compare hypothetical totals, and export the assumptions and results without recording trades or implying forecast probabilities.
 - Compare my largest holding, largest sector bucket, and combined top three holdings before and after targets. I rank each side separately, exclude cash and zero weights from rankings, and download the concentration measures with dates and limits as CSV.
 - Compare current and target sector weights, dollar values, and percentage-point changes in my allocation plan. I group by the fixed catalog, keep cash separate and missing classifications explicit, and include bucket totals in the CSV without claiming to measure correlations or recommend allocations.
@@ -97,6 +98,9 @@ java -jar backend/target/capitalscope-0.1.0.jar
 | `DELETE /api/watchlist/{ticker}?version=…&entryId=…` | Remove the active entry using its saved version; retain revision history |
 | `GET /api/watchlist/{ticker}/history?before=…` | Read 20 saved revisions at a time with an optional cursor |
 | `GET /api/watchlist/{ticker}/history/export.csv` | Export all recorded revisions for one company, oldest record first |
+| `GET /api/portfolios/{id}/allocation-targets` | I list saved percentage mixes for this portfolio |
+| `POST /api/portfolios/{id}/allocation-targets` | I save `{name, targets}` with Cash and exactly the current holding tickers; percentages must total 100 |
+| `DELETE /api/portfolios/{id}/allocation-targets/{targetId}` | I delete one saved mix without changing trades |
 | `GET /api/portfolios/{id}/stress-scenarios/{scenarioId}/export.csv` | I download the saved assumptions, results, and price evidence without recalculating |
 | `GET /api/portfolios/{id}/stress-scenarios` | I review saved stress snapshots for this portfolio |
 | `POST /api/portfolios/{id}/stress-scenarios` | I save `{name, assumptions}` after calculating the current server baseline |
@@ -130,6 +134,8 @@ curl -X POST http://localhost:8080/api/valuations/dcf \
   -H 'Content-Type: application/json' \
   -d '{"baseFreeCashFlow":100000000,"growthRate":0.05,"discountRate":0.10,"terminalGrowthRate":0.02,"years":5,"netDebt":200000000,"sharesOutstanding":50000000}'
 ```
+
+Saved allocation targets use percentage units (`40` means 40%), with up to two decimal places. I include `Cash` even when its target is zero. These are reusable inputs, not valuation snapshots.
 
 These inputs are invented. API rates use decimals (`0.10` means 10%); the interface accepts percentages (`10` means 10%). Money and shares use full units, not millions.
 

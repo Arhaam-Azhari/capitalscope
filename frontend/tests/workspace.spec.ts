@@ -1,3 +1,4 @@
+import { savedAllocationInputs, type SavedAllocationTarget } from '../src/savedAllocationTargets';
 import { allocationShock } from '../src/allocationShock';
 import { allocationShockCsv } from '../src/allocationShockCsv';
 import { allocationConcentrationCsv } from '../src/allocationConcentrationCsv';
@@ -32,6 +33,7 @@ async function installApi(page: Page) {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/scenarios/price-context')) return route.fulfill({ json: { ticker: path.split('/')[3], dataMode: path.includes('/DEMO/') ? 'example' : 'market',
       evaluatedAt: '2026-10-08T00:00:00Z', shareBasisConfirmed: false, quote: null, quoteError: 'No stored close in this fixture.', scenarios: [] } });
+    if (path.endsWith('/allocation-targets') && route.request().method() === 'GET') return route.fulfill({ json: [] });
     if (path.endsWith('/scenarios')) return route.fulfill({ json: [] });
     if (path === '/api/companies') return route.fulfill({ json: catalog });
     if (path === '/api/universe') return route.fulfill({ json: { asOf: '2026-10-06', count: 50, dynamic: false } });
@@ -1159,8 +1161,18 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
     priceDate: '2026-10-01', priceAgeDays: 7, source: '=My, "fixture"\ncloses', sourceUrl: null, retrievedAt: '2026-10-01T12:00:00Z',
     value: (i + 2) * 100, unrealizedPnl: (i + 2) * 100 - 100, error: null }));
   let mode = 'complete'; const writes: string[] = [];
+  let presets: SavedAllocationTarget[] = []; const targetWrites: unknown[] = [];
   await page.route('**/api/**', route => {
     const path = new URL(route.request().url()).pathname;
+    if (path.includes('/allocation-targets')) {
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON(); targetWrites.push(body);
+        const saved = { ...body, id: 'my-saved-targets', portfolioId: portfolio.id, dataMode: 'market', modelVersion: 'allocation-targets-v1', createdAt: '2026-10-10T00:00:00Z' };
+        presets = [saved, ...presets]; return route.fulfill({ status: 201, json: saved });
+      }
+      if (route.request().method() === 'DELETE') { presets = presets.filter(item => item.id !== path.split('/').at(-1)); return route.fulfill({ status: 204 }); }
+      return route.fulfill({ json: presets });
+    }
     if (path.startsWith('/api/portfolios') && route.request().method() !== 'GET') writes.push(path);
     if (path === '/api/portfolios') return route.fulfill({ json: [portfolio] });
     if (path === `/api/portfolios/${portfolio.id}`) return route.fulfill({ json: { portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, events: [], trades: [],
@@ -1179,6 +1191,8 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
   const planner = page.getByRole('region', { name: 'Target allocation planner', exact: true });
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
+  const savedTargets = planner.getByRole('region', { name: 'Saved allocation targets', exact: true });
+  await expect(savedTargets.getByRole('button', { name: 'Save allocation targets', exact: true })).toBeDisabled();
   await planner.getByRole('button', { name: 'Use current weights' }).click();
   await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('16.67');
   await expect(planner.getByLabel('Target AAPL allocation (%)')).toHaveValue('33.33');
@@ -1280,6 +1294,19 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await expect(result.getByRole('row', { name: /^AAPL/ })).toContainText('$240.00');
   await basis.check();
 
+  await savedTargets.getByLabel('Allocation target name').fill('My reserve mix');
+  await savedTargets.getByRole('button', { name: 'Save allocation targets', exact: true }).click();
+  await expect(savedTargets).toContainText('Saved targets: My reserve mix');
+  expect(targetWrites).toEqual([{ name: 'My reserve mix', targets: { Cash: 10, AAPL: 40, MSFT: 50 } }]);
+  await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
+  await savedTargets.getByRole('button', { name: 'Load targets from My reserve mix' }).click();
+  await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('10');
+  await expect(basis).not.toBeChecked();
+  await expect(result).toHaveCount(0);
+  await expect(shocks).toHaveCount(0);
+  await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
+  await savedTargets.getByRole('button', { name: 'Refresh saved targets' }).click();
+  await expect(savedTargets.getByRole('button', { name: 'Load targets from My reserve mix' })).toBeEnabled();
   await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
   await expect(movement).toHaveCount(0);
   await expect(sectorTable).toHaveCount(0);
@@ -1327,6 +1354,10 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await shocks.getByLabel('Plan default price change (%)').fill('-100');
   await shocks.getByRole('button', { name: 'Compare allocation shocks' }).click();
   await expect(shockedTotals.getByRole('row', { name: /^Target mix/ })).toContainText('$100.00');
+  await expect(savedTargets.getByRole('button', { name: 'Load targets from My reserve mix' })).toBeDisabled();
+  await expect(savedTargets).toContainText('The holdings have changed');
+  await savedTargets.getByRole('button', { name: 'Delete targets My reserve mix' }).click();
+  await expect(savedTargets).toContainText('No saved allocation targets');
   expect(writes).toEqual([]);
 });
 
@@ -1393,6 +1424,13 @@ test('I rerank concentration when targets change the leading holdings', () => {
     allocation: { available: true, unavailableReason: null, cashWeight: 0.5, largestHolding: null, largestSector: null, topThreeHoldingsWeight: 0.45, companies: [], sectors: [] } };
   const companies = marks.holdings.map((holding, i) => ({ ticker: holding.ticker, name: holding.ticker, sector: i < 2 ? 'Technology' : 'Financials' }));
   const targets = ['20', '0', '0', '20', '60'];
+  const preset: SavedAllocationTarget = { id: 'my-preset', portfolioId: marks.portfolioId, name: 'My saved mix', createdAt: marks.evaluatedAt, dataMode: marks.dataMode, modelVersion: 'allocation-targets-v1', targets: { V: 60, Cash: 20, JPM: 20, MSFT: 0, AAPL: 0 } };
+  expect(savedAllocationInputs(marks, preset)).toEqual(targets);
+  expect(() => savedAllocationInputs(marks, { ...preset, portfolioId: 'other' })).toThrow('different portfolio');
+  expect(() => savedAllocationInputs(marks, { ...preset, modelVersion: 'future' })).toThrow('model version');
+  expect(() => savedAllocationInputs(marks, { ...preset, targets: { Cash: 100 } })).toThrow('holdings have changed');
+  expect(() => savedAllocationInputs(marks, { ...preset, targets: { ...preset.targets, Cash: 10 } })).toThrow('exactly 100%');
+  expect(() => savedAllocationInputs({ ...marks, complete: false }, preset)).toThrow('complete, positive');
   const shocked = allocationShock(marks, targets, companies, '-10', { Financials: '-50', Technology: '' });
   expect(shocked).toMatchObject({ currentTotal: 178, targetTotal: 120, currentChange: -22, targetChange: -80, currentChangePercent: -11, targetChangePercent: -40, targetMinusCurrent: -58 });
   expect(shocked.rows.find(row => row.kind === 'cash')).toMatchObject({ shockPercent: 0, currentStressedValue: 100, targetStressedValue: 40 });
