@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { allocationPlanCsv } from './allocationPlanCsv';
 import { money } from './api';
-import { allocationShareEstimate, currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
+import { allocationPlanSummary, allocationShareEstimate, currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
 import type { PortfolioMarks } from './types';
 
 export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMarks }) {
@@ -12,6 +12,7 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
   const [basisChecked, setBasisChecked] = useState(false);
   const [error, setError] = useState('');
   const available = rebalanceAvailable(marks);
+  const movement = result ? allocationPlanSummary(marks, targets) : null;
   function calculate(event: FormEvent) {
     event.preventDefault(); setResult(null); setError('');
     try { setResult(rebalancePlan(marks, targets)); setCalculatedAt(new Date().toISOString()); }
@@ -44,6 +45,17 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
       <label><input type="checkbox" checked={basisChecked} onChange={event => setBasisChecked(event.target.checked)} /> I checked the recorded-share and stored-price basis</label>
       <p className="muted small">Optional fractional-share estimates divide target value by each stored raw close, then subtract recorded shares. This manual check does not verify split history or current prices. Estimates use up to six decimals for display, with no whole-share rounding, fees, taxes, or slippage; they are not orders or recorded fills. The CSV includes unrounded estimates and this acknowledgment. Cash has no share estimate.</p>
       {error && <p role="alert" className="notice error">{error}</p>}
+      {movement && <section aria-labelledby="allocation-movement-heading">
+        <h4 id="allocation-movement-heading">Allocation movement summary</h4>
+        <dl className="allocation-plan-summary">
+          <div><dt>Holding increases</dt><dd>{money(movement.holdingIncreases, false)}</dd></div>
+          <div><dt>Holding reductions</dt><dd>{money(movement.holdingReductions, false)}</dd></div>
+          <div><dt>Gross holding changes / baseline</dt><dd>{movement.grossHoldingChangePercent.toFixed(2)}%</dd></div>
+          <div><dt>Target cash reserve</dt><dd>{money(movement.targetCash, false)}</dd></div>
+          <div><dt>Cash reserve change</dt><dd>{money(movement.cashChange, false)}</dd></div>
+        </dl>
+        <p className="muted small">Gross holding changes count increases plus reductions, divided by the baseline total; cash is excluded. This measures this plan's dollar movement, not annual fund turnover. Holding reductions minus increases fund the cash reserve change. Balance residual (six decimals): {movement.balanceResidual.toFixed(6)} USD. Display rounding can leave small differences. No fees, taxes, execution sequence, or trading activity are modeled.</p>
+      </section>}
       {result && <><p className="muted small">Baseline total: {money(marks.totalValue!, false)} · Evaluated {new Date(marks.evaluatedAt).toLocaleString()}. Positive changes increase a holding or cash; negative changes decrease it. Cash is the balancing reserve, not a trade.</p>
         <div className="table-scroll"><table><caption>Target allocation dollar changes</caption><thead><tr><th>Asset</th><th>Current value</th><th>Current weight</th><th>Target weight</th><th>Target value</th><th>Dollar change</th><th>Estimated target shares</th><th>Estimated share change</th></tr></thead><tbody>{result.map((row, i) => { const estimate = allocationShareEstimate(i === 0 ? undefined : marks.holdings[i - 1], row.targetValue, basisChecked); return <tr key={row.ticker}><th scope="row">{row.ticker}</th><td>{money(row.value, false)}</td><td>{(row.currentWeight * 100).toFixed(2)}%</td><td>{(row.targetWeight * 100).toFixed(2)}%</td><td>{money(row.targetValue, false)}</td><td>{money(row.change, false)}</td><td title={estimate.reason || undefined}>{estimate.targetShares === null ? '—' : estimate.targetShares.toLocaleString(undefined, { maximumFractionDigits: 6 })}{basisChecked && estimate.reason && <small> {estimate.reason}</small>}</td><td title={estimate.reason || undefined}>{estimate.shareChange === null ? '—' : estimate.shareChange.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td></tr>; })}</tbody></table></div></>}
     </>}

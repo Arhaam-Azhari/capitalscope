@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
 import { readCsv } from './readCsv';
-import { allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
+import { allocationPlanSummary, allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
 import type { PortfolioMarks } from '../src/types';
 import { portfolioResearchRows, portfolioResearchQueue } from '../src/portfolioResearch';
 
@@ -1184,6 +1184,10 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
 
   for (const [asset, value] of [['Cash', '10'], ['AAPL', '40'], ['MSFT', '50']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  const movement = planner.getByRole('region', { name: 'Allocation movement summary', exact: true });
+  await expect(movement).toContainText('6.67%');
+  await expect(movement).toContainText('$60.00');
+  await expect(movement).toContainText('-$40.00');
   const result = planner.getByRole('table', { name: 'Target allocation dollar changes' });
   await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('-$40.00');
   await expect(result.getByRole('row', { name: /^AAPL/ })).toContainText('$240.00');
@@ -1199,6 +1203,10 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   expect(records[0]).toMatchObject({ asset_kind: 'cash', ticker: '', current_value_usd: '100', target_weight_percent: '10', target_value_usd: '60', dollar_change_usd: '-40', recorded_shares: '', stored_raw_close_usd: '', price_date: '', price_source: '' });
   expect(records[1]).toMatchObject({ asset_kind: 'holding', ticker: 'AAPL', model_version: 'allocation-dollars-v1', portfolio_id: portfolio.id,
     target_weight_percent: '40', target_value_usd: '240', dollar_change_usd: '40', baseline_total_usd: '600', recorded_shares: '2', stored_raw_close_usd: '100', price_date: '2026-10-01', price_retrieved_at: '2026-10-01T12:00:00Z', baseline_evaluated_at: '2026-10-08T00:00:00Z' });
+  for (const record of records) {
+    expect(record).toMatchObject({ movement_summary_model_version: 'allocation-movement-v1', plan_holding_increases_usd: '40', plan_holding_reductions_usd: '0', plan_target_cash_usd: '60', plan_cash_change_usd: '-40', plan_balance_residual_usd: '0' });
+    expect(Number(record.plan_gross_holding_change_percent)).toBeCloseTo(100 / 15);
+  }
   expect(records[1].price_source).toBe("'=My, \"fixture\"\ncloses");
   expect(records[1].plan_scope).toContain('no orders or recorded fills');
   expect(records[1].plan_calculated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
@@ -1222,6 +1230,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await basis.check();
 
   await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
+  await expect(movement).toHaveCount(0);
   await expect(result).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
@@ -1253,23 +1262,33 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('100.00');
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('$0.00');
+  await expect(movement).toContainText('0.00%');
+  await expect(movement).toContainText('$100.00');
   expect(writes).toEqual([]);
 });
 
 
-test('I round current allocations to exactly 100% without assigning weight to zero cash', () => {
+test('I reconcile allocation movement and round current weights without assigning weight to zero cash', () => {
   const marks: PortfolioMarks = { portfolioId: 'rounding', dataMode: 'market', evaluatedAt: '2026-10-10T00:00:00Z', cash: 1,
     pricedPositions: 2, totalPositions: 2, complete: true, pricedHoldingsValue: 2, totalValue: 3, unrealizedPnl: 0,
     holdings: ['AAPL', 'MSFT'].map(ticker => ({ ticker, quantity: 1, costBasis: 1, close: 1, priceDate: '2026-10-09', priceAgeDays: 1,
       source: 'My rounding fixture', sourceUrl: null, retrievedAt: null, value: 1, unrealizedPnl: 0, error: null })),
     allocation: { available: true, unavailableReason: null, cashWeight: 1 / 3, largestHolding: null, largestSector: null, topThreeHoldingsWeight: 2 / 3, companies: [], sectors: [] } };
   expect(currentAllocationTargets(marks)).toEqual(['33.34', '33.33', '33.33']);
+  const summary = allocationPlanSummary(marks, ['50', '50', '0']);
+  expect(summary).toMatchObject({ holdingIncreases: 0.5, holdingReductions: 1, targetCash: 1.5, cashChange: 0.5, balanceResidual: 0 });
+  expect(summary.grossHoldingChangePercent).toBe(50);
+  expect(allocationPlanSummary(marks, ['100', '0', '0'])).toMatchObject({ holdingIncreases: 0, holdingReductions: 2, targetCash: 3, cashChange: 2, balanceResidual: 0 });
+  expect(() => allocationPlanSummary(marks, ['50', '20', '20'])).toThrow('exactly 100%');
   marks.cash = 0; marks.totalValue = 2;
   expect(currentAllocationTargets(marks)).toEqual(['0.00', '50.00', '50.00']);
+  expect(allocationPlanSummary(marks, ['0', '0', '100'])).toMatchObject({ holdingIncreases: 1, holdingReductions: 1, grossHoldingChangePercent: 100, cashChange: 0, balanceResidual: 0 });
+  expect(allocationPlanSummary(marks, ['0', '50', '50'])).toMatchObject({ holdingIncreases: 0, holdingReductions: 0, grossHoldingChangePercent: 0 });
   marks.holdings[0].value = 0.000001; marks.totalValue = 1.000001;
   expect(currentAllocationTargets(marks)).toEqual(['0.00', '0.00', '100.00']);
   marks.complete = false;
   expect(() => currentAllocationTargets(marks)).toThrow('complete, positive');
+  expect(() => allocationPlanSummary(marks, ['0', '0', '100'])).toThrow('complete, positive');
 });
 
 
