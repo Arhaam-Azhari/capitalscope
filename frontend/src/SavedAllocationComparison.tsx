@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import SavedAllocationShockComparison from './SavedAllocationShockComparison';
 import { compareSavedAllocations, savedAllocationComparisonCsv } from './savedAllocationComparison';
 import type { SavedAllocationTarget } from './savedAllocationTargets';
 import { money } from './api';
@@ -39,5 +40,6 @@ export default function SavedAllocationComparison({ marks, companies, selected }
     </tbody></table></div>
     <div className="export-actions"><button className="secondary" onClick={download}>Download saved mix comparison CSV</button><p className="muted small">Exports one row per proposal with unrounded metrics, target percentages, saved dates, and the common baseline's holding and price evidence as JSON fields.</p></div>
     {error && <p className="notice error" role="alert">{error}</p>}
+    <SavedAllocationShockComparison key={JSON.stringify([marks, companies, selected])} marks={marks} companies={companies} selected={selected} />
   </section>;
 }
