@@ -21,6 +21,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 ## What I can do
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
+- I analyze a chosen window of loaded raw closes for the largest observed peak-to-trough decline and its recovery, then export each observation with source evidence. I count observation intervals rather than trading days and keep split and dividend caveats explicit.
 - Compare two to four saved valuation cases, inspect changed assumptions, and download their comparison as CSV.
 - Download my calculated allocation plan as CSV with unrounded dollar values, entered targets, baseline and calculation dates, and per-holding stored price evidence. I keep cash price fields blank and include the simulation limits in the file.
 - Compare two to four compatible saved allocation mixes at one current valuation. I inspect cash, leading exposures, and gross holding changes beside the current mix, then export the target percentages and shared baseline evidence as CSV. Comparing leaves my planner inputs and trades unchanged.
