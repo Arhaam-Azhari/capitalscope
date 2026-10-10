@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
 import { readCsv } from './readCsv';
-import { currentAllocationTargets } from '../src/portfolioRebalance';
+import { allocationShareEstimate, currentAllocationTargets } from '../src/portfolioRebalance';
 import type { PortfolioMarks } from '../src/types';
 import { portfolioResearchRows, portfolioResearchQueue } from '../src/portfolioResearch';
 
@@ -1204,6 +1204,23 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   expect(records[1].plan_calculated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   expect(records[1].exported_at >= records[1].plan_calculated_at).toBe(true);
 
+  expect(records[1]).toMatchObject({ user_share_basis_acknowledged: 'false', estimated_target_shares: '', estimated_share_change: '', share_estimate_unavailable_reason: 'Share basis not checked' });
+  const basis = planner.getByLabel('I checked the recorded-share and stored-price basis');
+  await expect(basis).not.toBeChecked();
+  await basis.check();
+  await expect(result.getByRole('row', { name: /^AAPL/ }).getByRole('cell').nth(5)).toHaveText('2.4');
+  await expect(result.getByRole('row', { name: /^AAPL/ }).getByRole('cell').nth(6)).toHaveText('0.4');
+  await expect(result.getByRole('row', { name: /^MSFT/ }).getByRole('cell').nth(6)).toHaveText('0');
+  const estimateDownload = page.waitForEvent('download');
+  await planner.getByRole('button', { name: 'Download allocation plan CSV' }).click();
+  const estimatedRecords = readCsv(await readFile((await (await estimateDownload).path())!, 'utf8'));
+  expect(estimatedRecords[0]).toMatchObject({ estimated_target_shares: '', estimated_share_change: '', share_estimate_unavailable_reason: '' });
+  expect(estimatedRecords[1]).toMatchObject({ share_estimate_model_version: 'fractional-shares-v1', user_share_basis_acknowledged: 'true', estimated_target_shares: '2.4', estimated_share_change: '0.3999999999999999', share_estimate_unavailable_reason: '' });
+  await basis.uncheck();
+  await expect(result.getByRole('row', { name: /^AAPL/ }).getByRole('cell').nth(5)).toHaveText('—');
+  await expect(result.getByRole('row', { name: /^AAPL/ })).toContainText('$240.00');
+  await basis.check();
+
   await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
   await expect(result).toHaveCount(0);
   await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
@@ -1232,6 +1249,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   mode = 'cash';
   await page.getByRole('button', { name: 'Recheck stored prices' }).click();
   await planner.getByRole('button', { name: 'Use current weights' }).click();
+  await expect(basis).not.toBeChecked();
   await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('100.00');
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('$0.00');
@@ -1252,4 +1270,19 @@ test('I round current allocations to exactly 100% without assigning weight to ze
   expect(currentAllocationTargets(marks)).toEqual(['0.00', '0.00', '100.00']);
   marks.complete = false;
   expect(() => currentAllocationTargets(marks)).toThrow('complete, positive');
+});
+
+
+test('I withhold fractional estimates when the share basis is unusable', () => {
+  const holding: PortfolioMarks['holdings'][number] = { ticker: 'AAPL', quantity: 2, close: 100, value: 200,
+    costBasis: 100, priceDate: '2026-10-01', priceAgeDays: 7, source: 'My share fixture', sourceUrl: null, retrievedAt: null, unrealizedPnl: 100, error: null };
+  expect(allocationShareEstimate(holding, 240, true).targetShares).toBe(2.4);
+  expect(allocationShareEstimate(holding, 0, true).shareChange).toBe(-2);
+  expect(allocationShareEstimate(undefined, 100, true)).toEqual({ targetShares: null, shareChange: null, reason: null });
+  expect(allocationShareEstimate(holding, 240, false).reason).toBe('Share basis not checked');
+  for (const invalid of [{ ...holding, close: null }, { ...holding, close: 0 }, { ...holding, quantity: Infinity }, { ...holding, value: 250 }, { ...holding, value: NaN }]) {
+    const estimate = allocationShareEstimate(invalid, 240, true);
+    expect(estimate.targetShares).toBeNull(); expect(estimate.shareChange).toBeNull(); expect(estimate.reason).toBeTruthy();
+  }
+  expect(allocationShareEstimate(holding, Infinity, true).targetShares).toBeNull();
 });
