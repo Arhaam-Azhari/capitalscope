@@ -1,3 +1,4 @@
+import SavedAllocationTargets from './SavedAllocationTargets';
 import AllocationShockPanel from './AllocationShockPanel';
 import { allocationConcentrationCsv } from './allocationConcentrationCsv';
 import { useState, type FormEvent } from 'react';
@@ -43,6 +44,7 @@ export default function PortfolioRebalancePanel({ marks, companies }: { marks: P
     <div className="panel-title"><h3 id="rebalance-heading">Target allocation planner</h3><span className="pill">Dollar changes · simulation</span></div>
     <p className="muted small">Enter your own target percentages for cash and current holdings. Targets must total exactly 100%, with up to two decimal places. The plan holds this snapshot's total value fixed and shows target minus current value. It does not choose allocations, send orders, or record simulated fills.</p>
     <p className="muted small">Uses the dated prices above, which may differ across holdings. No fees, taxes, slippage, deposits, withdrawals, or share rounding are modeled. Dollar changes are rounded for display and may have a small rounding residual. Targets and results stay in this view only and reset when stored valuation is refreshed or the portfolio changes.</p>
+      <SavedAllocationTargets marks={marks} targets={targets} calculated={!!result} onLoad={loaded => { setTargets(loaded); setResult(null); setBasisChecked(false); setError(''); }} />
     {!available ? <p className="notice warning">Planning is unavailable until every holding is priced and total value is positive. A priced subtotal is not enough.</p> : <>
       <div className="export-actions"><button className="secondary" onClick={useCurrentWeights}>Use current weights</button><p className="muted small">Replaces entered targets with this snapshot's mix, rounded to two decimal places while keeping the total at 100%. Small dollar changes can result from rounding. Review or edit the targets, then calculate; nothing is saved or traded.</p></div>
       <form onSubmit={calculate}><div className="model-fields">{assets.map((ticker, i) => <label key={ticker}>Target {ticker} allocation (%)<input type="number" min="0" max="100" step="0.01" required value={targets[i]} onChange={event => { setTargets(current => current.map((value, index) => index === i ? event.target.value : value)); setResult(null); setError(''); }} /></label>)}</div>

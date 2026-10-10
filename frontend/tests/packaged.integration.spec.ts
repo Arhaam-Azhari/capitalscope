@@ -906,3 +906,45 @@ test('I match actual saved research to a packaged portfolio without importing ev
     else if (current) await page.request.delete(`/api/watchlist/${ticker}?version=${current.version}&entryId=${current.entryId}`);
   }
 });
+
+
+test('I reload saved allocation targets against a fresh packaged valuation', async ({ page }) => {
+  const created = await page.request.post('/api/portfolios', { data: { name: 'My persisted allocation targets', mode: 'example', initialCash: '1000' } });
+  expect(created.ok()).toBe(true); const { portfolio } = await created.json();
+  const path = `/api/portfolios/${portfolio.id}`;
+  expect((await page.request.post(`${path}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'BUY', quantity: '10', price: '20', fee: '0' } })).ok()).toBe(true);
+  const before = await (await page.request.get(path)).json();
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByLabel('Open portfolio').selectOption(portfolio.id);
+  const planner = page.getByRole('region', { name: 'Target allocation planner', exact: true });
+  const saved = planner.getByRole('region', { name: 'Saved allocation targets', exact: true });
+  await planner.getByLabel('Target Cash allocation (%)').fill('40');
+  await planner.getByLabel('Target DEMO allocation (%)').fill('60');
+  await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  await saved.getByLabel('Allocation target name').fill('My persisted reserve mix');
+  await saved.getByRole('button', { name: 'Save allocation targets', exact: true }).click();
+  await expect(saved).toContainText('Saved targets: My persisted reserve mix');
+  expect(await (await page.request.get(path)).json()).toEqual(before);
+  const records = await (await page.request.get(`${path}/allocation-targets`)).json();
+  expect(records[0].targets).toEqual({ Cash: 40, DEMO: 60 });
+  expect(records[0].modelVersion).toBe('allocation-targets-v1');
+
+  expect((await page.request.post(`${path}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'BUY', quantity: '2', price: '20', fee: '0' } })).ok()).toBe(true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await page.getByLabel('Open portfolio').selectOption(portfolio.id);
+  await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('');
+  await saved.getByRole('button', { name: 'Load targets from My persisted reserve mix' }).click();
+  await expect(planner.getByLabel('Target DEMO allocation (%)')).toHaveValue('60');
+  await expect(planner.getByRole('table', { name: 'Target allocation dollar changes' })).toHaveCount(0);
+  await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  await expect(planner.getByRole('table', { name: 'Target allocation dollar changes' }).getByRole('row', { name: /^DEMO/ })).toContainText('$611.52');
+  expect((await page.request.post(`${path}/trades`, { data: { requestId: crypto.randomUUID(), ticker: 'DEMO', side: 'SELL', quantity: '12', price: '20', fee: '0' } })).ok()).toBe(true);
+  await page.getByRole('button', { name: 'Recheck stored prices' }).click();
+  await expect(saved.getByRole('button', { name: 'Load targets from My persisted reserve mix' })).toBeDisabled();
+  await expect(saved).toContainText('The holdings have changed');
+  await saved.getByRole('button', { name: 'Delete targets My persisted reserve mix' }).click();
+  await expect(saved).toContainText('No saved allocation targets');
+  expect(await (await page.request.get(`${path}/allocation-targets`)).json()).toEqual([]);
+});
