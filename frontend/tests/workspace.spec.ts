@@ -1151,7 +1151,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await installApi(page);
   const portfolio = { id: 'allocation-plan', name: 'My allocation plan', mode: 'market', initialCash: 600, createdAt: '2026-10-01T00:00:00Z' };
   const holdings = ['AAPL', 'MSFT'].map((ticker, i) => ({ ticker, quantity: i + 2, costBasis: 100, close: 100,
-    priceDate: '2026-10-01', priceAgeDays: 7, source: 'My fixture closes', sourceUrl: null, retrievedAt: '2026-10-01T12:00:00Z',
+    priceDate: '2026-10-01', priceAgeDays: 7, source: '=My, "fixture"\ncloses', sourceUrl: null, retrievedAt: '2026-10-01T12:00:00Z',
     value: (i + 2) * 100, unrealizedPnl: (i + 2) * 100 - 100, error: null }));
   let mode = 'complete'; const writes: string[] = [];
   await page.route('**/api/**', route => {
@@ -1173,6 +1173,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   });
   await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
   const planner = page.getByRole('region', { name: 'Target allocation planner', exact: true });
+  await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
   for (const [asset, value] of [['Cash', '10'], ['AAPL', '40'], ['MSFT', '50']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   const result = planner.getByRole('table', { name: 'Target allocation dollar changes' });
@@ -1180,8 +1181,24 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await expect(result.getByRole('row', { name: /^AAPL/ })).toContainText('$240.00');
   await expect(result.getByRole('row', { name: /^AAPL/ })).toContainText('$40.00');
   await expect(result.getByRole('row', { name: /^MSFT/ })).toContainText('$0.00');
+  const downloadPromise = page.waitForEvent('download');
+  await planner.getByRole('button', { name: 'Download allocation plan CSV' }).click();
+  const file = await downloadPromise;
+  expect(file.suggestedFilename()).toBe('target-allocation-plan.csv');
+  const { readFile } = await import('node:fs/promises');
+  const records = readCsv(await readFile((await file.path())!, 'utf8'));
+  expect(records).toHaveLength(3);
+  expect(records[0]).toMatchObject({ asset_kind: 'cash', ticker: '', current_value_usd: '100', target_weight_percent: '10', target_value_usd: '60', dollar_change_usd: '-40', recorded_shares: '', stored_raw_close_usd: '', price_date: '', price_source: '' });
+  expect(records[1]).toMatchObject({ asset_kind: 'holding', ticker: 'AAPL', model_version: 'allocation-dollars-v1', portfolio_id: portfolio.id,
+    target_weight_percent: '40', target_value_usd: '240', dollar_change_usd: '40', baseline_total_usd: '600', recorded_shares: '2', stored_raw_close_usd: '100', price_date: '2026-10-01', price_retrieved_at: '2026-10-01T12:00:00Z', baseline_evaluated_at: '2026-10-08T00:00:00Z' });
+  expect(records[1].price_source).toBe("'=My, \"fixture\"\ncloses");
+  expect(records[1].plan_scope).toContain('no orders or recorded fills');
+  expect(records[1].plan_calculated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  expect(records[1].exported_at >= records[1].plan_calculated_at).toBe(true);
+
   await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
   await expect(result).toHaveCount(0);
+  await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toBeDisabled();
   await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
   await expect(planner.getByRole('alert')).toContainText('exactly 100%');
   for (const [asset, value] of [['Cash', '33.33'], ['AAPL', '33.33'], ['MSFT', '33.34']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
@@ -1196,6 +1213,7 @@ test('I plan target allocations only against a complete portfolio snapshot', asy
   await page.getByRole('button', { name: 'Recheck stored prices' }).click();
   await expect(planner).toContainText('Planning is unavailable');
   await expect(planner.getByRole('button', { name: 'Calculate allocation changes' })).toHaveCount(0);
+  await expect(planner.getByRole('button', { name: 'Download allocation plan CSV' })).toHaveCount(0);
   mode = 'cash';
   await page.getByRole('button', { name: 'Recheck stored prices' }).click();
   await planner.getByLabel('Target Cash allocation (%)').fill('100');
