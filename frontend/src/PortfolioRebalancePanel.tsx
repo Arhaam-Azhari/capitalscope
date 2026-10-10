@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { allocationPlanCsv } from './allocationPlanCsv';
 import { money } from './api';
-import { allocationPlanSummary, allocationShareEstimate, currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
-import type { PortfolioMarks } from './types';
+import { allocationPlanSummary, allocationSectorPlan, allocationShareEstimate, currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
+import type { Company, PortfolioMarks } from './types';
 
-export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMarks }) {
+export default function PortfolioRebalancePanel({ marks, companies }: { marks: PortfolioMarks; companies: Company[] }) {
   const assets = ['Cash', ...marks.holdings.map(holding => holding.ticker)];
   const [targets, setTargets] = useState<string[]>(assets.map(() => ''));
   const [result, setResult] = useState<ReturnType<typeof rebalancePlan> | null>(null);
@@ -13,6 +13,7 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
   const [error, setError] = useState('');
   const available = rebalanceAvailable(marks);
   const movement = result ? allocationPlanSummary(marks, targets) : null;
+  const sectors = result ? allocationSectorPlan(marks, targets, companies) : null;
   function calculate(event: FormEvent) {
     event.preventDefault(); setResult(null); setError('');
     try { setResult(rebalancePlan(marks, targets)); setCalculatedAt(new Date().toISOString()); }
@@ -27,7 +28,7 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
     if (!result) return;
     setError('');
     try {
-      const csv = allocationPlanCsv(marks, targets, calculatedAt, new Date().toISOString(), basisChecked);
+      const csv = allocationPlanCsv(marks, targets, calculatedAt, new Date().toISOString(), basisChecked, companies);
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       const link = document.createElement('a'); link.href = url; link.download = 'target-allocation-plan.csv';
       try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -55,6 +56,14 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
           <div><dt>Cash reserve change</dt><dd>{money(movement.cashChange, false)}</dd></div>
         </dl>
         <p className="muted small">Gross holding changes count increases plus reductions, divided by the baseline total; cash is excluded. This measures this plan's dollar movement, not annual fund turnover. Holding reductions minus increases fund the cash reserve change. Balance residual (six decimals): {movement.balanceResidual.toFixed(6)} USD. Display rounding can leave small differences. No fees, taxes, execution sequence, or trading activity are modeled.</p>
+      </section>}
+      {sectors && <section aria-labelledby="allocation-sector-heading">
+        <h4 id="allocation-sector-heading">Sector allocation before and after</h4>
+        <p className="muted small">Groups current holdings using the fixed company catalog; fictional DEMO uses Fictional Industrials and missing classifications remain Unclassified. Cash is a separate reserve. All weights use the full baseline total, and changes are percentage points. This shows sector concentration, without measuring correlations, underlying business exposures, or recommending a mix.</p>
+        <div className="table-scroll"><table><caption>Current and target sector allocations</caption>
+          <thead><tr><th>Bucket</th><th>Current weight</th><th>Target weight</th><th>Change (pp)</th><th>Current value</th><th>Target value</th></tr></thead>
+          <tbody>{sectors.map(group => <tr key={`${group.kind}:${group.label}`}><th scope="row">{group.label}</th><td>{group.currentWeightPercent.toFixed(2)}%</td><td>{group.targetWeightPercent.toFixed(2)}%</td><td>{group.weightChangePoints.toFixed(2)}</td><td>{money(group.currentValue, false)}</td><td>{money(group.targetValue, false)}</td></tr>)}</tbody>
+        </table></div>
       </section>}
       {result && <><p className="muted small">Baseline total: {money(marks.totalValue!, false)} · Evaluated {new Date(marks.evaluatedAt).toLocaleString()}. Positive changes increase a holding or cash; negative changes decrease it. Cash is the balancing reserve, not a trade.</p>
         <div className="table-scroll"><table><caption>Target allocation dollar changes</caption><thead><tr><th>Asset</th><th>Current value</th><th>Current weight</th><th>Target weight</th><th>Target value</th><th>Dollar change</th><th>Estimated target shares</th><th>Estimated share change</th></tr></thead><tbody>{result.map((row, i) => { const estimate = allocationShareEstimate(i === 0 ? undefined : marks.holdings[i - 1], row.targetValue, basisChecked); return <tr key={row.ticker}><th scope="row">{row.ticker}</th><td>{money(row.value, false)}</td><td>{(row.currentWeight * 100).toFixed(2)}%</td><td>{(row.targetWeight * 100).toFixed(2)}%</td><td>{money(row.targetValue, false)}</td><td>{money(row.change, false)}</td><td title={estimate.reason || undefined}>{estimate.targetShares === null ? '—' : estimate.targetShares.toLocaleString(undefined, { maximumFractionDigits: 6 })}{basisChecked && estimate.reason && <small> {estimate.reason}</small>}</td><td title={estimate.reason || undefined}>{estimate.shareChange === null ? '—' : estimate.shareChange.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td></tr>; })}</tbody></table></div></>}

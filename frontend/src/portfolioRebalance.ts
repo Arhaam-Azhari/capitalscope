@@ -1,4 +1,4 @@
-import type { PortfolioMarks } from './types';
+import type { Company, PortfolioMarks } from './types';
 
 export function rebalanceAvailable(marks: PortfolioMarks) {
   const total = marks.totalValue;
@@ -67,4 +67,23 @@ export function allocationPlanSummary(marks: PortfolioMarks, targets: string[]) 
   return { holdingIncreases, holdingReductions, grossHoldingChangePercent,
     targetCash: cash.targetValue, cashChange: cash.change,
     balanceResidual: holdingReductions - holdingIncreases - cash.change };
+}
+
+export function allocationSectorPlan(marks: PortfolioMarks, targets: string[], companies: Company[]) {
+  const plan = rebalancePlan(marks, targets);
+  const groups = new Map<string, { kind: 'cash' | 'sector'; label: string; currentValue: number; targetValue: number; currentWeightPercent: number; targetWeightPercent: number; tickers: string[] }>();
+  // I retain unknown holdings in an explicit bucket so the full portfolio remains in the denominator.
+  for (const [i, row] of plan.entries()) {
+    const kind = i === 0 ? 'cash' : 'sector';
+    const label = i === 0 ? 'Cash reserve' : marks.dataMode === 'example' && row.ticker === 'DEMO' ? 'Fictional Industrials'
+      : marks.dataMode === 'market' ? companies.find(company => company.ticker === row.ticker)?.sector.trim() || 'Unclassified' : 'Unclassified';
+    const key = `${kind}:${label}`;
+    const group = groups.get(key) || { kind, label, currentValue: 0, targetValue: 0, currentWeightPercent: 0, targetWeightPercent: 0, tickers: [] };
+    group.currentValue += row.value; group.targetValue += row.targetValue;
+    group.currentWeightPercent += row.currentWeight * 100; group.targetWeightPercent += Number(targets[i].trim());
+    if (i !== 0) group.tickers.push(row.ticker);
+    groups.set(key, group);
+  }
+  return [...groups.values()].sort((a, b) => a.kind === b.kind ? a.label.localeCompare(b.label) : a.kind === 'cash' ? -1 : 1)
+    .map(group => ({ ...group, weightChangePoints: group.targetWeightPercent - group.currentWeightPercent }));
 }
