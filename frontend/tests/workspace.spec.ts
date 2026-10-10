@@ -1146,3 +1146,60 @@ test('I select current real holdings for a linked company research comparison', 
   await page.reload();
   await expect(comparison).toContainText('My MSFT holdings thesis');
 });
+
+test('I plan target allocations only against a complete portfolio snapshot', async ({ page }) => {
+  await installApi(page);
+  const portfolio = { id: 'allocation-plan', name: 'My allocation plan', mode: 'market', initialCash: 600, createdAt: '2026-10-01T00:00:00Z' };
+  const holdings = ['AAPL', 'MSFT'].map((ticker, i) => ({ ticker, quantity: i + 2, costBasis: 100, close: 100,
+    priceDate: '2026-10-01', priceAgeDays: 7, source: 'My fixture closes', sourceUrl: null, retrievedAt: '2026-10-01T12:00:00Z',
+    value: (i + 2) * 100, unrealizedPnl: (i + 2) * 100 - 100, error: null }));
+  let mode = 'complete'; const writes: string[] = [];
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.startsWith('/api/portfolios') && route.request().method() !== 'GET') writes.push(path);
+    if (path === '/api/portfolios') return route.fulfill({ json: [portfolio] });
+    if (path === `/api/portfolios/${portfolio.id}`) return route.fulfill({ json: { portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, events: [], trades: [],
+      positions: holdings.map(holding => ({ ticker: holding.ticker, quantity: holding.quantity, costBasis: holding.costBasis, averageCost: 50 })) } });
+    if (path.endsWith('/valuation')) return route.fulfill({ json: {
+      portfolioId: portfolio.id, dataMode: 'market', evaluatedAt: mode === 'complete' ? '2026-10-08T00:00:00Z' : '2026-10-09T00:00:00Z', cash: 100,
+      pricedPositions: mode === 'cash' ? 0 : mode === 'partial' ? 1 : 2, totalPositions: mode === 'cash' ? 0 : 2,
+      complete: mode !== 'partial', pricedHoldingsValue: mode === 'cash' ? 0 : mode === 'partial' ? 200 : 500,
+      totalValue: mode === 'partial' ? null : mode === 'cash' ? 100 : 600, unrealizedPnl: 0,
+      holdings: mode === 'cash' ? [] : mode === 'partial' ? [holdings[0], { ...holdings[1], value: null, close: null, error: 'No stored price' }] : holdings,
+      allocation: { available: mode !== 'partial', unavailableReason: 'Missing prices', cashWeight: null, largestHolding: null, largestSector: null, topThreeHoldingsWeight: null, companies: [], sectors: [] }
+    } });
+    if (path.endsWith('/stress-scenarios')) return route.fulfill({ json: [] });
+    return route.fallback();
+  });
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  const planner = page.getByRole('region', { name: 'Target allocation planner', exact: true });
+  for (const [asset, value] of [['Cash', '10'], ['AAPL', '40'], ['MSFT', '50']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
+  await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  const result = planner.getByRole('table', { name: 'Target allocation dollar changes' });
+  await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('-$40.00');
+  await expect(result.getByRole('row', { name: /^AAPL/ })).toContainText('$240.00');
+  await expect(result.getByRole('row', { name: /^AAPL/ })).toContainText('$40.00');
+  await expect(result.getByRole('row', { name: /^MSFT/ })).toContainText('$0.00');
+  await planner.getByLabel('Target Cash allocation (%)').fill('9.99');
+  await expect(result).toHaveCount(0);
+  await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  await expect(planner.getByRole('alert')).toContainText('exactly 100%');
+  for (const [asset, value] of [['Cash', '33.33'], ['AAPL', '33.33'], ['MSFT', '33.34']]) await planner.getByLabel(`Target ${asset} allocation (%)`, { exact: true }).fill(value);
+  await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  await expect(result.getByRole('row', { name: /^MSFT/ })).toContainText('$200.04');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await planner.getByRole('button', { name: 'Clear allocation targets' }).click();
+  await expect(result).toHaveCount(0);
+  await expect(planner.getByLabel('Target Cash allocation (%)')).toHaveValue('');
+  mode = 'partial';
+  await page.getByRole('button', { name: 'Recheck stored prices' }).click();
+  await expect(planner).toContainText('Planning is unavailable');
+  await expect(planner.getByRole('button', { name: 'Calculate allocation changes' })).toHaveCount(0);
+  mode = 'cash';
+  await page.getByRole('button', { name: 'Recheck stored prices' }).click();
+  await planner.getByLabel('Target Cash allocation (%)').fill('100');
+  await planner.getByRole('button', { name: 'Calculate allocation changes' }).click();
+  await expect(result.getByRole('row', { name: /^Cash/ })).toContainText('$0.00');
+  expect(writes).toEqual([]);
+});

@@ -1,0 +1,26 @@
+import type { PortfolioMarks } from './types';
+
+export function rebalanceAvailable(marks: PortfolioMarks) {
+  const total = marks.totalValue;
+  const values = [marks.cash, ...marks.holdings.map(holding => holding.value)];
+  return marks.complete && total !== null && Number.isFinite(total) && total > 0
+    && values.every(value => value !== null && Number.isFinite(value) && value >= 0)
+    && marks.holdings.length === marks.totalPositions
+    && Math.abs(values.reduce<number>((sum, value) => sum + (value || 0), 0) - total) <= Math.max(0.000001, total * 1e-10);
+}
+
+export function rebalancePlan(marks: PortfolioMarks, targets: string[]) {
+  if (!rebalanceAvailable(marks)) throw new Error('A complete, positive portfolio valuation is required.');
+  const assets = [{ ticker: 'Cash', value: marks.cash }, ...marks.holdings.map(holding => ({ ticker: holding.ticker, value: holding.value! }))];
+  if (targets.length !== assets.length || targets.some(value => !/^\d{1,3}(\.\d{1,2})?$/.test(value.trim())))
+    throw new Error('Enter every target from 0 to 100, using up to two decimal places.');
+  // I sum targets as integer basis points so 100% does not depend on floating-point rounding.
+  const points = targets.map(value => Math.round(Number(value.trim()) * 100));
+  if (points.some(value => value > 10000) || points.reduce((sum, value) => sum + value, 0) !== 10000)
+    throw new Error('Targets must total exactly 100%, with each target between 0 and 100%.');
+  const total = marks.totalValue!;
+  return assets.map((asset, i) => {
+    const targetWeight = points[i] / 10000, targetValue = total * targetWeight;
+    return { ...asset, currentWeight: asset.value / total, targetWeight, targetValue, change: targetValue - asset.value };
+  });
+}
