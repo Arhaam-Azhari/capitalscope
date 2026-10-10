@@ -57,3 +57,14 @@ export function allocationShareEstimate(holding: PortfolioMarks['holdings'][numb
     return unavailable('Fractional estimate unavailable');
   return { targetShares, shareChange, reason: null };
 }
+
+export function allocationPlanSummary(marks: PortfolioMarks, targets: string[]) {
+  const [cash, ...holdings] = rebalancePlan(marks, targets);
+  const holdingIncreases = holdings.reduce((sum, row) => sum + Math.max(0, row.change), 0);
+  const holdingReductions = holdings.reduce((sum, row) => sum + Math.max(0, -row.change), 0);
+  // I count both sides of holding changes and exclude cash from this movement measure.
+  const grossHoldingChangePercent = (holdingIncreases / marks.totalValue! + holdingReductions / marks.totalValue!) * 100;
+  return { holdingIncreases, holdingReductions, grossHoldingChangePercent,
+    targetCash: cash.targetValue, cashChange: cash.change,
+    balanceResidual: holdingReductions - holdingIncreases - cash.change };
+}

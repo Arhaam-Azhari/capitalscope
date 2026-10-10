@@ -1,4 +1,4 @@
-import { allocationShareEstimate, rebalancePlan } from './portfolioRebalance';
+import { allocationPlanSummary, allocationShareEstimate, rebalancePlan } from './portfolioRebalance';
 import type { PortfolioMarks } from './types';
 
 function cell(value: string | number | null | undefined) {
@@ -11,10 +11,11 @@ function cell(value: string | number | null | undefined) {
 
 export function allocationPlanCsv(marks: PortfolioMarks, targets: string[], calculatedAt: string, exportedAt: string, basisChecked = false) {
   const plan = rebalancePlan(marks, targets);
+  const summary = allocationPlanSummary(marks, targets);
   const headers = ['portfolio_id', 'model_version', 'data_mode', 'currency', 'asset_kind', 'ticker', 'current_value_usd',
     'current_weight_percent', 'target_weight_percent', 'target_value_usd', 'dollar_change_usd', 'baseline_total_usd',
     'recorded_shares', 'stored_raw_close_usd', 'price_date', 'price_age_calendar_days', 'price_source', 'price_source_url',
-    'price_retrieved_at', 'baseline_evaluated_at', 'plan_calculated_at', 'exported_at', 'share_estimate_model_version', 'user_share_basis_acknowledged', 'estimated_target_shares', 'estimated_share_change', 'share_estimate_unavailable_reason', 'plan_scope'];
+    'price_retrieved_at', 'baseline_evaluated_at', 'plan_calculated_at', 'exported_at', 'share_estimate_model_version', 'user_share_basis_acknowledged', 'estimated_target_shares', 'estimated_share_change', 'share_estimate_unavailable_reason', 'movement_summary_model_version', 'plan_holding_increases_usd', 'plan_holding_reductions_usd', 'plan_gross_holding_change_percent', 'plan_target_cash_usd', 'plan_cash_change_usd', 'plan_balance_residual_usd', 'plan_scope'];
   const rows = plan.map((row, i) => {
     const holding = i === 0 ? undefined : marks.holdings[i - 1];
     const estimate = allocationShareEstimate(holding, row.targetValue, basisChecked);
@@ -23,7 +24,8 @@ export function allocationPlanCsv(marks: PortfolioMarks, targets: string[], calc
       holding?.quantity, holding?.close, holding?.priceDate, holding?.priceAgeDays, holding?.source, holding?.sourceUrl,
       holding?.retrievedAt, marks.evaluatedAt, calculatedAt, exportedAt,
       'fractional-shares-v1', String(basisChecked), estimate.targetShares, estimate.shareChange, estimate.reason,
-      'User-entered targets; complete dated stored valuation; fixed total value; unrounded dollar arithmetic; cash is a reserve, not a trade; excludes fees, taxes, slippage, external cash flows and share rounding; optional fractional shares use raw dated closes and a manual share-basis acknowledgment, not verified split history; no orders or recorded fills'];
+      'allocation-movement-v1', summary.holdingIncreases, summary.holdingReductions, summary.grossHoldingChangePercent, summary.targetCash, summary.cashChange, summary.balanceResidual,
+      'User-entered targets; complete dated stored valuation; fixed total value; unrounded dollar arithmetic; cash is a reserve, not a trade; excludes fees, taxes, slippage, external cash flows and share rounding; optional fractional shares use raw dated closes and a manual share-basis acknowledgment, not verified split history; gross holding movement counts increases plus reductions over baseline total, excludes cash, and is not annual fund turnover; plan summary fields repeat on every asset row; no orders or recorded fills'];
   });
   return [headers, ...rows].map(row => row.map(cell).join(',')).join('\r\n') + '\r\n';
 }
