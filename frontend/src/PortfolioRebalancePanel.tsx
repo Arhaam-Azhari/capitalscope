@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { allocationPlanCsv } from './allocationPlanCsv';
 import { money } from './api';
-import { currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
+import { allocationShareEstimate, currentAllocationTargets, rebalanceAvailable, rebalancePlan } from './portfolioRebalance';
 import type { PortfolioMarks } from './types';
 
 export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMarks }) {
@@ -9,6 +9,7 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
   const [targets, setTargets] = useState<string[]>(assets.map(() => ''));
   const [result, setResult] = useState<ReturnType<typeof rebalancePlan> | null>(null);
   const [calculatedAt, setCalculatedAt] = useState('');
+  const [basisChecked, setBasisChecked] = useState(false);
   const [error, setError] = useState('');
   const available = rebalanceAvailable(marks);
   function calculate(event: FormEvent) {
@@ -25,7 +26,7 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
     if (!result) return;
     setError('');
     try {
-      const csv = allocationPlanCsv(marks, targets, calculatedAt, new Date().toISOString());
+      const csv = allocationPlanCsv(marks, targets, calculatedAt, new Date().toISOString(), basisChecked);
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
       const link = document.createElement('a'); link.href = url; link.download = 'target-allocation-plan.csv';
       try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -40,9 +41,11 @@ export default function PortfolioRebalancePanel({ marks }: { marks: PortfolioMar
       <form onSubmit={calculate}><div className="model-fields">{assets.map((ticker, i) => <label key={ticker}>Target {ticker} allocation (%)<input type="number" min="0" max="100" step="0.01" required value={targets[i]} onChange={event => { setTargets(current => current.map((value, index) => index === i ? event.target.value : value)); setResult(null); setError(''); }} /></label>)}</div>
         <div className="comparison-controls"><button className="secondary" type="submit">Calculate allocation changes</button><button className="text-button" type="button" onClick={() => { setTargets(assets.map(() => '')); setResult(null); setError(''); }}>Clear allocation targets</button></div></form>
       <div className="export-actions"><button className="secondary" disabled={!result} onClick={download}>Download allocation plan CSV</button><p className="muted small">Exports the calculated plan with unrounded dollar values, entered target percentages, baseline dates, and each holding's price evidence. Cash has no price evidence. Calculate again after changing targets.</p></div>
+      <label><input type="checkbox" checked={basisChecked} onChange={event => setBasisChecked(event.target.checked)} /> I checked the recorded-share and stored-price basis</label>
+      <p className="muted small">Optional fractional-share estimates divide target value by each stored raw close, then subtract recorded shares. This manual check does not verify split history or current prices. Estimates use up to six decimals for display, with no whole-share rounding, fees, taxes, or slippage; they are not orders or recorded fills. The CSV includes unrounded estimates and this acknowledgment. Cash has no share estimate.</p>
       {error && <p role="alert" className="notice error">{error}</p>}
       {result && <><p className="muted small">Baseline total: {money(marks.totalValue!, false)} · Evaluated {new Date(marks.evaluatedAt).toLocaleString()}. Positive changes increase a holding or cash; negative changes decrease it. Cash is the balancing reserve, not a trade.</p>
-        <div className="table-scroll"><table><caption>Target allocation dollar changes</caption><thead><tr><th>Asset</th><th>Current value</th><th>Current weight</th><th>Target weight</th><th>Target value</th><th>Dollar change</th></tr></thead><tbody>{result.map(row => <tr key={row.ticker}><th scope="row">{row.ticker}</th><td>{money(row.value, false)}</td><td>{(row.currentWeight * 100).toFixed(2)}%</td><td>{(row.targetWeight * 100).toFixed(2)}%</td><td>{money(row.targetValue, false)}</td><td>{money(row.change, false)}</td></tr>)}</tbody></table></div></>}
+        <div className="table-scroll"><table><caption>Target allocation dollar changes</caption><thead><tr><th>Asset</th><th>Current value</th><th>Current weight</th><th>Target weight</th><th>Target value</th><th>Dollar change</th><th>Estimated target shares</th><th>Estimated share change</th></tr></thead><tbody>{result.map((row, i) => { const estimate = allocationShareEstimate(i === 0 ? undefined : marks.holdings[i - 1], row.targetValue, basisChecked); return <tr key={row.ticker}><th scope="row">{row.ticker}</th><td>{money(row.value, false)}</td><td>{(row.currentWeight * 100).toFixed(2)}%</td><td>{(row.targetWeight * 100).toFixed(2)}%</td><td>{money(row.targetValue, false)}</td><td>{money(row.change, false)}</td><td title={estimate.reason || undefined}>{estimate.targetShares === null ? '—' : estimate.targetShares.toLocaleString(undefined, { maximumFractionDigits: 6 })}{basisChecked && estimate.reason && <small> {estimate.reason}</small>}</td><td title={estimate.reason || undefined}>{estimate.shareChange === null ? '—' : estimate.shareChange.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td></tr>; })}</tbody></table></div></>}
     </>}
   </section>;
 }

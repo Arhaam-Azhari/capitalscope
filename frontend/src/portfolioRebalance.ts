@@ -39,3 +39,21 @@ export function currentAllocationTargets(marks: PortfolioMarks) {
   for (let i = 0; i < remaining; i++) points[order[i].index]++;
   return points.map(value => (value / 100).toFixed(2));
 }
+
+export function allocationShareEstimate(holding: PortfolioMarks['holdings'][number] | undefined, targetValue: number, basisChecked: boolean) {
+  const unavailable = (reason: string | null) => ({ targetShares: null, shareChange: null, reason });
+  if (!holding) return unavailable(null);
+  if (!basisChecked) return unavailable('Share basis not checked');
+  const { quantity, close, value } = holding;
+  if (close === null || !Number.isFinite(close) || close <= 0 || !Number.isFinite(quantity) || quantity <= 0)
+    return unavailable('Recorded shares or stored close unavailable');
+  const impliedValue = quantity * close;
+  // I check arithmetic consistency here; the manual acknowledgment does not verify split history.
+  if (value === null || !Number.isFinite(value) || !Number.isFinite(impliedValue)
+    || Math.abs(value - impliedValue) > Math.max(0.000001, Math.abs(value) * 1e-10))
+    return unavailable('Recorded shares and stored value do not match');
+  const targetShares = targetValue / close, shareChange = targetShares - quantity;
+  if (!Number.isFinite(targetShares) || targetShares < 0 || !Number.isFinite(shareChange))
+    return unavailable('Fractional estimate unavailable');
+  return { targetShares, shareChange, reason: null };
+}
