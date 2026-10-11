@@ -22,6 +22,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
 - I compare two market companies on exact shared closing-price dates, starting both indices at 100. I inspect raw-price changes, shared-date drawdowns, excluded observations, and each source snapshot, then export the aligned evidence as CSV.
+- I inspect and export every stored date in a price-comparison window, including dates excluded from alignment. I keep unavailable closes blank, define overlap against each loaded snapshot, and retain the coverage audit when there are too few shared dates to calculate a comparison.
 - I analyze a chosen window of loaded raw closes for the largest observed peak-to-trough decline and its recovery, then export each observation with source evidence. I count observation intervals rather than trading days and keep split and dividend caveats explicit.
 - I chart declines below the running price peak and inspect every decline-and-recovery episode in the window, including unfinished recoveries. I export episode depths, dates, observation counts, and the full window's close-price evidence.
 - Compare two to four saved valuation cases, inspect changed assumptions, and download their comparison as CSV.
