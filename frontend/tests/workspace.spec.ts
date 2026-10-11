@@ -1884,3 +1884,55 @@ test('I measure interval changes with their own raw endpoints and date spacing',
   expect(() => priceIntervals(comparePrices(huge, flatReference, '2026-10-01', '2026-10-03'))).toThrow('numeric range');
   expect(() => priceIntervals({ ...result, rows: [result.rows[0]] })).toThrow('at least two');
 });
+
+test('I reload stored prices and discard calculations from the previous load', async ({ page }) => {
+  await installApi(page);
+  const { current, reference } = myComparisonPrices();
+  let held = false; let release = () => {}; let started = false; let finished = false;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let mode: 'initial' | 'updated' | 'failed' | 'wrong' = 'initial';
+  await page.route('**/api/companies/AAPL/prices', route => {
+    if (mode === 'failed') return route.fulfill({ status: 503, json: { error: 'My reload failed.' } });
+    return route.fulfill({ json: mode === 'wrong' ? { ...current, ticker: 'MSFT' } : mode === 'updated' ? { ...current, days: current.days.map(day => ({ ...day, close: day.close * 2 })) } : current });
+  });
+  await page.route('**/api/companies/MSFT/prices', async route => {
+    if (held) { started = true; await gate; }
+    try { await route.fulfill({ json: reference }); } catch {} finally { finished = true; }
+  });
+  await openCatalog(page);
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  const prices = page.getByRole('region', { name: 'Daily prices', exact: true });
+  await prices.getByRole('button', { name: 'Analyze price drawdown' }).click();
+  await expect(prices.getByRole('button', { name: 'Download drawdown CSV', exact: true })).toBeVisible();
+  const comparison = prices.getByRole('region', { name: 'Compare company prices' });
+  await comparison.getByLabel('Comparison company').selectOption('MSFT');
+  await comparison.getByRole('button', { name: 'Load price comparison' }).click();
+  await expect(comparison.getByRole('button', { name: 'Download price intervals CSV' })).toBeVisible();
+  mode = 'updated';
+  await prices.getByRole('button', { name: 'Reload stored prices' }).click();
+  await expect(prices.getByRole('table', { name: 'Daily raw prices, newest first' }).getByRole('row', { name: /^2026-10-01/ })).toContainText('$200.00');
+  await expect(comparison.getByLabel('Comparison company')).toHaveValue('');
+  await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(0);
+  await expect(prices).toContainText('Loaded in this view');
+  held = true; finished = false;
+  await comparison.getByLabel('Comparison company').selectOption('MSFT');
+  await comparison.getByRole('button', { name: 'Load price comparison' }).click();
+  await expect.poll(() => started).toBe(true);
+  mode = 'failed';
+  await prices.getByRole('button', { name: 'Reload stored prices' }).click();
+  await expect(prices.getByRole('alert')).toContainText('My reload failed');
+  release();
+  await expect.poll(() => finished).toBe(true);
+  await expect(comparison).toHaveCount(0);
+  await expect(prices.getByRole('table')).toHaveCount(0);
+  await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(0);
+  mode = 'wrong';
+  await prices.getByRole('button', { name: 'Retry prices' }).click();
+  await expect(prices.getByRole('alert')).toContainText('do not match');
+  mode = 'initial';
+  await prices.getByRole('button', { name: 'Retry prices' }).click();
+  await expect(prices.getByRole('table', { name: 'Daily raw prices, newest first' })).toBeVisible();
+  await expect(prices.getByRole('alert')).toHaveCount(0);
+  await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(0);
+});

@@ -8,10 +8,16 @@ export default function PricePanel({ company, companies }: { company: Company; c
   const [history, setHistory] = useState<PriceHistory | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
+  const [loadedAt, setLoadedAt] = useState('');
+  function reload() { setHistory(null); setLoadedAt(''); setError(''); setAttempt(n => n + 1); }
   useEffect(() => {
     const controller = new AbortController(); setHistory(null); setError('');
     const path = company.ticker === 'DEMO' ? '/api/examples/prices' : `/api/companies/${company.ticker}/prices`;
-    request<PriceHistory>(path, { signal: controller.signal }).then(data => { if (!controller.signal.aborted) setHistory(data); })
+    request<PriceHistory>(path, { signal: controller.signal }).then(data => {
+      if (controller.signal.aborted) return;
+      if (data.ticker !== company.ticker) throw new Error('The returned prices do not match the selected company.');
+      setHistory(data); setLoadedAt(new Date().toISOString());
+    })
       .catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
   }, [company.ticker, attempt]);
@@ -22,9 +28,11 @@ export default function PricePanel({ company, companies }: { company: Company; c
   return <section className="panel" aria-labelledby="prices-heading">
     <div className="panel-title"><div><span className="eyebrow">MARKET HISTORY</span><h2 id="prices-heading">Daily prices</h2></div><span className="pill">Raw close · USD</span></div>
     <p className="notice warning">These are unadjusted daily prices, not live quotes. Splits and dividends are not accounted for. Price changes here are not total returns.</p>
-    {error ? <div className="notice error" role="alert">{error}<button className="secondary" onClick={() => setAttempt(n => n + 1)}>Retry prices</button></div> : !history ? <p role="status">Loading daily prices…</p> : <>
+    <div className="export-actions"><button className="secondary" disabled={!history} onClick={reload}>Reload stored prices</button><p className="muted small">Reads the current company's server-held price history again and clears calculations based on the previous load. Server caching still applies; this does not force fresh provider quotes.</p></div>
+    {error ? <div className="notice error" role="alert">{error}<button className="secondary" onClick={reload}>Retry prices</button></div> : !history ? <p role="status">Loading daily prices…</p> : <>
       {history.dataMode === 'example' && <p className="notice example">These prices are invented for the fictional example company. Dates include calendar days and do not represent an exchange trading calendar.</p>}
       <p className="muted small">{history.source} · {history.days.length} observations{history.retrievedAt && ` · Retrieved ${new Date(history.retrievedAt).toLocaleString()}`}{history.sourceUrl && <> · <a href={history.sourceUrl} target="_blank" rel="noreferrer">Provider documentation ↗</a></>}</p>
+      <p className="muted small">Loaded in this view {new Date(loadedAt).toLocaleString()}. This load time is separate from the provider snapshot's retrieval time.</p>
       <PriceDrawdownPanel key={JSON.stringify(history)} history={history} />
       {history.dataMode === 'market' && <PriceComparisonPanel key={JSON.stringify(history)} history={history} companies={companies} />}
       {days.length > 0 && <div className="trend"><svg viewBox="0 0 520 220" role="img" aria-label="Daily closing price trend; exact prices are in the table below">
