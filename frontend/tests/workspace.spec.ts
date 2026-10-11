@@ -42,6 +42,7 @@ async function installApi(page: Page) {
     if (path.endsWith('/scenarios/price-context')) return route.fulfill({ json: { ticker: path.split('/')[3], dataMode: path.includes('/DEMO/') ? 'example' : 'market',
       evaluatedAt: '2026-10-08T00:00:00Z', shareBasisConfirmed: false, quote: null, quoteError: 'No stored close in this fixture.', scenarios: [] } });
     if (path.endsWith('/allocation-targets') && route.request().method() === 'GET') return route.fulfill({ json: [] });
+    if (path.endsWith('/price-comparison-setups') && route.request().method() === 'GET') return route.fulfill({ json: [] });
     if (path.endsWith('/scenarios')) return route.fulfill({ json: [] });
     if (path === '/api/companies') return route.fulfill({ json: catalog });
     if (path === '/api/universe') return route.fulfill({ json: { asOf: '2026-10-06', count: 50, dynamic: false } });
@@ -2031,4 +2032,54 @@ test('I download the full price snapshot independently of a drawdown window', as
   await prices.getByRole('button', { name: 'Reload stored prices' }).click();
   await expect(prices.getByRole('alert')).toHaveCount(0);
   await expect(prices.getByRole('button', { name: 'Download raw price history CSV', exact: true })).toBeEnabled();
+});
+
+test('I save comparison inputs and reload them without restoring old prices', async ({ page }) => {
+  await installApi(page);
+  const { current, reference } = myComparisonPrices();
+  let referenceReads = 0;
+  let setups: { id: string; currentTicker: string; referenceTicker: string; name: string; startDate: string; endDate: string; createdAt: string; modelVersion: string }[] = [];
+  const writes: unknown[] = [];
+  await page.route('**/api/companies/AAPL/prices', route => route.fulfill({ json: current }));
+  await page.route('**/api/companies/MSFT/prices', route => { referenceReads++; return route.fulfill({ json: reference }); });
+  await page.route('**/api/companies/AAPL/price-comparison-setups*', route => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON(); writes.push(body);
+      const item = { ...body, id: 'my-tech-window', currentTicker: 'AAPL', modelVersion: 'price-comparison-setup-v1', createdAt: '2026-10-11T23:00:00Z' };
+      setups = [item, ...setups]; return route.fulfill({ status: 201, json: item });
+    }
+    return route.fulfill({ json: setups });
+  });
+  await page.route('**/api/companies/AAPL/price-comparison-setups/*', route => { setups = setups.filter(item => !route.request().url().endsWith(item.id)); return route.fulfill({ status: 204 }); });
+  await openCatalog(page);
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  const comparison = page.getByRole('region', { name: 'Compare company prices' });
+  const saved = comparison.getByRole('region', { name: 'Saved price comparison setups' });
+  await saved.getByLabel('Price comparison setup name').fill('My tech window');
+  await expect(saved.getByRole('button', { name: 'Save price comparison setup', exact: true })).toBeDisabled();
+  await comparison.getByLabel('Comparison company').selectOption('MSFT');
+  await comparison.getByRole('button', { name: 'Load price comparison', exact: true }).click();
+  await saved.getByRole('button', { name: 'Save price comparison setup', exact: true }).click();
+  await expect(saved.getByRole('button', { name: 'Load setup My tech window', exact: true })).toBeVisible();
+  expect(writes).toEqual([{ name: 'My tech window', referenceTicker: 'MSFT', startDate: '2026-10-01', endDate: '2026-10-04' }]);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await comparison.getByLabel('Comparison company').selectOption('NVDA');
+  const beforeLoad = referenceReads;
+  await saved.getByRole('button', { name: 'Load setup My tech window', exact: true }).click();
+  await expect(comparison.getByLabel('Comparison company')).toHaveValue('MSFT');
+  await expect(comparison.getByRole('button', { name: 'Download price comparison CSV', exact: true })).toHaveCount(0);
+  expect(referenceReads).toBe(beforeLoad);
+  await page.reload();
+  await openCatalog(page);
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  await expect(saved.getByRole('button', { name: 'Load setup My tech window', exact: true })).toBeVisible();
+  await expect(comparison.getByLabel('Comparison company')).toHaveValue('');
+  await saved.getByRole('button', { name: 'Load setup My tech window', exact: true }).click();
+  await comparison.getByRole('button', { name: 'Load price comparison', exact: true }).click();
+  await expect(comparison.getByRole('button', { name: 'Download price comparison CSV', exact: true })).toBeVisible();
+  await saved.getByRole('button', { name: 'Delete setup My tech window', exact: true }).click();
+  await expect(saved).toContainText('No saved price comparison setups');
 });

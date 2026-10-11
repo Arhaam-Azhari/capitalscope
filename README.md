@@ -24,6 +24,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 - I export the full loaded raw OHLC and volume history as CSV, regardless of analysis windows or filters. I include source evidence and separate provider, view-load, and export dates, and reject invalid observations instead of silently omitting them.
 - I reload server-held price history without leaving the Prices view. I clear dependent calculations and pending comparisons, show the new view-load time separately from provider retrieval time, and leave server caching intact.
 - I compare two market companies on exact shared closing-price dates, starting both indices at 100. I inspect raw-price changes, shared-date drawdowns, excluded observations, and each source snapshot, then export the aligned evidence as CSV.
+- I save named company pairs and date windows in the shared database, then reload their inputs for a new price comparison. I save no price snapshots or results in these setups; old windows may no longer overlap the available observations.
 - I compare price changes between adjacent shared dates, inspect the highest and lowest intervals, and export the raw endpoints and percentage-point gaps. I show calendar spacing and keep unequal intervals separate from daily or total-return performance.
 - I review intervals by displayed minimum gap and direction, or sort by unrounded absolute gap. I keep summary metrics and CSV exports complete regardless of these review controls, and reset the controls when the comparison changes.
 - I inspect and export every stored date in a price-comparison window, including dates excluded from alignment. I keep unavailable closes blank, define overlap against each loaded snapshot, and retain the coverage audit when there are too few shared dates to calculate a comparison.
@@ -101,6 +102,9 @@ java -jar backend/target/capitalscope-0.1.0.jar
 
 | Endpoint | Purpose |
 | --- | --- |
+| `GET /api/companies/{ticker}/price-comparison-setups` | I list saved comparison inputs for a market company |
+| `POST /api/companies/{ticker}/price-comparison-setups` | I save `{name, referenceTicker, startDate, endDate}` without fetching prices |
+| `DELETE /api/companies/{ticker}/price-comparison-setups/{id}` | I delete a setup scoped to its current company |
 | `GET /api/companies/{ticker}/prices` | Cached daily raw prices from Alpha Vantage |
 | `GET /api/examples/prices` | Invented price series for the fictional company |
 | `GET /api/watchlist` | Shared saved research shortlist |

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { comparePrices, priceComparisonCsv, priceComparisonCoverage } from './priceComparison';
 import PriceCoveragePanel from './PriceCoveragePanel';
 import PriceIntervalPanel from './PriceIntervalPanel';
+import SavedPriceComparisonSetups from './SavedPriceComparisonSetups';
 import { priceDrawdown } from './priceDrawdown';
 import { money, request } from './api';
 import type { Company, PriceHistory } from './types';
@@ -57,6 +58,7 @@ export default function PriceComparisonPanel({ history, companies }: { history: 
     </div><button className="secondary" disabled={loading || !ticker}>Load price comparison</button></form>
     {loading && <p role="status">Loading comparison prices…</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
+    <SavedPriceComparisonSetups currentTicker={history.ticker} referenceTicker={ticker} startDate={start} endDate={end} calculated={!!result} companies={companies} onLoad={setup => { clear(); setTicker(setup.referenceTicker); setStart(setup.startDate); setEnd(setup.endDate); }} />
     {snapshot && <PriceCoveragePanel key={snapshot.calculatedAt} current={history} reference={snapshot.reference} coverage={snapshot.coverage} calculatedAt={snapshot.calculatedAt} />}
     {snapshot && result && <>
       <p className="muted small">{result.rows.length} shared observations: {result.rows[0].date} through {result.rows[result.rows.length - 1].date}. Excluded in-window observations: {history.ticker} {result.currentExcluded}; {snapshot.reference.ticker} {result.referenceExcluded}. No dates are filled in.</p>
