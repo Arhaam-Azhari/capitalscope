@@ -140,7 +140,7 @@ export default function App() {
         </>}
         {section === 'Valuation' && <ValuationPanel key={selected} company={company} />}
         {section === 'Compare companies' && <CompanyComparison companies={companies} peers={comparisonPeers} onChange={changeComparison} contextTicker={selected} onOpen={ticker => navigate(ticker, 'Research summary')} />}
-        {section === 'Prices' && <PricePanel key={selected} company={company} />}
+        {section === 'Prices' && <PricePanel key={selected} company={company} companies={companies} />}
         {section === 'Portfolios' && <PortfolioPanel companies={companies} onCompare={compareHoldings} onOpen={ticker => navigate(ticker, 'Research summary')} />}
         {section === 'Watchlist' && <WatchlistPanel companies={companies} currentTicker={selected} onOpen={(ticker, target) => { navigate(ticker, target); }} />}
         {section === 'Research summary' && <ResearchSummary key={selected} company={company} report={report} financialLoading={loading} financialError={reportError} onOpen={target => navigate(selected, target)} />}
