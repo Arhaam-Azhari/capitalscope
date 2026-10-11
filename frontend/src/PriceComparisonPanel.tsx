@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { comparePrices, priceComparisonCsv, priceComparisonCoverage } from './priceComparison';
 import PriceCoveragePanel from './PriceCoveragePanel';
+import PriceIntervalPanel from './PriceIntervalPanel';
 import { priceDrawdown } from './priceDrawdown';
 import { money, request } from './api';
 import type { Company, PriceHistory } from './types';
@@ -72,6 +73,7 @@ export default function PriceComparisonPanel({ history, companies }: { history: 
       </svg><p className="muted small">{history.ticker}: solid violet; {snapshot.reference.ticker}: dashed green. Vertical axis spans observed index values and does not start at zero. Dates are spaced by observation order, not calendar time.</p></div>
       <div className="table-scroll"><table><caption>Shared-date raw closes and index values</caption><thead><tr><th>Date</th><th>{history.ticker} raw close</th><th>{snapshot.reference.ticker} raw close</th><th>{history.ticker} index</th><th>{snapshot.reference.ticker} index</th></tr></thead><tbody>{result.rows.map(row => <tr key={row.date}><th scope="row">{row.date}</th><td>{money(row.currentClose, false)}</td><td>{money(row.referenceClose, false)}</td><td>{row.currentIndex.toFixed(2)}</td><td>{row.referenceIndex.toFixed(2)}</td></tr>)}</tbody></table></div>
       <div className="export-actions"><button className="secondary" onClick={download}>Download price comparison CSV</button><p className="muted small">Exports shared closes, unrounded indices and metrics, coverage counts, each source and retrieval date, and model limits.</p></div>
+      <PriceIntervalPanel key={snapshot.calculatedAt} current={history} reference={snapshot.reference} result={result} calculatedAt={snapshot.calculatedAt} />
     </>}
   </section>;
 }
