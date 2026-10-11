@@ -1,13 +1,20 @@
 import { useState } from 'react';
 import { priceIntervals, priceIntervalsCsv } from './priceIntervals';
+import { reviewPriceIntervals, type IntervalDirection, type IntervalOrder } from './priceIntervalReview';
 import type { comparePrices } from './priceComparison';
 import type { PriceHistory } from './types';
 
 export default function PriceIntervalPanel({ current, reference, result, calculatedAt }: { current: PriceHistory; reference: PriceHistory; result: ReturnType<typeof comparePrices>; calculatedAt: string }) {
   const [error, setError] = useState('');
+  const [minimumGap, setMinimumGap] = useState('');
+  const [direction, setDirection] = useState<IntervalDirection>('all');
+  const [order, setOrder] = useState<IntervalOrder>('oldest');
   let intervals: ReturnType<typeof priceIntervals>;
   try { intervals = priceIntervals(result); }
   catch (e) { return <p className="notice warning" role="status">Interval comparison unavailable: {(e as Error).message}</p>; }
+  let reviewed: typeof intervals.rows = []; let reviewError = '';
+  try { reviewed = reviewPriceIntervals(intervals.rows, minimumGap, direction, order); }
+  catch (e) { reviewError = (e as Error).message; }
   const evidence = (row: typeof intervals.rows[number], field: 'currentChangePercent' | 'referenceChangePercent') => <>{row[field].toFixed(2)}%<small className="comparison-evidence">{row.startDate} → {row.endDate} · {row.calendarDays} calendar days</small></>;
   function download() {
     try {
@@ -26,8 +33,18 @@ export default function PriceIntervalPanel({ current, reference, result, calcula
       <tr><th scope="row">{reference.ticker}</th><td>{evidence(intervals.referenceHighest, 'referenceChangePercent')}</td><td>{evidence(intervals.referenceLowest, 'referenceChangePercent')}</td></tr>
     </tbody></table></div>
     <p className="muted small">Ties keep the earliest interval. Highest can still be negative and lowest can still be positive. Interval changes compound rather than add to the full-window change. The gap is not a relative return or a ranking.</p>
-    <details><summary>Inspect every shared-date interval</summary><div className="table-scroll"><table><caption>Shared-date interval price changes, oldest first</caption><thead><tr><th>Start</th><th>End</th><th>Calendar days</th><th>{current.ticker} change</th><th>{reference.ticker} change</th><th>Gap (percentage points)</th></tr></thead><tbody>{intervals.rows.map(row => <tr key={row.endDate}><th scope="row">{row.startDate}</th><td>{row.endDate}</td><td>{row.calendarDays}</td><td>{row.currentChangePercent.toFixed(2)}%</td><td>{row.referenceChangePercent.toFixed(2)}%</td><td>{row.gapPoints.toFixed(2)}</td></tr>)}</tbody></table></div></details>
-    <div className="export-actions"><button className="secondary" onClick={download}>Download price intervals CSV</button><p className="muted small">Includes both raw endpoint closes, unrounded changes and gaps, date spacing, coverage counts, source evidence, and calculation dates.</p></div>
+    <details><summary>Inspect every shared-date interval</summary>
+      <div className="stress-inputs">
+        <label>Minimum absolute interval gap (percentage points)<input type="number" min="0" step="0.01" placeholder="0" value={minimumGap} onChange={event => setMinimumGap(event.target.value)} /></label>
+        <label>Interval gap direction<select value={direction} onChange={event => setDirection(event.target.value as IntervalDirection)}><option value="all">Both directions</option><option value="current-higher">{current.ticker} change higher</option><option value="reference-higher">{reference.ticker} change higher</option></select></label>
+        <label>Interval review order<select value={order} onChange={event => setOrder(event.target.value as IntervalOrder)}><option value="oldest">Oldest first</option><option value="largest-gap">Largest absolute gap first</option></select></label>
+      </div>
+      <p className="muted small">Filters use the displayed gap rounded to two decimals, with an inclusive minimum; blank means zero. Direction also uses that displayed gap, so displayed ties match neither higher direction. Gap sorting uses unrounded magnitudes, with earliest dates breaking ties. The summary and CSV still include every interval; review controls do not change the comparison or request prices.</p>
+      {reviewError ? <p className="notice warning" role="status">{reviewError}</p> : <p className="muted small" role="status">Showing {reviewed.length} of {intervals.rows.length} intervals.{reviewed.length === 0 && ' No intervals match this review.'}</p>}
+      <button className="secondary" onClick={() => { setMinimumGap(''); setDirection('all'); setOrder('oldest'); }}>Reset interval review</button>
+      {!reviewError && <div className="table-scroll"><table><caption>Shared-date interval price changes, {order === 'oldest' ? 'oldest first' : 'largest absolute gap first'}</caption><thead><tr><th>Start</th><th>End</th><th>Calendar days</th><th>{current.ticker} change</th><th>{reference.ticker} change</th><th>Gap (percentage points)</th></tr></thead><tbody>{reviewed.map(row => <tr key={row.endDate}><th scope="row">{row.startDate}</th><td>{row.endDate}</td><td>{row.calendarDays}</td><td>{row.currentChangePercent.toFixed(2)}%</td><td>{row.referenceChangePercent.toFixed(2)}%</td><td>{row.gapPoints.toFixed(2)}</td></tr>)}</tbody></table></div>}
+    </details>
+    <div className="export-actions"><button className="secondary" onClick={download}>Download price intervals CSV</button><p className="muted small">Always includes every interval in chronological order, regardless of review filters, with raw endpoints, unrounded changes, date spacing, coverage counts, source evidence, and calculation dates.</p></div>
     {error && <p className="notice error" role="alert">{error}</p>}
   </section>;
 }
