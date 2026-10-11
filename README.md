@@ -21,6 +21,7 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 ## What I can do
 
 - Inspect daily price history with source, retrieval date, and raw-price caveats.
+- I export the full loaded raw OHLC and volume history as CSV, regardless of analysis windows or filters. I include source evidence and separate provider, view-load, and export dates, and reject invalid observations instead of silently omitting them.
 - I reload server-held price history without leaving the Prices view. I clear dependent calculations and pending comparisons, show the new view-load time separately from provider retrieval time, and leave server caching intact.
 - I compare two market companies on exact shared closing-price dates, starting both indices at 100. I inspect raw-price changes, shared-date drawdowns, excluded observations, and each source snapshot, then export the aligned evidence as CSV.
 - I compare price changes between adjacent shared dates, inspect the highest and lowest intervals, and export the raw endpoints and percentage-point gaps. I show calendar spacing and keep unequal intervals separate from daily or total-return performance.
