@@ -3,13 +3,25 @@ import { money, request } from './api';
 import type { Company, PriceHistory } from './types';
 import PriceDrawdownPanel from './PriceDrawdownPanel';
 import PriceComparisonPanel from './PriceComparisonPanel';
+import { rawPricesCsv } from './rawPricesCsv';
 
 export default function PricePanel({ company, companies }: { company: Company; companies: Company[] }) {
   const [history, setHistory] = useState<PriceHistory | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   const [loadedAt, setLoadedAt] = useState('');
-  function reload() { setHistory(null); setLoadedAt(''); setError(''); setAttempt(n => n + 1); }
+  const [exportError, setExportError] = useState('');
+  function reload() { setHistory(null); setLoadedAt(''); setError(''); setExportError(''); setAttempt(n => n + 1); }
+  function download() {
+    if (!history) return;
+    try {
+      const csv = rawPricesCsv(history, loadedAt, new Date().toISOString());
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${history.ticker}-raw-price-history.csv`;
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+      setExportError('');
+    } catch (e) { setExportError((e as Error).message); }
+  }
   useEffect(() => {
     const controller = new AbortController(); setHistory(null); setError('');
     const path = company.ticker === 'DEMO' ? '/api/examples/prices' : `/api/companies/${company.ticker}/prices`;
@@ -33,6 +45,8 @@ export default function PricePanel({ company, companies }: { company: Company; c
       {history.dataMode === 'example' && <p className="notice example">These prices are invented for the fictional example company. Dates include calendar days and do not represent an exchange trading calendar.</p>}
       <p className="muted small">{history.source} · {history.days.length} observations{history.retrievedAt && ` · Retrieved ${new Date(history.retrievedAt).toLocaleString()}`}{history.sourceUrl && <> · <a href={history.sourceUrl} target="_blank" rel="noreferrer">Provider documentation ↗</a></>}</p>
       <p className="muted small">Loaded in this view {new Date(loadedAt).toLocaleString()}. This load time is separate from the provider snapshot's retrieval time.</p>
+      <div className="export-actions"><button className="secondary" disabled={history.days.length === 0} onClick={download}>Download raw price history CSV</button><p className="muted small">Exports every loaded OHLC and volume observation, newest first, regardless of analysis windows or filters. Includes source, provider retrieval, view-load, and export dates without requesting new prices.</p></div>
+      {exportError && <p className="notice error" role="alert">{exportError}</p>}
       <PriceDrawdownPanel key={JSON.stringify(history)} history={history} />
       {history.dataMode === 'market' && <PriceComparisonPanel key={JSON.stringify(history)} history={history} companies={companies} />}
       {days.length > 0 && <div className="trend"><svg viewBox="0 0 520 220" role="img" aria-label="Daily closing price trend; exact prices are in the table below">

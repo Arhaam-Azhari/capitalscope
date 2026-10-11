@@ -3,6 +3,7 @@ import { priceDrawdown, priceDrawdownCsv } from '../src/priceDrawdown';
 import { comparePrices, priceComparisonCsv, priceComparisonCoverage, priceCoverageCsv } from '../src/priceComparison';
 import { priceIntervals, priceIntervalsCsv } from '../src/priceIntervals';
 import { reviewPriceIntervals } from '../src/priceIntervalReview';
+import { rawPricesCsv } from '../src/rawPricesCsv';
 import { priceDrawdownEpisodes, priceDrawdownEpisodesCsv } from '../src/priceDrawdownEpisodes';
 import { compareSavedAllocationShocks, savedAllocationShockCsv } from '../src/savedAllocationShocks';
 import { savedAllocationInputs, type SavedAllocationTarget } from '../src/savedAllocationTargets';
@@ -1939,7 +1940,8 @@ test('I reload stored prices and discard calculations from the previous load', a
   await prices.getByRole('button', { name: 'Reload stored prices' }).click();
   await expect(prices.getByRole('table', { name: 'Daily raw prices, newest first' }).getByRole('row', { name: /^2026-10-01/ })).toContainText('$200.00');
   await expect(comparison.getByLabel('Comparison company')).toHaveValue('');
-  await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(0);
+  await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(1);
+  await expect(prices.getByRole('button', { name: 'Download raw price history CSV', exact: true })).toBeVisible();
   await expect(prices).toContainText('Loaded in this view');
   held = true; finished = false;
   await comparison.getByLabel('Comparison company').selectOption('MSFT');
@@ -1960,7 +1962,7 @@ test('I reload stored prices and discard calculations from the previous load', a
   await prices.getByRole('button', { name: 'Retry prices' }).click();
   await expect(prices.getByRole('table', { name: 'Daily raw prices, newest first' })).toBeVisible();
   await expect(prices.getByRole('alert')).toHaveCount(0);
-  await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(0);
+  await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(1);
 });
 
 test('I review displayed interval gaps while preserving every export row', () => {
@@ -1977,4 +1979,56 @@ test('I review displayed interval gaps while preserving every export row', () =>
   const tied = [{ ...rows[1], gapPoints: -10 }, { ...rows[0], gapPoints: 10 }];
   expect(reviewPriceIntervals(tied, '0', 'all', 'largest-gap')[0].startDate).toBe('2026-10-01');
   for (const invalid of ['-1', 'NaN', 'Infinity', '1.234', '1e3']) expect(() => reviewPriceIntervals(rows, invalid, 'all', 'oldest')).toThrow('nonnegative');
+});
+
+test('I export complete raw observations with source dates and numeric precision', () => {
+  const history = myDrawdownHistory();
+  history.days[0] = { ...history.days[0], open: 110.123456, close: 110.123456, high: 111, low: 109, volume: 1234567 };
+  const csv = readCsv(rawPricesCsv(history, '2026-10-11T23:00:00Z', '2026-10-11T23:01:00Z'));
+  expect(csv).toHaveLength(6);
+  expect(csv[0]).toMatchObject({ observation_date: '2026-10-06', open_usd: '110.123456', close_usd: '110.123456', high_usd: '111', low_usd: '109', volume: '1234567', source: "'=My, \"raw\"\nfixture", data_mode: 'example', view_loaded_at: '2026-10-11T23:00:00Z', exported_at: '2026-10-11T23:01:00Z', provider_retrieved_at: '2026-10-09T00:00:00Z' });
+  expect(csv[5].observation_date).toBe('2026-10-01');
+  expect(readCsv(rawPricesCsv({ ...history, days: history.days.slice(0, 1), retrievedAt: null }, 'load', 'export'))[0].provider_retrieved_at).toBe('');
+  expect(() => rawPricesCsv({ ...history, days: [] }, 'load', 'export')).toThrow('no stored');
+  expect(() => rawPricesCsv({ ...history, days: [...history.days, history.days[0]] }, 'load', 'export')).toThrow('unique valid');
+  expect(() => rawPricesCsv({ ...history, days: [{ ...history.days[0], date: '2026-02-30' }] }, 'load', 'export')).toThrow('unique valid');
+  for (const volume of [-1, 1.5, NaN, Number.MAX_SAFE_INTEGER + 1]) expect(() => rawPricesCsv({ ...history, days: [{ ...history.days[0], volume }] }, 'load', 'export')).toThrow('exact integer');
+  for (const close of [0, Infinity, NaN, 200]) expect(() => rawPricesCsv({ ...history, days: [{ ...history.days[0], close }] }, 'load', 'export')).toThrow('OHLC');
+  expect(() => rawPricesCsv({ ...history, adjusted: true }, 'load', 'export')).toThrow('unadjusted USD');
+});
+
+test('I download the full price snapshot independently of a drawdown window', async ({ page }) => {
+  await installApi(page);
+  const { current } = myComparisonPrices();
+  let reads = 0;
+  await page.route('**/api/companies/AAPL/prices', route => { reads++; return route.fulfill({ json: current }); });
+  await openCatalog(page);
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  const prices = page.getByRole('region', { name: 'Daily prices', exact: true });
+  await expect(prices.getByRole('button', { name: 'Download raw price history CSV', exact: true })).toBeEnabled();
+  const initialReads = reads;
+  await prices.getByLabel('Drawdown start date').selectOption('2026-10-03');
+  await prices.getByRole('button', { name: 'Analyze price drawdown' }).click();
+  const pending = page.waitForEvent('download');
+  await prices.getByRole('button', { name: 'Download raw price history CSV', exact: true }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('AAPL-raw-price-history.csv');
+  const { readFile } = await import('node:fs/promises');
+  const rows = readCsv(await readFile((await file.path())!, 'utf8'));
+  expect(rows).toHaveLength(4);
+  expect(rows.map(row => row.observation_date)).toEqual(['2026-10-04', '2026-10-03', '2026-10-02', '2026-10-01']);
+  expect(rows[3]).toMatchObject({ ticker: 'AAPL', open_usd: '100', close_usd: '100', volume: '100', data_mode: 'market' });
+  expect(Number.isNaN(Date.parse(rows[0].view_loaded_at))).toBe(false);
+  expect(Number.isNaN(Date.parse(rows[0].exported_at))).toBe(false);
+  expect(reads).toBe(initialReads);
+  await page.route('**/api/companies/AAPL/prices', route => route.fulfill({ json: { ...current, days: [{ ...current.days[0], volume: 1.5 }] } }));
+  await prices.getByRole('button', { name: 'Reload stored prices' }).click();
+  await expect(prices.getByRole('table', { name: 'Daily raw prices, newest first' }).getByRole('row')).toHaveCount(2);
+  await prices.getByRole('button', { name: 'Download raw price history CSV', exact: true }).click();
+  await expect(prices.getByRole('alert')).toContainText('exact integer');
+  await page.route('**/api/companies/AAPL/prices', route => route.fulfill({ json: current }));
+  await prices.getByRole('button', { name: 'Reload stored prices' }).click();
+  await expect(prices.getByRole('alert')).toHaveCount(0);
+  await expect(prices.getByRole('button', { name: 'Download raw price history CSV', exact: true })).toBeEnabled();
 });
