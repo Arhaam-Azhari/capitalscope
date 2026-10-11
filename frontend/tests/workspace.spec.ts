@@ -1,5 +1,6 @@
 import { compareSavedAllocations, savedAllocationComparisonCsv } from '../src/savedAllocationComparison';
 import { priceDrawdown, priceDrawdownCsv } from '../src/priceDrawdown';
+import { comparePrices, priceComparisonCsv } from '../src/priceComparison';
 import { priceDrawdownEpisodes, priceDrawdownEpisodesCsv } from '../src/priceDrawdownEpisodes';
 import { compareSavedAllocationShocks, savedAllocationShockCsv } from '../src/savedAllocationShocks';
 import { savedAllocationInputs, type SavedAllocationTarget } from '../src/savedAllocationTargets';
@@ -1681,4 +1682,104 @@ test('I separate recovered and unfinished raw-close decline episodes', () => {
   expect(csv[1]).toMatchObject({ episode_number: '2', status: 'Recovery not observed within window', recovery_date: '', recovery_close_usd: '', trough_to_recovery_observation_intervals: '', episode_last_date: '2026-10-06' });
   expect(csv[1].window_closes_json).toBe(csv[0].window_closes_json);
   expect(JSON.parse(csv[0].window_closes_json)[0]).toEqual({ date: '2026-10-01', close: 100 });
+});
+
+function myComparisonPrices() {
+  const current = { ...myDrawdownHistory([100, 80, 120, 110]), ticker: 'AAPL', dataMode: 'market' as const };
+  const reference = { ...myDrawdownHistory([50, 99, 55, 60]), ticker: 'MSFT', dataMode: 'market' as const, retrievedAt: '2026-10-10T00:00:00Z', days: myDrawdownHistory([50, 99, 55, 60]).days.filter(day => day.date !== '2026-10-02') };
+  return { current, reference };
+}
+
+test('I compare raw prices only on exact shared dates', () => {
+  const { current, reference } = myComparisonPrices();
+  const result = comparePrices(current, reference, '2026-10-01', '2026-10-04');
+  expect(result.rows.map(row => row.date)).toEqual(['2026-10-01', '2026-10-03', '2026-10-04']);
+  expect(result.rows[0]).toMatchObject({ currentClose: 100, referenceClose: 50, currentIndex: 100, referenceIndex: 100 });
+  expect(result.rows[2].currentIndex).toBeCloseTo(110);
+  expect(result.rows[2].referenceIndex).toBe(120);
+  expect(result).toMatchObject({ currentExcluded: 1, referenceExcluded: 0, referenceChangePercent: 20, referenceMaximumDeclinePercent: 0 });
+  expect(result.currentChangePercent).toBeCloseTo(10);
+  expect(result.currentMaximumDeclinePercent).toBeCloseTo(100 / 12);
+  expect(priceDrawdown(current, '2026-10-01', '2026-10-04').maximumDeclinePercent).toBeCloseTo(20);
+  const shortened = comparePrices(current, reference, '2026-10-02', '2026-10-04');
+  expect(shortened.rows[0]).toMatchObject({ date: '2026-10-03', currentIndex: 100, referenceIndex: 100 });
+  const csv = readCsv(priceComparisonCsv(current, reference, result, '2026-10-11T01:00:00Z', '2026-10-11T02:00:00Z'));
+  expect(csv).toHaveLength(3);
+  expect(csv[0]).toMatchObject({ current_ticker: 'AAPL', reference_ticker: 'MSFT', shared_date: '2026-10-01', current_raw_close_usd: '100', reference_raw_close_usd: '50', current_source: "'=My, \"raw\"\nfixture", current_excluded_observations: '1', reference_retrieved_at: '2026-10-10T00:00:00Z', calculated_at: '2026-10-11T01:00:00Z' });
+  expect(csv[2].current_index_start_100).toBe(String(result.rows[2].currentIndex));
+  expect(() => comparePrices(current, current, '2026-10-01', '2026-10-04')).toThrow('distinct market');
+  expect(() => comparePrices(current, { ...reference, dataMode: 'example' }, '2026-10-01', '2026-10-04')).toThrow('example prices');
+  expect(() => comparePrices(current, { ...reference, currency: 'EUR' }, '2026-10-01', '2026-10-04')).toThrow('unadjusted USD');
+  expect(() => comparePrices(current, { ...reference, adjusted: true }, '2026-10-01', '2026-10-04')).toThrow('unadjusted USD');
+  expect(() => comparePrices(current, { ...reference, days: reference.days.map(day => ({ ...day, date: day.date.replace('10-', '09-') })) }, '2026-09-01', '2026-10-04')).toThrow('at least two dates');
+  expect(() => comparePrices(current, { ...reference, days: [reference.days[0], reference.days[0]] }, '2026-10-01', '2026-10-04')).toThrow('unique');
+  const huge = { ...current, days: [{ ...current.days[0], date: '2026-10-01', close: Number.MIN_VALUE }, { ...current.days[0], date: '2026-10-04', close: Number.MAX_VALUE }] };
+  expect(() => comparePrices(huge, reference, '2026-10-01', '2026-10-04')).toThrow('numeric range');
+});
+
+test('I load a second company and export its shared-date price comparison', async ({ page }) => {
+  await installApi(page);
+  const { current, reference } = myComparisonPrices();
+  let referenceReads = 0;
+  await page.route('**/api/companies/AAPL/prices', route => route.fulfill({ json: current }));
+  await page.route('**/api/companies/MSFT/prices', route => { referenceReads++; return route.fulfill({ json: reference }); });
+  await page.route('**/api/companies/NVDA/prices', route => route.fulfill({ status: 503, json: { error: 'My provider is unavailable.' } }));
+  await page.route('**/api/companies/GOOG/prices', route => route.fulfill({ json: { ...reference, ticker: 'WRONG' } }));
+  await openCatalog(page);
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  const panel = page.getByRole('region', { name: 'Compare company prices' });
+  await expect(panel).toBeVisible();
+  expect(referenceReads).toBe(0);
+  await expect(panel.getByLabel('Comparison company').locator('option[value="AAPL"]')).toHaveCount(0);
+  await expect(panel.getByLabel('Comparison company').locator('option[value="DEMO"]')).toHaveCount(0);
+  await panel.getByLabel('Comparison company').selectOption('MSFT');
+  await panel.getByRole('button', { name: 'Load price comparison' }).click();
+  const summary = panel.getByRole('table', { name: 'Shared-date price comparison summary' });
+  await expect(summary.getByRole('row', { name: /^AAPL/ })).toContainText('10.00%');
+  await expect(summary.getByRole('row', { name: /^MSFT/ })).toContainText('20.00%');
+  await expect(panel).toContainText('AAPL 1; MSFT 0');
+  const chart = panel.getByRole('img', { name: 'Company raw closes indexed to 100; exact shared-date values are in the table' });
+  await expect(chart.locator('polyline')).toHaveCount(2);
+  for (const line of await chart.locator('polyline').all()) expect(await line.getAttribute('points')).not.toMatch(/NaN|Infinity/);
+  const pending = page.waitForEvent('download');
+  await panel.getByRole('button', { name: 'Download price comparison CSV' }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('AAPL-MSFT-price-comparison.csv');
+  const { readFile } = await import('node:fs/promises');
+  const rows = readCsv(await readFile((await file.path())!, 'utf8'));
+  expect(rows).toHaveLength(3);
+  expect(rows[0]).toMatchObject({ shared_date: '2026-10-01', current_index_start_100: '100', reference_index_start_100: '100', current_excluded_observations: '1' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await panel.getByLabel('Price comparison start date').fill('2026-10-03');
+  await expect(summary).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Download price comparison CSV' })).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Load price comparison' }).click();
+  await expect(panel).toContainText('2 shared observations: 2026-10-03');
+  await panel.getByLabel('Comparison company').selectOption('NVDA');
+  await panel.getByRole('button', { name: 'Load price comparison' }).click();
+  await expect(panel.getByRole('alert')).toContainText('My provider is unavailable');
+  await expect(summary).toHaveCount(0);
+  await panel.getByLabel('Comparison company').selectOption('GOOG');
+  await panel.getByRole('button', { name: 'Load price comparison' }).click();
+  await expect(panel.getByRole('alert')).toContainText('do not match');
+  let release = () => {};
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let started = false; let finished = false;
+  await page.route('**/api/companies/MSFT/prices', async route => {
+    started = true; await gate;
+    try { await route.fulfill({ json: reference }); } catch {} finally { finished = true; }
+  });
+  await panel.getByLabel('Comparison company').selectOption('MSFT');
+  await panel.getByRole('button', { name: 'Load price comparison' }).click();
+  await expect.poll(() => started).toBe(true);
+  await panel.getByLabel('Comparison company').selectOption('NVDA');
+  await panel.getByRole('button', { name: 'Load price comparison' }).click();
+  await expect(panel.getByRole('alert')).toContainText('My provider is unavailable');
+  release();
+  await expect.poll(() => finished).toBe(true);
+  await expect(panel.getByRole('alert')).toContainText('My provider is unavailable');
+  await expect(summary).toHaveCount(0);
+  await expect(panel.getByRole('button', { name: 'Download price comparison CSV' })).toHaveCount(0);
 });
