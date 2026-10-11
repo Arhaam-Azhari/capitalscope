@@ -2,6 +2,7 @@ import { compareSavedAllocations, savedAllocationComparisonCsv } from '../src/sa
 import { priceDrawdown, priceDrawdownCsv } from '../src/priceDrawdown';
 import { comparePrices, priceComparisonCsv, priceComparisonCoverage, priceCoverageCsv } from '../src/priceComparison';
 import { priceIntervals, priceIntervalsCsv } from '../src/priceIntervals';
+import { reviewPriceIntervals } from '../src/priceIntervalReview';
 import { priceDrawdownEpisodes, priceDrawdownEpisodesCsv } from '../src/priceDrawdownEpisodes';
 import { compareSavedAllocationShocks, savedAllocationShockCsv } from '../src/savedAllocationShocks';
 import { savedAllocationInputs, type SavedAllocationTarget } from '../src/savedAllocationTargets';
@@ -1757,6 +1758,27 @@ test('I load a second company and export its shared-date price comparison', asyn
   expect(intervalRows).toHaveLength(2);
   expect(intervalRows[0]).toMatchObject({ interval_start: '2026-10-01', interval_end: '2026-10-03', calendar_days: '2', current_start_raw_close_usd: '100', current_end_raw_close_usd: '120', reference_start_raw_close_usd: '50', reference_end_raw_close_usd: '55', current_excluded_observations: '1' });
   expect(Number(intervalRows[0].current_interval_change_percent)).toBeCloseTo(20);
+  await intervalPanel.getByLabel('Minimum absolute interval gap (percentage points)').fill('15');
+  await expect(intervalPanel).toContainText('Showing 1 of 2 intervals');
+  await intervalPanel.getByLabel('Interval gap direction').selectOption('current-higher');
+  await expect(intervalPanel).toContainText('No intervals match this review');
+  await intervalPanel.getByLabel('Interval gap direction').selectOption('reference-higher');
+  await expect(intervalTable.getByRole('row')).toHaveCount(2);
+  const filteredDownload = page.waitForEvent('download');
+  await intervalPanel.getByRole('button', { name: 'Download price intervals CSV' }).click();
+  const filteredFile = await filteredDownload;
+  const fullRows = readCsv(await intervalFs.readFile((await filteredFile.path())!, 'utf8'));
+  expect(fullRows).toHaveLength(2);
+  expect(fullRows[0].interval_start).toBe('2026-10-01');
+  await intervalPanel.getByLabel('Minimum absolute interval gap (percentage points)').fill('-1');
+  await expect(intervalPanel).toContainText('Enter a nonnegative minimum gap');
+  await expect(intervalTable).toHaveCount(0);
+  await intervalPanel.getByRole('button', { name: 'Reset interval review' }).click();
+  await intervalPanel.getByLabel('Interval review order').selectOption('largest-gap');
+  await expect(intervalPanel.getByRole('table', { name: 'Shared-date interval price changes, largest absolute gap first' }).getByRole('row').nth(1)).toContainText('2026-10-03');
+  await intervalPanel.getByRole('button', { name: 'Reset interval review' }).click();
+  await expect(intervalTable.getByRole('row').nth(1)).toContainText('2026-10-01');
+  expect(referenceReads).toBe(1);
   const coverage = panel.getByRole('region', { name: 'Price comparison coverage' });
   await expect(coverage).toContainText('AAPL 75.00% of 4');
   await expect(coverage).toContainText('MSFT 100.00% of 3');
@@ -1785,6 +1807,7 @@ test('I load a second company and export its shared-date price comparison', asyn
   expect(rows[0]).toMatchObject({ shared_date: '2026-10-01', current_index_start_100: '100', reference_index_start_100: '100', current_excluded_observations: '1' });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await intervalPanel.getByLabel('Minimum absolute interval gap (percentage points)').fill('15');
   await panel.getByLabel('Price comparison start date').fill('2026-10-03');
   await expect(summary).toHaveCount(0);
   await expect(coverage).toHaveCount(0);
@@ -1792,6 +1815,9 @@ test('I load a second company and export its shared-date price comparison', asyn
   await expect(panel.getByRole('button', { name: 'Download price comparison CSV' })).toHaveCount(0);
   await panel.getByRole('button', { name: 'Load price comparison' }).click();
   await expect(panel).toContainText('2 shared observations: 2026-10-03');
+  await intervalPanel.locator('summary').click();
+  await expect(intervalPanel.getByLabel('Minimum absolute interval gap (percentage points)')).toHaveValue('');
+  await expect(intervalPanel.getByLabel('Interval review order')).toHaveValue('oldest');
   await panel.getByLabel('Comparison company').selectOption('NVDA');
   await panel.getByRole('button', { name: 'Load price comparison' }).click();
   await expect(panel.getByRole('alert')).toContainText('My provider is unavailable');
@@ -1935,4 +1961,20 @@ test('I reload stored prices and discard calculations from the previous load', a
   await expect(prices.getByRole('table', { name: 'Daily raw prices, newest first' })).toBeVisible();
   await expect(prices.getByRole('alert')).toHaveCount(0);
   await expect(prices.getByRole('button', { name: /Download/ })).toHaveCount(0);
+});
+
+test('I review displayed interval gaps while preserving every export row', () => {
+  const { current, reference } = myComparisonPrices();
+  const rows = priceIntervals(comparePrices(current, reference, '2026-10-01', '2026-10-04')).rows;
+  expect(reviewPriceIntervals(rows, '10', 'all', 'oldest')).toHaveLength(2);
+  expect(reviewPriceIntervals(rows, '15', 'current-higher', 'oldest')).toEqual([]);
+  expect(reviewPriceIntervals(rows, '15', 'reference-higher', 'oldest')[0].startDate).toBe('2026-10-03');
+  expect(reviewPriceIntervals(rows, '', 'all', 'largest-gap')[0].startDate).toBe('2026-10-03');
+  expect(rows[0].startDate).toBe('2026-10-01');
+  const nearBoundary = [{ ...rows[0], gapPoints: 9.999999999 }, { ...rows[1], gapPoints: -0.0001 }];
+  expect(reviewPriceIntervals(nearBoundary, '10', 'all', 'oldest')).toHaveLength(1);
+  expect(reviewPriceIntervals(nearBoundary, '', 'reference-higher', 'oldest')).toHaveLength(0);
+  const tied = [{ ...rows[1], gapPoints: -10 }, { ...rows[0], gapPoints: 10 }];
+  expect(reviewPriceIntervals(tied, '0', 'all', 'largest-gap')[0].startDate).toBe('2026-10-01');
+  for (const invalid of ['-1', 'NaN', 'Infinity', '1.234', '1e3']) expect(() => reviewPriceIntervals(rows, invalid, 'all', 'oldest')).toThrow('nonnegative');
 });
