@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { comparePrices, priceComparisonCsv } from './priceComparison';
+import { comparePrices, priceComparisonCsv, priceComparisonCoverage } from './priceComparison';
+import PriceCoveragePanel from './PriceCoveragePanel';
 import { priceDrawdown } from './priceDrawdown';
 import { money, request } from './api';
 import type { Company, PriceHistory } from './types';
@@ -9,7 +10,7 @@ export default function PriceComparisonPanel({ history, companies }: { history: 
   const [start, setStart] = useState(dates[0] || '');
   const [end, setEnd] = useState(dates[dates.length - 1] || '');
   const [ticker, setTicker] = useState('');
-  const [snapshot, setSnapshot] = useState<{ result: ReturnType<typeof comparePrices>; reference: PriceHistory; calculatedAt: string } | null>(null);
+  const [snapshot, setSnapshot] = useState<{ result: ReturnType<typeof comparePrices> | null; coverage: ReturnType<typeof priceComparisonCoverage>; reference: PriceHistory; calculatedAt: string } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const pending = useRef<AbortController | null>(null);
@@ -24,12 +25,16 @@ export default function PriceComparisonPanel({ history, companies }: { history: 
       const reference = await request<PriceHistory>(`/api/companies/${encodeURIComponent(ticker)}/prices`, { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (reference.ticker !== ticker) throw new Error('The returned prices do not match the selected comparison company.');
-      setSnapshot({ result: comparePrices(history, reference, start, end), reference, calculatedAt: new Date().toISOString() });
+      const coverage = priceComparisonCoverage(history, reference, start, end);
+      let result: ReturnType<typeof comparePrices> | null = null;
+      try { result = comparePrices(history, reference, start, end); }
+      catch (e) { setError((e as Error).message); }
+      setSnapshot({ result, coverage, reference, calculatedAt: new Date().toISOString() });
     } catch (e) { if (!controller.signal.aborted) setError((e as Error).message); }
     finally { if (!controller.signal.aborted) setLoading(false); }
   }
   function download() {
-    if (!snapshot) return;
+    if (!snapshot?.result) return;
     try {
       const csv = priceComparisonCsv(history, snapshot.reference, snapshot.result, snapshot.calculatedAt, new Date().toISOString());
       const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -51,6 +56,7 @@ export default function PriceComparisonPanel({ history, companies }: { history: 
     </div><button className="secondary" disabled={loading || !ticker}>Load price comparison</button></form>
     {loading && <p role="status">Loading comparison prices…</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
+    {snapshot && <PriceCoveragePanel key={snapshot.calculatedAt} current={history} reference={snapshot.reference} coverage={snapshot.coverage} calculatedAt={snapshot.calculatedAt} />}
     {snapshot && result && <>
       <p className="muted small">{result.rows.length} shared observations: {result.rows[0].date} through {result.rows[result.rows.length - 1].date}. Excluded in-window observations: {history.ticker} {result.currentExcluded}; {snapshot.reference.ticker} {result.referenceExcluded}. No dates are filled in.</p>
       <p className="muted small">{history.ticker}: {history.source} · Retrieved {history.retrievedAt || 'Not supplied'}. {snapshot.reference.ticker}: {snapshot.reference.source} · Retrieved {snapshot.reference.retrievedAt || 'Not supplied'}. The current series is the already loaded snapshot; reference prices are read separately. Calculated {new Date(snapshot.calculatedAt).toLocaleString()}.</p>
