@@ -27,6 +27,7 @@ export default function App() {
   const [selected, setSelected] = useState('DEMO');
   const [query, setQuery] = useState('');
   const [sector, setSector] = useState('All sectors');
+  const sectionNavigation = useRef<HTMLElement>(null);
   const catalogSummary = useRef<HTMLElement>(null);
   const catalogDetails = useRef<HTMLDetailsElement>(null);
   const [section, setSection] = useState<Section>(() => readResearchRoute().ticker === 'DEMO' ? readResearchRoute().section : 'Financials');
@@ -73,6 +74,16 @@ export default function App() {
     window.addEventListener('popstate', restore); window.addEventListener('hashchange', restore);
     return () => { window.removeEventListener('popstate', restore); window.removeEventListener('hashchange', restore); };
   }, [companies, catalogReady]);
+  useEffect(() => {
+    const navigation = sectionNavigation.current;
+    const active = navigation?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!navigation || !active) return;
+    // I keep the selected section visible without moving the research page vertically.
+    const bounds = navigation.getBoundingClientRect();
+    const item = active.getBoundingClientRect();
+    if (item.left < bounds.left) navigation.scrollLeft += item.left - bounds.left;
+    else if (item.right > bounds.right) navigation.scrollLeft += item.right - bounds.right;
+  }, [section, routeWaiting]);
   function restoreRoute(catalog: Company[], ready = catalogReady) {
     const route = readResearchRoute();
     if ((route.ticker !== 'DEMO' || route.peers) && !ready) { setRouteWaiting(true); return; }
@@ -104,12 +115,13 @@ export default function App() {
 
   if (routeWaiting) return <main className="main-content"><section className="panel"><h1>Opening research link</h1>{catalogError ? <><p className="notice error" role="alert">{catalogError}</p><button className="secondary" onClick={() => setCatalogAttempt(value => value + 1)}>Retry company catalog</button></> : <p role="status">Checking the linked company against the catalog…</p>}<button className="text-button" onClick={() => navigate('DEMO', 'Financials')}>Open example workspace</button></section></main>;
   return <div className="workspace">
+    <a className="skip-link" href="#research-content" onClick={event => { event.preventDefault(); document.getElementById('research-content')?.focus(); }}>Skip to research content</a>
     <header className="masthead">
       <a className="brand" href="#"><span className="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="12" stroke="currentColor" strokeWidth="1.5" /><circle cx="16" cy="16" r="3" fill="currentColor" /><path d="M16 1v9m0 12v9M1 16h9m12 0h9" stroke="currentColor" strokeWidth="1.5" /></svg></span><span>CapitalScope<small>Research & valuation</small></span></a>
-      <nav className="section-tabs" aria-label="Research sections">{tabs.map(t => <button key={t} onClick={() => { navigate(selected, t); }} aria-current={section === t ? 'page' : undefined} className={section === t ? 'active' : ''}>{t}</button>)}</nav>
+      <nav ref={sectionNavigation} className="section-tabs" aria-label="Research sections">{tabs.map(t => <button key={t} onClick={() => { navigate(selected, t); }} aria-current={section === t ? 'page' : undefined} className={section === t ? 'active' : ''}>{t}</button>)}</nav>
       <span className="workspace-tag"><strong>The research workbench</strong>Evidence before conviction</span>
     </header>
-    <main>
+    <main id="research-content" tabIndex={-1}>
       <div className="context-bar">
         <details className="company-browser" ref={catalogDetails} onKeyDown={event => { if (event.key === 'Escape') { closeCatalog(); catalogSummary.current?.focus(); } }}>
           <summary ref={catalogSummary}><span className="picker-icon" aria-hidden="true">⌕</span><strong>Browse companies</strong><span className="picker-current">{isExample ? 'DEMO' : company.ticker}</span><span aria-hidden="true">⌄</span></summary>

@@ -363,3 +363,5 @@ I can prepare any loaded historical record as an editor draft. I preview its sav
 
 
 I can download all recorded research revisions for the editor's company as CSV, regardless of the history pages or comparison records I have loaded. I include saved snapshots, removals, and legacy baselines in recorded order, oldest first. I keep entry IDs, versions, capture times, original save times, exported time, and manual checklist marks in separate columns. I label company names and sectors as current catalog metadata, exclude drafts, and leave my open editor unchanged. I escape commas, quotes, line breaks, and formula-like text using the same CSV rules as my other exports. The file contains only recorded history; it cannot reconstruct earlier legacy edits or verify an editor's identity.
+
+I keep the active research section visible in the scrolling mobile navigation. I can use the first keyboard link to skip straight to the research content without changing my saved research URL, and focused controls have a copper outline.

@@ -2125,3 +2125,27 @@ test('I search saved setup inputs and export hidden or unsupported records', () 
   expect(csv[1]).toMatchObject({ setup_name: "'=My, \"legacy\"\nwindow", reference_company: '', can_load_in_current_view: 'false', setup_model_version: 'future' });
   expect(Object.keys(csv[0]).some(key => /price|close|return/.test(key))).toBe(false);
 });
+
+test('I keep mobile research navigation visible and let keyboard users skip the header', async ({ page }) => {
+  await installApi(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Example Manufacturing', exact: true })).toBeVisible();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('link', { name: 'Skip to research content' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#research-content')).toBeFocused();
+  await expect(page).not.toHaveURL(/research-content/);
+  await page.getByRole('button', { name: 'Research notes', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Research notes', exact: true })).toHaveAttribute('aria-current', 'page');
+  await page.reload();
+  const navigation = page.getByRole('navigation', { name: 'Research sections' });
+  await expect.poll(() => navigation.evaluate(element => {
+    const active = element.querySelector('[aria-current="page"]')!;
+    const item = active.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    return item.left >= bounds.left - 1 && item.right <= bounds.right + 1;
+  })).toBe(true);
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await expect.poll(() => navigation.evaluate(element => element.scrollLeft)).toBe(0);
+});
