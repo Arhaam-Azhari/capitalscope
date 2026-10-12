@@ -261,3 +261,12 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
   .company-option { gap: 6px; }
   .ticker-mark { min-width: 26px; height: 26px; }
 }
+
+/* I make keyboard navigation visible without adding clutter to the reading view. */
+@media screen {
+  :where(a, button, input, select, textarea, summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  .skip-link { position: fixed; top: 12px; left: 20px; z-index: 100; padding: 12px 18px; color: var(--ink); background: var(--panel); border: 1px solid var(--accent); transform: translateY(-160%); }
+  .skip-link:focus { transform: translateY(0); }
+  #research-content:focus { outline: none; }
+}
+@media print { .skip-link { display: none; } }
