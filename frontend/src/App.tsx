@@ -84,6 +84,14 @@ export default function App() {
     if (item.left < bounds.left) navigation.scrollLeft += item.left - bounds.left;
     else if (item.right > bounds.right) navigation.scrollLeft += item.right - bounds.right;
   }, [section, routeWaiting]);
+  useEffect(() => {
+    // I close the catalog when I continue working outside it.
+    const dismiss = (event: PointerEvent) => {
+      if (catalogDetails.current?.open && event.target instanceof Node && !catalogDetails.current.contains(event.target)) closeCatalog();
+    };
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, []);
   function restoreRoute(catalog: Company[], ready = catalogReady) {
     const route = readResearchRoute();
     if ((route.ticker !== 'DEMO' || route.peers) && !ready) { setRouteWaiting(true); return; }
@@ -129,9 +137,10 @@ export default function App() {
       <div className="catalog-heading"><span className="eyebrow">COMPANY UNIVERSE</span><span className="catalog-count">{companies.length || '—'}</span></div>
       <label className="search"><span className="sr-only">Search companies</span><span aria-hidden="true">⌕</span><input placeholder="Company or ticker" value={query} onChange={e => setQuery(e.target.value)} /></label>
       <label className="sector-filter"><span className="sr-only">Filter by sector</span><select value={sector} onChange={e => setSector(e.target.value)}><option>All sectors</option>{sectors.map(s => <option key={s}>{s}</option>)}</select></label>
+      <div className="catalog-results"><span role="status">{catalogReady ? `${filtered.length} of ${companies.length} companies` : 'Loading company catalog…'}</span>{(query || sector !== 'All sectors') && <button type="button" className="text-button" onClick={() => { setQuery(''); setSector('All sectors'); }}>Clear filters</button>}</div>
       <button className={`example-switch ${isExample ? 'selected' : ''}`} onClick={() => choose('DEMO')} aria-pressed={isExample}><span aria-hidden="true">◇</span><div>Example workspace<small>Explore with invented figures</small></div></button>
       {catalogError && <div className="sidebar-error" role="alert"><p>{catalogError}</p><button onClick={() => setCatalogAttempt(n => n + 1)}>Retry catalog</button></div>}
-      <div className="company-list">{filtered.map(c => <button key={c.ticker} className={`company-option ${selected === c.ticker ? 'selected' : ''}`} onClick={() => choose(c.ticker)} aria-pressed={selected === c.ticker}><span className="ticker-mark" aria-hidden="true">{c.ticker.slice(0, 2)}</span><span className="company-option-name">{c.name}<small>{c.ticker} · {c.sector}</small></span><span aria-hidden="true">›</span></button>)}
+      <div className="company-list">{filtered.map(c => <button key={c.ticker} className={`company-option ${selected === c.ticker ? 'selected' : ''}`} onClick={() => choose(c.ticker)} aria-pressed={selected === c.ticker}><span className="ticker-mark" aria-hidden="true">{c.ticker.slice(0, 2)}</span><span className="company-option-name" title={`${c.name} (${c.ticker}) · ${c.sector}`}>{c.name}<small>{c.ticker} · {c.sector}</small></span><span aria-hidden="true">›</span></button>)}
         {!catalogError && companies.length > 0 && !filtered.length && <p className="no-companies">No matching companies. Try another name or sector.</p>}
       </div>
       <div className="sidebar-footer"><span className="status-dot" />{universeDate ? `Catalog snapshot · ${universeDate}` : 'Fixed company catalog'}<small>U.S. public companies · market-cap selection</small></div>

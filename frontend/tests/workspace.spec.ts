@@ -2172,3 +2172,27 @@ test('I reveal wide evidence columns on mobile and remove scroll controls when t
   await expect(right).toHaveCount(0);
   await expect(page.getByRole('table')).toBeVisible();
 });
+
+test('I reset catalog filters and dismiss the picker without losing my company', async ({ page }) => {
+  await installApi(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await openCatalog(page);
+  const picker = page.locator('.company-browser');
+  await expect(picker.getByRole('status')).toHaveText('50 of 50 companies');
+  await page.getByRole('textbox', { name: 'Search companies' }).fill('no matching company');
+  await page.getByRole('combobox', { name: 'Filter by sector' }).selectOption('Technology');
+  await expect(picker.getByRole('status')).toHaveText('0 of 50 companies');
+  await page.getByRole('button', { name: 'Clear filters', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Search companies' })).toHaveValue('');
+  await expect(page.getByRole('combobox', { name: 'Filter by sector' })).toHaveValue('All sectors');
+  await expect(picker.getByRole('status')).toHaveText('50 of 50 companies');
+  await page.locator('.masthead').click({ position: { x: 5, y: 5 } });
+  await expect(picker).not.toHaveAttribute('open', '');
+  await openCatalog(page);
+  await page.getByRole('textbox', { name: 'Search companies' }).fill('Apple');
+  await expect(picker.getByRole('status')).toHaveText('1 of 50 companies');
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await expect(page.getByRole('heading', { name: 'Apple', exact: true })).toBeVisible();
+  await expect(picker).not.toHaveAttribute('open', '');
+});
