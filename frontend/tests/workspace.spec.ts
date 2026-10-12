@@ -2149,3 +2149,26 @@ test('I keep mobile research navigation visible and let keyboard users skip the 
   await page.getByRole('button', { name: 'Financials', exact: true }).click();
   await expect.poll(() => navigation.evaluate(element => element.scrollLeft)).toBe(0);
 });
+
+test('I reveal wide evidence columns on mobile and remove scroll controls when they fit', async ({ page }) => {
+  await installApi(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const region = page.getByRole('region', { name: 'Revenue financial evidence' });
+  await expect(region).toBeVisible();
+  const left = page.getByRole('button', { name: 'Scroll Revenue financial evidence left' });
+  const right = page.getByRole('button', { name: 'Scroll Revenue financial evidence right' });
+  await expect(left).toBeDisabled();
+  await right.click();
+  await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  await expect(right).toBeDisabled();
+  await expect(page.getByText('Last columns in view', { exact: true })).toBeVisible();
+  await left.click();
+  await expect(left).toBeDisabled();
+  await region.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  await page.setViewportSize({ width: 1440, height: 1080 });
+  await expect(right).toHaveCount(0);
+  await expect(page.getByRole('table')).toBeVisible();
+});

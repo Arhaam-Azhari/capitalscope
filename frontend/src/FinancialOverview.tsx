@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import { useState } from 'react';
 import { money } from './api';
 import type { FinancialReport, Metric } from './types';
@@ -34,10 +35,10 @@ export default function FinancialOverview({ report }: { report: FinancialReport 
     })}</div>
     {metric && <section className="panel" aria-labelledby="trend-heading"><div className="panel-title"><div><span className="eyebrow">ANNUAL FINANCIALS</span><h2 id="trend-heading">{metric.name}</h2></div><span className="pill">Up to 5 periods</span></div>
       <div className="financial-analysis"><div className="chart-column"><span className="chart-unit">REPORTED USD / ANNUAL</span><Trend metric={metric} /></div>
-      <div className="table-scroll facts-column"><table><caption>{metric.name}: values and filing sources</caption><thead><tr><th>Period ended</th><th>Reported value</th><th>Filed</th><th>Source</th></tr></thead><tbody>
+      <EvidenceTable className="facts-column" label={`${metric.name} financial evidence`}><table><caption>{metric.name}: values and filing sources</caption><thead><tr><th>Period ended</th><th>Reported value</th><th>Filed</th><th>Source</th></tr></thead><tbody>
         {metric.annualValues.map(p => <tr key={p.periodEnd}><th scope="row">{p.periodEnd}</th><td>{money(p.value, false)}</td><td>{p.filed || '—'}</td><td>{p.sourceUrl && report.dataMode === 'sec' ? <a href={p.sourceUrl} target="_blank" rel="noreferrer">SEC filing ↗</a> : 'Example only'}</td></tr>)}
         {!metric.annualValues.length && <tr><td colSpan={4}>No supported annual facts were found. Missing data is not zero.</td></tr>}
-      </tbody></table></div></div>
+      </tbody></table></EvidenceTable></div>
       <details><summary>Accounting tags and data notes</summary><p className="small muted">{report.notes.join(' ')}</p><ul className="source-tags">{metric.annualValues.map(p => <li key={p.periodEnd}>{p.periodEnd}: <code>{p.tag}</code>{p.periodStart && ` · ${p.periodStart} to ${p.periodEnd}`}</li>)}</ul></details>
     </section>}
   </>;

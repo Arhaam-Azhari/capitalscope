@@ -270,3 +270,12 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
   #research-content:focus { outline: none; }
 }
 @media print { .skip-link { display: none; } }
+
+/* I expose horizontal table movement when the evidence needs more room. */
+.evidence-table { min-width: 0; }
+.table-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; color: var(--muted); font-size: 12px; }
+.table-navigation > div { display: flex; gap: 8px; flex-shrink: 0; }
+.table-navigation button { padding: 7px 12px; min-width: 40px; }
+.table-navigation button:disabled { cursor: default; }
+.evidence-table .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media print { .table-navigation { display: none; } }
