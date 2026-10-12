@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import { comparisonLink } from './researchNavigation';
 import SavedResearchComparison from './SavedResearchComparison';
 import { useEffect, useRef, useState } from 'react';
@@ -84,14 +85,14 @@ export default function CompanyComparison({ companies, peers, onChange, contextT
     <p className="muted small">Margins use matching start and end dates within each company. Growth uses the preceding annual revenue period, 300–400 days earlier. Missing or mismatched inputs stay blank. Cash after capex is reported operating cash flow minus capex; it is not the unlevered cash flow used by the valuation model.</p>
     {busy && <p role="status">Loading comparison…</p>}
     {failures.length > 0 && <div className="notice error" role="alert">{failures.map(f => <p key={f}>{f}</p>)}<button className="secondary" onClick={() => setAttempt(n => n + 1)}>Retry comparison</button></div>}
-    {!busy && rows.length > 0 && <div className="table-scroll"><table className="comparison-table"><caption>Latest annual fundamentals and matched-period ratios</caption><thead><tr><th>Measure</th>{rows.map(({ report }) => <th key={report.company.ticker}>{report.company.name}<small className="comparison-evidence">{report.company.ticker} · {report.company.sector}{report.retrievedAt && <span>Retrieved {new Date(report.retrievedAt).toLocaleString()}</span>}</small></th>)}</tr></thead><tbody>
+    {!busy && rows.length > 0 && <EvidenceTable label="Company fundamentals"><table className="comparison-table"><caption>Latest annual fundamentals and matched-period ratios</caption><thead><tr><th>Measure</th>{rows.map(({ report }) => <th key={report.company.ticker}>{report.company.name}<small className="comparison-evidence">{report.company.ticker} · {report.company.sector}{report.retrievedAt && <span>Retrieved {new Date(report.retrievedAt).toLocaleString()}</span>}</small></th>)}</tr></thead><tbody>
       <tr><th>Revenue</th>{rows.map(({ report, revenue }) => <td key={report.company.ticker}>{revenue ? money(revenue.value) : '—'}<Evidence point={revenue} example={mode === 'example'} /></td>)}</tr>
       <tr><th>Annual revenue growth</th>{rows.map(({ report, revenue, prior }) => <td key={report.company.ticker}>{percent(revenue && prior ? revenue.value - prior.value : undefined, prior?.value)}<Evidence point={prior} example={mode === 'example'} /></td>)}</tr>
       <tr><th>Net income margin</th>{rows.map(({ report, revenue, income }) => <td key={report.company.ticker}>{percent(income?.value, revenue?.value)}<Evidence point={income} example={mode === 'example'} /></td>)}</tr>
       <tr><th>Operating cash flow margin</th>{rows.map(({ report, revenue, operating }) => <td key={report.company.ticker}>{percent(operating?.value, revenue?.value)}<Evidence point={operating} example={mode === 'example'} /></td>)}</tr>
       <tr><th>Cash after capex</th>{rows.map(({ report, operating, capex, afterCapex }) => <td key={report.company.ticker}>{afterCapex !== undefined ? money(afterCapex) : '—'}<Evidence point={operating} example={mode === 'example'} /><Evidence point={capex} example={mode === 'example'} /></td>)}</tr>
       <tr><th>Cash after capex / revenue</th>{rows.map(({ report, revenue, afterCapex }) => <td key={report.company.ticker}>{percent(afterCapex, revenue?.value)}</td>)}</tr>
-    </tbody></table></div>}
+    </tbody></table></EvidenceTable>}
     {!busy && !rows.length && <p>No company figures are available for this comparison.</p>}
     {mode === 'sec' && <SavedResearchComparison companies={companies} tickers={selected} onOpen={onOpen} />}
   </section>;
