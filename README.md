@@ -6,6 +6,8 @@ I gave this workspace a midnight-blue and violet design, with top navigation and
 
 ![My company research workspace with explicitly labeled example figures](docs/research-dashboard.png)
 
+I use this [short demo walkthrough](docs/demo-walkthrough.md) to show the research, valuation, portfolio, and price-analysis flows. It includes a key-free route, a small calculation I can check, and the limits I explain when presenting the project.
+
 ## Run the app
 
 With Docker installed, copy `.env.example` to `.env` and set `DATABASE_PASSWORD` to a password for the local database:
