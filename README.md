@@ -2,9 +2,11 @@
 
 I'm building a workspace for company research, valuation, and practice portfolios. I can browse companies, inspect annual figures, save valuation scenarios, and keep research notes. SEC imports and valuation versions now live in a database.
 
-I gave this workspace a midnight-blue and violet design, with top navigation and a searchable company picker. I can read the annual chart beside its source table on desktop; the layout stacks on smaller screens.
+I gave CapitalScope a warm ivory and copper identity, with serif company titles, an editorial metric strip, and horizontal navigation. I checked it against my LedgerDesk UI so the projects have different colors, typography, and layouts. I keep tables readable and let wide evidence tables scroll on smaller screens.
 
 ![My company research workspace with explicitly labeled example figures](docs/research-dashboard.png)
+
+I also keep a [mobile screenshot](docs/research-dashboard-mobile.png) of the same example workspace.
 
 I use this [short demo walkthrough](docs/demo-walkthrough.md) to show the research, valuation, portfolio, and price-analysis flows. It includes a key-free route, a small calculation I can check, and the limits I explain when presenting the project.
 

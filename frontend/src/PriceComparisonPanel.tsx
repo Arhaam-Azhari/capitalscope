@@ -70,9 +70,9 @@ export default function PriceComparisonPanel({ history, companies }: { history: 
       <div className="trend"><svg viewBox="0 0 520 220" role="img" aria-label="Company raw closes indexed to 100; exact shared-date values are in the table">
         <text x="45" y="25">{high.toFixed(2)}</text><text x="45" y="195">{low.toFixed(2)}</text>
         <polyline fill="none" stroke="var(--accent)" strokeWidth="3" points={points('currentIndex')} />
-        <polyline fill="none" stroke="#6ee7b7" strokeWidth="3" strokeDasharray="6 4" points={points('referenceIndex')} />
+        <polyline fill="none" stroke="var(--reference)" strokeWidth="3" strokeDasharray="6 4" points={points('referenceIndex')} />
         <text x="45" y="215">{result.rows[0].date}</text><text x="485" y="215" textAnchor="end">{result.rows[result.rows.length - 1].date}</text>
-      </svg><p className="muted small">{history.ticker}: solid violet; {snapshot.reference.ticker}: dashed green. Vertical axis spans observed index values and does not start at zero. Dates are spaced by observation order, not calendar time.</p></div>
+      </svg><p className="muted small">{history.ticker}: solid copper; {snapshot.reference.ticker}: dashed slate. Vertical axis spans observed index values and does not start at zero. Dates are spaced by observation order, not calendar time.</p></div>
       <div className="table-scroll"><table><caption>Shared-date raw closes and index values</caption><thead><tr><th>Date</th><th>{history.ticker} raw close</th><th>{snapshot.reference.ticker} raw close</th><th>{history.ticker} index</th><th>{snapshot.reference.ticker} index</th></tr></thead><tbody>{result.rows.map(row => <tr key={row.date}><th scope="row">{row.date}</th><td>{money(row.currentClose, false)}</td><td>{money(row.referenceClose, false)}</td><td>{row.currentIndex.toFixed(2)}</td><td>{row.referenceIndex.toFixed(2)}</td></tr>)}</tbody></table></div>
       <div className="export-actions"><button className="secondary" onClick={download}>Download price comparison CSV</button><p className="muted small">Exports shared closes, unrounded indices and metrics, coverage counts, each source and retrieval date, and model limits.</p></div>
       <PriceIntervalPanel key={snapshot.calculatedAt} current={history} reference={snapshot.reference} result={result} calculatedAt={snapshot.calculatedAt} />
