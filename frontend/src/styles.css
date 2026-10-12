@@ -279,3 +279,11 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .table-navigation button:disabled { cursor: default; }
 .evidence-table .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media print { .table-navigation { display: none; } }
+
+.catalog-results { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 42px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.catalog-results .text-button { padding: 8px 0; font-size: 12px; }
+@media screen and (max-width: 480px) {
+  .company-list { grid-template-columns: 1fr; }
+  .company-option-name { white-space: normal; line-height: 1.4; }
+  .company-option small { white-space: normal; }
+}

@@ -367,3 +367,5 @@ I can download all recorded research revisions for the editor's company as CSV, 
 I keep the active research section visible in the scrolling mobile navigation. I can use the first keyboard link to skip straight to the research content without changing my saved research URL, and focused controls have a copper outline.
 
 I show horizontal scroll controls only when financial or summary evidence tables are wider than their viewport. I can move through the columns with the arrow buttons, touch scrolling, or the keyboard-focused table region; the indicator tells me when I reach the last columns. I keep these controls out of printed summaries.
+
+I show how many catalog companies match my search and sector, and I can clear both filters together. I close the picker when I click outside it or press Escape. On small phones I use one column so full company names are easier to read.
