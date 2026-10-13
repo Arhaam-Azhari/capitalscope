@@ -23,6 +23,8 @@ test('dashboard sends percentage inputs to the real Java calculator', async ({ p
   ]) await page.getByRole('spinbutton', { name: label, exact: false }).fill(value);
   await page.getByRole('button', { name: 'Calculate valuation' }).click();
   await expect(page.locator('.result-heading')).toContainText('$90.00');
+  await expect(page.getByRole('img', { name: 'Projected cash flow versus discounted present value', exact: true })).toBeVisible();
+  await expect(page.locator('.valuation-forecast')).toContainText('Forecast cash flows');
   await expect(page.getByRole('table', { name: 'Forecast cash flow and present value' }).locator('tbody tr')).toHaveCount(5);
   const breakdown = page.getByRole('table', { name: 'Value breakdown for the current model case' });
   await expect(breakdown.getByRole('row', { name: 'Enterprise value' })).toContainText('$1,000.00');
@@ -32,6 +34,7 @@ test('dashboard sends percentage inputs to the real Java calculator', async ({ p
   await expect(page.locator('.sensitivity-table td')).toHaveCount(25);
   await page.getByRole('spinbutton', { name: 'Annual growth', exact: false }).fill('1');
   await expect(page.locator('.sensitivity-table')).toHaveCount(0);
+  await expect(page.locator('.valuation-forecast')).toHaveCount(0);
 });
 
 test('unconfigured live SEC access reports a failure rather than serving example data', async ({ page }) => {

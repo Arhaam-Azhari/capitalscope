@@ -294,3 +294,19 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .valuation-bridge th { text-align: left; }
 .valuation-bridge tbody .bridge-total { background: #f4f0e7; }
 .valuation-bridge .bridge-total td { font-weight: 600; }
+
+.valuation-forecast { margin: 28px 0; }
+.valuation-forecast svg { display: block; width: 100%; max-width: 900px; height: auto; margin: 20px auto; }
+.valuation-forecast svg text { fill: var(--muted); font: 12px Arial, sans-serif; }
+.forecast-legend { display: flex; flex-wrap: wrap; gap: 12px 24px; font-size: 12px; color: var(--muted); }
+.forecast-legend > span { display: flex; align-items: center; gap: 8px; }
+.forecast-legend i { width: 24px; border-top: 3px solid var(--accent); }
+.forecast-legend .discounted-key { border-color: var(--reference); border-top-style: dashed; }
+.value-composition { padding: 18px; background: #f4f0e7; border: 1px solid var(--line); }
+.value-composition h4 { margin: 0 0 16px; }
+.value-composition-bar { display: flex; height: 12px; overflow: hidden; }
+.value-composition-bar > span:first-child { background: var(--accent); }
+.value-composition-bar > span:last-child { background: var(--reference); }
+.value-composition-labels { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; margin-top: 12px; font-size: 13px; }
+.value-composition-labels strong { display: block; margin-top: 5px; }
+.value-composition p { margin: 16px 0 0; }
