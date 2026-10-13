@@ -23,7 +23,11 @@ test('dashboard sends percentage inputs to the real Java calculator', async ({ p
   ]) await page.getByRole('spinbutton', { name: label, exact: false }).fill(value);
   await page.getByRole('button', { name: 'Calculate valuation' }).click();
   await expect(page.locator('.result-heading')).toContainText('$90.00');
-  await expect(page.locator('.valuation-result > .table-scroll tbody tr')).toHaveCount(5);
+  await expect(page.getByRole('table', { name: 'Forecast cash flow and present value' }).locator('tbody tr')).toHaveCount(5);
+  const breakdown = page.getByRole('table', { name: 'Value breakdown for the current model case' });
+  await expect(breakdown.getByRole('row', { name: 'Enterprise value' })).toContainText('$1,000.00');
+  await expect(breakdown.getByRole('row', { name: 'Equity value' })).toContainText('$900.00');
+  await expect(breakdown.getByRole('row', { name: 'Modeled value per share' })).toContainText('$90.00');
   await expect(page.locator('.sensitivity-table .base-case')).toContainText('$90.00');
   await expect(page.locator('.sensitivity-table td')).toHaveCount(25);
   await page.getByRole('spinbutton', { name: 'Annual growth', exact: false }).fill('1');

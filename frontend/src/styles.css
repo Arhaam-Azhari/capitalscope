@@ -287,3 +287,10 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
   .company-option-name { white-space: normal; line-height: 1.4; }
   .company-option small { white-space: normal; }
 }
+
+.valuation-bridge { margin: 26px 0; padding: 22px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.valuation-bridge h3 { margin-top: 0; }
+.valuation-bridge td { text-align: right; font-variant-numeric: tabular-nums; }
+.valuation-bridge th { text-align: left; }
+.valuation-bridge tbody .bridge-total { background: #f4f0e7; }
+.valuation-bridge .bridge-total td { font-weight: 600; }

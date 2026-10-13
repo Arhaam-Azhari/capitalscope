@@ -2220,3 +2220,26 @@ test('I export an unsaved research note even when browser saving fails', async (
   await expect(page.getByRole('textbox', { name: /Your notes/ })).toHaveValue(note);
   expect(await page.evaluate(() => localStorage.getItem('capitalscope.note.DEMO'))).toBeNull();
 });
+
+test('I trace valuation value through net cash and clear the breakdown when assumptions change', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/valuations/dcf', route => route.fulfill({ json: {
+    projections: [{ year: 1, freeCashFlow: 110000000, presentValue: 100000000 }],
+    terminalValue: 990000000, presentValueOfTerminalValue: 900000000,
+    enterpriseValue: 1000000000, equityValue: 1100000000, valuePerShare: 22, terminalValueShare: .9
+  } }));
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Net debt' }).fill('-100000000');
+  await page.getByRole('button', { name: 'Calculate valuation' }).click();
+  const table = page.getByRole('table', { name: 'Value breakdown for the current model case' });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole('row', { name: 'Present value of forecast cash flows' })).toContainText('$100,000,000.00');
+  await expect(table.getByRole('row', { name: 'Present value of terminal cash flows' })).toContainText('$900,000,000.00');
+  await expect(table.getByRole('row', { name: 'Enterprise value', exact: false })).toContainText('$1,000,000,000.00');
+  await expect(table.getByRole('row', { name: 'Net debt to subtract' })).toContainText('-$100,000,000.00');
+  await expect(table.getByRole('row', { name: 'Equity value', exact: false })).toContainText('$1,100,000,000.00');
+  await expect(table.getByRole('row', { name: 'Shares to divide by' })).toContainText('50,000,000');
+  await expect(table.getByRole('row', { name: 'Modeled value per share' })).toContainText('$22.00');
+  await page.getByRole('spinbutton', { name: 'Shares outstanding' }).fill('60000000');
+  await expect(table).toHaveCount(0);
+});

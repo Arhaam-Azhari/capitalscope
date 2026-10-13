@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import SensitivityTable from './SensitivityTable';
 import SavedScenarios from './SavedScenarios';
@@ -81,7 +82,20 @@ export default function ValuationPanel({ company }: { company: Company }) {
         <div className="result-heading"><span className="eyebrow">MODEL ESTIMATE</span><strong>{money(result.valuePerShare, false)}</strong><span>per share, based on your assumptions</span></div>
         <div className="result-summary"><div><span>Enterprise value</span><strong>{money(result.enterpriseValue)}</strong></div><div><span>Equity value</span><strong>{money(result.equityValue)}</strong></div><div><span>Terminal contribution</span><strong>{(result.terminalValueShare * 100).toFixed(1)}%</strong></div></div>
         {result.terminalValueShare > .75 && <p className="notice warning">More than 75% of this estimate comes from terminal value. Small changes in long-term assumptions can materially change the result.</p>}
-        <div className="table-scroll"><table><caption>Forecast cash flow and present value</caption><thead><tr><th>Year</th><th>Unlevered cash flow</th><th>Present value</th></tr></thead><tbody>{result.projections.map(p => <tr key={p.year}><th scope="row">{p.year}</th><td>{money(p.freeCashFlow)}</td><td>{money(p.presentValue)}</td></tr>)}</tbody></table></div>
+        <section className="valuation-bridge" aria-labelledby="value-bridge-heading">
+          <h3 id="value-bridge-heading">From cash flow to value per share</h3>
+          <p className="muted small">Discounted forecast cash flows plus discounted terminal value give enterprise value. Subtract net debt to reach equity value, then divide by the modeled shares. Negative net debt adds net cash.</p>
+          <EvidenceTable label="Valuation value breakdown"><table><caption>Value breakdown for the current model case</caption><thead><tr><th>Step</th><th>Amount</th></tr></thead><tbody>
+            <tr><th scope="row">Present value of forecast cash flows</th><td>{money(result.projections.reduce((total, projection) => total + projection.presentValue, 0), false)}</td></tr>
+            <tr><th scope="row">Present value of terminal cash flows</th><td>{money(result.presentValueOfTerminalValue, false)}</td></tr>
+            <tr className="bridge-total"><th scope="row">Enterprise value</th><td>{money(result.enterpriseValue, false)}</td></tr>
+            <tr><th scope="row">Net debt to subtract</th><td>{money(assumptions.netDebt, false)}</td></tr>
+            <tr className="bridge-total"><th scope="row">Equity value</th><td>{money(result.equityValue, false)}</td></tr>
+            <tr><th scope="row">Shares to divide by</th><td>{assumptions.sharesOutstanding.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td></tr>
+            <tr className="bridge-total"><th scope="row">Modeled value per share</th><td>{money(result.valuePerShare, false)}</td></tr>
+          </tbody></table></EvidenceTable>
+        </section>
+        <EvidenceTable label="Valuation forecast evidence"><table><caption>Forecast cash flow and present value</caption><thead><tr><th>Year</th><th>Unlevered cash flow</th><th>Present value</th></tr></thead><tbody>{result.projections.map(p => <tr key={p.year}><th scope="row">{p.year}</th><td>{money(p.freeCashFlow)}</td><td>{money(p.presentValue)}</td></tr>)}</tbody></table></EvidenceTable>
         <SensitivityTable assumptions={assumptions} />
         <p className="muted small">A model estimate is not a market quote. This version does not adjust for dilution, excess assets, or all non-debt claims.</p>
       </div>}
