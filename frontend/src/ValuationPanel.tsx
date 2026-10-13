@@ -1,3 +1,4 @@
+import { sessionValuationInputs, type ValuationInputs } from './valuationInputs';
 import ValuationForecast from './ValuationForecast';
 import EvidenceTable from './EvidenceTable';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -6,7 +7,7 @@ import SavedScenarios from './SavedScenarios';
 import { money, request } from './api';
 import type { Assumptions, Company, Scenario, Valuation } from './types';
 
-type FormValues = Record<keyof Assumptions, string>;
+type FormValues = ValuationInputs;
 const fields: { key: keyof Assumptions; label: string; hint: string; min?: number; max?: number; step: string }[] = [
   { key: 'baseFreeCashFlow', label: 'Starting unlevered cash flow', hint: 'USD, full amount', min: 0.01, step: 'any' },
   { key: 'growthRate', label: 'Annual growth', hint: 'Percent per year', min: -99.99, max: 100, step: 'any' },
@@ -22,7 +23,9 @@ const example: FormValues = { baseFreeCashFlow: '100000000', growthRate: '5', di
 const specialized = new Set(['BRK-B', 'JPM', 'BAC', 'MS', 'GS', 'WFC', 'UNH']);
 
 export default function ValuationPanel({ company }: { company: Company }) {
-  const [values, setValues] = useState<FormValues>(company.ticker === 'DEMO' ? example : empty);
+  const defaults = company.ticker === 'DEMO' ? example : empty;
+  const [values, setValues] = useState<FormValues>(() => sessionValuationInputs.get(company.ticker) || defaults);
+  const [inputMessage, setInputMessage] = useState(() => sessionValuationInputs.has(company.ticker) ? 'Session inputs restored. Recalculate to review or save a result.' : '');
   const [result, setResult] = useState<Valuation | null>(null);
   const [snapshot, setSnapshot] = useState<{ assumptions: Assumptions; modelVersion: string; calculatedAt: string | null; savedCase: { id: string; name: string; savedAt: string } | null } | null>(null);
   const [exportError, setExportError] = useState('');
@@ -34,7 +37,8 @@ export default function ValuationPanel({ company }: { company: Company }) {
   function edit(key: keyof Assumptions, value: string) {
     active.current?.abort();
     setBusy(false); setResult(null); setSnapshot(null); setExportError(''); setError('');
-    setValues(current => ({ ...current, [key]: value }));
+    const next = { ...values, [key]: value };
+    sessionValuationInputs.set(company.ticker, next); setValues(next); setInputMessage('Inputs kept for this app session.');
   }
 
   const assumptions = Object.fromEntries(fields.map(({ key }) => [key,
@@ -43,11 +47,18 @@ export default function ValuationPanel({ company }: { company: Company }) {
 
   function load(scenario: Scenario) {
     active.current?.abort(); setBusy(false); setError('');
-    setValues(Object.fromEntries(fields.map(({ key }) => [key,
+    const next = Object.fromEntries(fields.map(({ key }) => [key,
       String(scenario.assumptions[key] * (rateKeys.has(key) ? 100 : 1))
-    ])) as FormValues);
+    ])) as FormValues;
+    setValues(next); sessionValuationInputs.set(company.ticker, next); setInputMessage('Saved case inputs loaded and kept for this app session.');
     setResult(scenario.result); setExportError('');
     setSnapshot({ assumptions: scenario.assumptions, modelVersion: scenario.modelVersion, calculatedAt: null, savedCase: { id: scenario.id, name: scenario.name, savedAt: scenario.createdAt } });
+  }
+
+  function resetInputs() {
+    active.current?.abort(); setBusy(false); setResult(null); setSnapshot(null); setError(''); setExportError('');
+    sessionValuationInputs.delete(company.ticker); setValues(defaults);
+    setInputMessage(company.ticker === 'DEMO' ? 'Fictional example inputs restored.' : 'Valuation inputs cleared for this company.');
   }
 
   async function calculate(event: FormEvent) {
@@ -92,13 +103,15 @@ export default function ValuationPanel({ company }: { company: Company }) {
     <p className="muted">Estimate enterprise and equity value with a discounted cash flow model. Inputs are yours; reported cash flow is not automatically treated as unlevered cash flow.</p>
     {specialized.has(company.ticker) ? <div className="notice warning" role="note">{company.name} needs a sector-specific valuation approach. This general FCFF calculator is unavailable for this company.</div> : <>
       {company.ticker === 'DEMO' && <div className="notice example">These starting assumptions are invented examples. Change them to explore the model.</div>}
+      <p className="muted small">Inputs stay available for each company while this app is open. Refreshing or closing can lose them. Save a scenario to keep a model across sessions.</p>
+      {inputMessage && <p role="status" className="save-status">{inputMessage}</p>}
       <form onSubmit={calculate}>
         <div className="model-fields">{fields.map(field => <label key={field.key}>
           <span>{field.label}</span><input type="number" required value={values[field.key]} onChange={e => edit(field.key, e.target.value)} min={field.min} max={field.max} step={field.step} />
           <small>{field.hint}</small>
         </label>)}</div>
         {error && <p className="notice error" role="alert">{error}</p>}
-        <div className="model-actions"><button className="primary" type="submit" disabled={busy}>{busy ? 'Calculating…' : 'Calculate valuation'}<span aria-hidden="true"> ↗</span></button><span className="muted small">Constant growth · Gordon-growth terminal value</span></div>
+        <div className="model-actions"><button className="primary" type="submit" disabled={busy}>{busy ? 'Calculating…' : 'Calculate valuation'}<span aria-hidden="true"> ↗</span></button><button type="button" className="secondary" onClick={resetInputs}>Reset valuation inputs</button><span className="muted small">Constant growth · Gordon-growth terminal value</span></div>
       </form>
       {result && <div className="valuation-result" aria-live="polite">
         <div className="export-actions"><button type="button" className="secondary" onClick={download}>Download valuation snapshot</button><span className="muted small">JSON · assumptions, forecast, result, and case provenance</span></div>
