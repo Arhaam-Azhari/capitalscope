@@ -2312,3 +2312,31 @@ test('I export company fundamentals with matched evidence and leave unavailable 
   expect(cash.input_1_value_usd).toBe('184000000');
   expect(cash.input_2_value_usd).toBe('59000000');
 });
+
+test('I retain valuation inputs by company during navigation and reset only the current company', async ({ page }) => {
+  await installApi(page);
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('spinbutton', { name: 'Annual growth' }).fill('7.25');
+  await page.getByRole('button', { name: 'Calculate valuation' }).click();
+  await expect(page.locator('.valuation-result')).toBeVisible();
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Annual growth' })).toHaveValue('7.25');
+  await expect(page.locator('.valuation-result')).toHaveCount(0);
+  await expect(page.getByText('Session inputs restored. Recalculate to review or save a result.', { exact: true })).toBeVisible();
+  await openCatalog(page);
+  await page.getByRole('textbox', { name: 'Search companies' }).fill('Apple');
+  await page.getByRole('button', { name: /^Apple/ }).click();
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Annual growth' })).toHaveValue('');
+  await page.getByRole('spinbutton', { name: 'Annual growth' }).fill('3');
+  await page.getByRole('button', { name: 'Reset valuation inputs' }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Annual growth' })).toHaveValue('');
+  await openCatalog(page);
+  await page.getByRole('button', { name: /Example workspace/ }).click();
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Annual growth' })).toHaveValue('7.25');
+  await page.getByRole('button', { name: 'Reset valuation inputs' }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Annual growth' })).toHaveValue('5');
+  await expect(page.getByRole('spinbutton', { name: 'Starting unlevered cash flow' })).toHaveValue('100000000');
+});
