@@ -23,6 +23,8 @@ const specialized = new Set(['BRK-B', 'JPM', 'BAC', 'MS', 'GS', 'WFC', 'UNH']);
 export default function ValuationPanel({ company }: { company: Company }) {
   const [values, setValues] = useState<FormValues>(company.ticker === 'DEMO' ? example : empty);
   const [result, setResult] = useState<Valuation | null>(null);
+  const [snapshot, setSnapshot] = useState<{ assumptions: Assumptions; modelVersion: string; calculatedAt: string | null; savedCase: { id: string; name: string; savedAt: string } | null } | null>(null);
+  const [exportError, setExportError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
@@ -30,7 +32,7 @@ export default function ValuationPanel({ company }: { company: Company }) {
 
   function edit(key: keyof Assumptions, value: string) {
     active.current?.abort();
-    setBusy(false); setResult(null); setError('');
+    setBusy(false); setResult(null); setSnapshot(null); setExportError(''); setError('');
     setValues(current => ({ ...current, [key]: value }));
   }
 
@@ -43,7 +45,8 @@ export default function ValuationPanel({ company }: { company: Company }) {
     setValues(Object.fromEntries(fields.map(({ key }) => [key,
       String(scenario.assumptions[key] * (rateKeys.has(key) ? 100 : 1))
     ])) as FormValues);
-    setResult(scenario.result);
+    setResult(scenario.result); setExportError('');
+    setSnapshot({ assumptions: scenario.assumptions, modelVersion: scenario.modelVersion, calculatedAt: null, savedCase: { id: scenario.id, name: scenario.name, savedAt: scenario.createdAt } });
   }
 
   async function calculate(event: FormEvent) {
@@ -53,16 +56,34 @@ export default function ValuationPanel({ company }: { company: Company }) {
     }
     active.current?.abort();
     const controller = new AbortController(); active.current = controller;
-    setBusy(true); setError(''); setResult(null);
+    setBusy(true); setError(''); setResult(null); setSnapshot(null); setExportError('');
     try {
       const valuation = await request<Valuation>('/api/valuations/dcf', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(assumptions), signal: controller.signal
       });
-      if (!controller.signal.aborted) setResult(valuation);
+      if (!controller.signal.aborted) {
+        setResult(valuation);
+        setSnapshot({ assumptions, modelVersion: 'fcff-v1', calculatedAt: new Date().toISOString(), savedCase: null });
+      }
     } catch (e) {
       if (!controller.signal.aborted) setError(e instanceof Error ? e.message : 'Could not calculate this model.');
     } finally { if (!controller.signal.aborted) setBusy(false); }
+  }
+
+  function download() {
+    if (!result || !snapshot) return;
+    setExportError('');
+    try {
+      // I retain the original case inputs, rather than reconstructing them from displayed fields.
+      const content = { schemaVersion: 'capitalscope-valuation-v1', company, exportedAt: new Date().toISOString(),
+        source: snapshot.savedCase ? 'saved_case' : 'session_calculation', ...snapshot, result,
+        units: { cashFlowAndValue: 'USD', sharesOutstanding: 'shares', rates: 'decimal fractions' },
+        scope: 'User-assumed model estimate; not a market quote or verified financial evidence.' };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(content, null, 2) + '\n'], { type: 'application/json;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${company.ticker}-valuation-snapshot.json`;
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch { setExportError('The valuation snapshot could not be prepared. Please try again.'); }
   }
 
   return <section className="panel valuation-panel" aria-labelledby="valuation-heading">
@@ -79,6 +100,8 @@ export default function ValuationPanel({ company }: { company: Company }) {
         <div className="model-actions"><button className="primary" type="submit" disabled={busy}>{busy ? 'Calculating…' : 'Calculate valuation'}<span aria-hidden="true"> ↗</span></button><span className="muted small">Constant growth · Gordon-growth terminal value</span></div>
       </form>
       {result && <div className="valuation-result" aria-live="polite">
+        <div className="export-actions"><button type="button" className="secondary" onClick={download}>Download valuation snapshot</button><span className="muted small">JSON · assumptions, forecast, result, and case provenance</span></div>
+        {exportError && <p role="alert" className="notice error">{exportError}</p>}
         <div className="result-heading"><span className="eyebrow">MODEL ESTIMATE</span><strong>{money(result.valuePerShare, false)}</strong><span>per share, based on your assumptions</span></div>
         <div className="result-summary"><div><span>Enterprise value</span><strong>{money(result.enterpriseValue)}</strong></div><div><span>Equity value</span><strong>{money(result.equityValue)}</strong></div><div><span>Terminal contribution</span><strong>{(result.terminalValueShare * 100).toFixed(1)}%</strong></div></div>
         {result.terminalValueShare > .75 && <p className="notice warning">More than 75% of this estimate comes from terminal value. Small changes in long-term assumptions can materially change the result.</p>}

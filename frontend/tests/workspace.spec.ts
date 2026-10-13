@@ -2243,3 +2243,40 @@ test('I trace valuation value through net cash and clear the breakdown when assu
   await page.getByRole('spinbutton', { name: 'Shares outstanding' }).fill('60000000');
   await expect(table).toHaveCount(0);
 });
+
+test('I export a loaded valuation with original inputs and distinguish a fresh calculation', async ({ page }) => {
+  await installApi(page);
+  const original = { baseFreeCashFlow: 100000000, growthRate: .053123456789, discountRate: .1, terminalGrowthRate: .02, years: 5, netDebt: 200000000, sharesOutstanding: 50000000 };
+  await page.route('**/api/companies/DEMO/scenarios', route => route.fulfill({ json: [{
+    id: 'my-case', ticker: 'DEMO', name: 'My saved case', createdAt: '2026-10-01T10:00:00Z', modelVersion: 'fcff-v1', assumptions: original,
+    result: { projections: [{ year: 1, freeCashFlow: 105000000, presentValue: 95000000 }], terminalValue: 1600000000, presentValueOfTerminalValue: 990000000, enterpriseValue: 1085000000, equityValue: 885000000, valuePerShare: 17.7, terminalValueShare: .91 }
+  }] }));
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  const button = page.getByRole('button', { name: 'Download valuation snapshot' });
+  await expect(button).toHaveCount(0);
+  await page.getByRole('button', { name: 'Load My saved case', exact: true }).click();
+  const pending = page.waitForEvent('download');
+  await button.click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('DEMO-valuation-snapshot.json');
+  const { readFile } = await import('node:fs/promises');
+  const saved = JSON.parse(await readFile((await file.path())!, 'utf8'));
+  expect(saved.assumptions).toEqual(original);
+  expect(saved.source).toBe('saved_case');
+  expect(saved.savedCase).toEqual({ id: 'my-case', name: 'My saved case', savedAt: '2026-10-01T10:00:00Z' });
+  expect(saved.calculatedAt).toBeNull();
+  expect(saved.modelVersion).toBe('fcff-v1');
+  expect(saved.result.valuePerShare).toBe(17.7);
+  await page.getByRole('spinbutton', { name: 'Annual growth' }).fill('6');
+  await expect(button).toHaveCount(0);
+  await page.getByRole('button', { name: 'Calculate valuation' }).click();
+  const freshDownload = page.waitForEvent('download');
+  await button.click();
+  const fresh = JSON.parse(await readFile((await (await freshDownload).path())!, 'utf8'));
+  expect(fresh.source).toBe('session_calculation');
+  expect(fresh.savedCase).toBeNull();
+  expect(Number.isFinite(Date.parse(fresh.calculatedAt))).toBe(true);
+  expect(fresh.assumptions.growthRate).toBe(.06);
+  expect(fresh.result.valuePerShare).toBe(22);
+  expect(fresh.units.rates).toBe('decimal fractions');
+});
