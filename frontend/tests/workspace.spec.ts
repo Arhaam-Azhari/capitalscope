@@ -2280,3 +2280,35 @@ test('I export a loaded valuation with original inputs and distinguish a fresh c
   expect(fresh.result.valuePerShare).toBe(22);
   expect(fresh.units.rates).toBe('decimal fractions');
 });
+
+test('I export company fundamentals with matched evidence and leave unavailable ratios blank', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/companies/AAPL/financials', route => route.fulfill({ json: {
+    ...example, company: catalog.find(company => company.ticker === 'AAPL'), dataMode: 'sec', source: 'SEC EDGAR companyfacts', retrievedAt: '2026-10-13T00:00:00Z',
+    metrics: example.metrics.map(metric => metric.name === 'Net income' ? { ...metric, annualValues: metric.annualValues.map(point => ({ ...point, periodStart: '2025-02-01' })) } : metric)
+  } }));
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  await expect(page.getByRole('table', { name: 'Latest annual fundamentals and matched-period ratios' })).toBeVisible();
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download fundamentals comparison CSV' }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('company-fundamentals-comparison.csv');
+  const { readFile } = await import('node:fs/promises');
+  const rows = readCsv(await readFile((await file.path())!, 'utf8'));
+  expect(rows).toHaveLength(12);
+  const revenue = rows.find(row => row.ticker === 'AAPL' && row.measure === 'Revenue')!;
+  expect(revenue.value).toBe('1280000000');
+  expect(revenue.input_1_period_start).toBe('2025-01-01');
+  expect(revenue.data_mode).toBe('sec');
+  const missing = rows.find(row => row.ticker === 'AAPL' && row.measure === 'Net income margin')!;
+  expect(missing.value).toBe('');
+  expect(missing.input_1_value_usd).toBe('');
+  const margin = rows.find(row => row.ticker === 'MSFT' && row.measure === 'Net income margin')!;
+  expect(Number(margin.value)).toBeCloseTo(145 / 1280, 12);
+  expect(margin.unit).toBe('decimal fraction');
+  const cash = rows.find(row => row.ticker === 'AAPL' && row.measure === 'Cash after capex')!;
+  expect(cash.value).toBe('125000000');
+  expect(cash.input_1_value_usd).toBe('184000000');
+  expect(cash.input_2_value_usd).toBe('59000000');
+});

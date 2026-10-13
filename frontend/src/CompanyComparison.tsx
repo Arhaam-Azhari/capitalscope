@@ -1,3 +1,4 @@
+import { companyFundamentals, companyComparisonCsv, comparisonRatio } from './companyFundamentals';
 import EvidenceTable from './EvidenceTable';
 import { comparisonLink } from './researchNavigation';
 import SavedResearchComparison from './SavedResearchComparison';
@@ -5,15 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { money, request } from './api';
 import type { Company, FinancialReport, Point } from './types';
 
-function points(report: FinancialReport, name: string) {
-  return report.metrics.find(m => m.name === name && m.unit === 'USD')?.annualValues || [];
-}
-function aligned(report: FinancialReport, name: string, revenue: Point | undefined) {
-  return revenue && points(report, name).find(p => p.periodStart === revenue.periodStart && p.periodEnd === revenue.periodEnd);
-}
 function percent(numerator: number | undefined, denominator: number | undefined) {
-  return numerator !== undefined && denominator !== undefined && denominator > 0 ?
-    `${(numerator / denominator * 100).toFixed(1)}%` : '—';
+  const value = comparisonRatio(numerator, denominator);
+  return value === undefined ? '—' : `${(value * 100).toFixed(1)}%`;
 }
 function Evidence({ point, example }: { point: Point | undefined; example: boolean }) {
   if (!point) return null;
@@ -35,7 +30,7 @@ export default function CompanyComparison({ companies, peers, onChange, contextT
   const active = useRef<AbortController | null>(null);
   useEffect(() => {
     const controller = new AbortController(); active.current = controller;
-    setReports([]); setFailures([]); setBusy(true);
+    setReports([]); setFailures([]); setBusy(true); setExportError('');
     async function load() {
       if (mode === 'example') {
         try {
@@ -58,18 +53,16 @@ export default function CompanyComparison({ companies, peers, onChange, contextT
     active.current?.abort(); setReports([]); setFailures([]);
     setCopyMessage(''); onChange(selected.map((value, i) => i === index ? ticker : value));
   }
-  const rows = reports.map(report => {
-    const revenue = points(report, 'Revenue')[0];
-    const income = aligned(report, 'Net income', revenue);
-    const operating = aligned(report, 'Operating cash flow', revenue);
-    const capex = aligned(report, 'Capital expenditure', revenue);
-    const prior = revenue && points(report, 'Revenue').find(p => {
-      const days = (Date.parse(revenue.periodEnd) - Date.parse(p.periodEnd)) / 86400000;
-      return days >= 300 && days <= 400;
-    });
-    const afterCapex = operating && capex ? operating.value - capex.value : undefined;
-    return { report, revenue, income, operating, capex, prior, afterCapex };
-  });
+  const rows = reports.map(companyFundamentals);
+  const [exportError, setExportError] = useState('');
+  function download() {
+    setExportError('');
+    try {
+      const url = URL.createObjectURL(new Blob([companyComparisonCsv(reports, failures, new Date().toISOString())], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = 'company-fundamentals-comparison.csv';
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch { setExportError('The company comparison CSV could not be prepared. Please try again.'); }
+  }
   return <section className="panel" aria-labelledby="comparison-heading">
     <div className="panel-title"><div><span className="eyebrow">PEER RESEARCH</span><h2 id="comparison-heading">Compare company fundamentals</h2></div></div>
     <div className="comparison-controls"><label>Comparison data<select disabled={companies.length < 2} value={mode} onChange={e => { active.current?.abort(); setReports([]); setCopyMessage(''); onChange(e.target.value === 'sec' ? companies.filter(c => ['AAPL', 'MSFT'].includes(c.ticker)).map(c => c.ticker) : null); }}><option value="example">Fictional example peers</option><option value="sec">Real SEC companies</option></select></label>
@@ -85,6 +78,8 @@ export default function CompanyComparison({ companies, peers, onChange, contextT
     <p className="muted small">Margins use matching start and end dates within each company. Growth uses the preceding annual revenue period, 300–400 days earlier. Missing or mismatched inputs stay blank. Cash after capex is reported operating cash flow minus capex; it is not the unlevered cash flow used by the valuation model.</p>
     {busy && <p role="status">Loading comparison…</p>}
     {failures.length > 0 && <div className="notice error" role="alert">{failures.map(f => <p key={f}>{f}</p>)}<button className="secondary" onClick={() => setAttempt(n => n + 1)}>Retry comparison</button></div>}
+    {!busy && rows.length > 0 && <div className="export-actions"><button className="secondary" onClick={download}>Download fundamentals comparison CSV</button><span className="muted small">Loaded companies only · decimal ratios · dated inputs and filing sources · load failures included</span></div>}
+    {exportError && <p role="alert" className="notice error">{exportError}</p>}
     {!busy && rows.length > 0 && <EvidenceTable label="Company fundamentals"><table className="comparison-table"><caption>Latest annual fundamentals and matched-period ratios</caption><thead><tr><th>Measure</th>{rows.map(({ report }) => <th key={report.company.ticker}>{report.company.name}<small className="comparison-evidence">{report.company.ticker} · {report.company.sector}{report.retrievedAt && <span>Retrieved {new Date(report.retrievedAt).toLocaleString()}</span>}</small></th>)}</tr></thead><tbody>
       <tr><th>Revenue</th>{rows.map(({ report, revenue }) => <td key={report.company.ticker}>{revenue ? money(revenue.value) : '—'}<Evidence point={revenue} example={mode === 'example'} /></td>)}</tr>
       <tr><th>Annual revenue growth</th>{rows.map(({ report, revenue, prior }) => <td key={report.company.ticker}>{percent(revenue && prior ? revenue.value - prior.value : undefined, prior?.value)}<Evidence point={prior} example={mode === 'example'} /></td>)}</tr>
