@@ -2196,3 +2196,27 @@ test('I reset catalog filters and dismiss the picker without losing my company',
   await expect(page.getByRole('heading', { name: 'Apple', exact: true })).toBeVisible();
   await expect(picker).not.toHaveAttribute('open', '');
 });
+
+test('I export an unsaved research note even when browser saving fails', async ({ page }) => {
+  await page.addInitScript(() => { Storage.prototype.setItem = () => { throw new Error('Storage denied'); }; });
+  await installApi(page);
+  await page.getByRole('button', { name: 'Research notes', exact: true }).click();
+  const button = page.getByRole('button', { name: 'Download note text', exact: true });
+  await expect(button).toBeDisabled();
+  const note = 'My thesis: café demand grows.\n\nRisk: margins could fall <5%.';
+  await page.getByRole('textbox', { name: /Your notes/ }).fill(note);
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('could not save your note');
+  const pending = page.waitForEvent('download');
+  await button.click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('DEMO-research-note.txt');
+  const { readFile } = await import('node:fs/promises');
+  const content = await readFile((await file.path())!, 'utf8');
+  expect(content).toContain('Company: Example Manufacturing (DEMO)');
+  expect(content).toContain('State: Unsaved draft');
+  expect(content.endsWith(note)).toBe(true);
+  await expect(page.getByRole('alert')).toContainText('could not save your note');
+  await expect(page.getByRole('textbox', { name: /Your notes/ })).toHaveValue(note);
+  expect(await page.evaluate(() => localStorage.getItem('capitalscope.note.DEMO'))).toBeNull();
+});

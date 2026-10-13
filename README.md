@@ -369,3 +369,5 @@ I keep the active research section visible in the scrolling mobile navigation. I
 I show horizontal scroll controls only when financial or summary evidence tables are wider than their viewport. I can move through the columns with the arrow buttons, touch scrolling, or the keyboard-focused table region; the indicator tells me when I reach the last columns. I keep these controls out of printed summaries.
 
 I show how many catalog companies match my search and sector, and I can clear both filters together. I close the picker when I click outside it or press Escape. On small phones I use one column so full company names are easier to read.
+
+I can download the research note currently on screen as a UTF-8 text file, with the company, export time, and saved-or-draft state. I preserve the note text and leave browser storage and draft warnings unchanged. This gives me a portable copy even if saving in the browser fails; it does not include financial evidence or create a cloud backup.
