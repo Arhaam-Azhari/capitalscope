@@ -2340,3 +2340,33 @@ test('I retain valuation inputs by company during navigation and reset only the 
   await expect(page.getByRole('spinbutton', { name: 'Annual growth' })).toHaveValue('5');
   await expect(page.getByRole('spinbutton', { name: 'Starting unlevered cash flow' })).toHaveValue('100000000');
 });
+
+test('I search and sort saved cases without losing my selected comparison', async ({ page }) => {
+  await installApi(page);
+  const assumptions = { baseFreeCashFlow: 100000000, growthRate: .05, discountRate: .1, terminalGrowthRate: .02, years: 5, netDebt: 200000000, sharesOutstanding: 50000000 };
+  await page.route('**/api/companies/DEMO/scenarios', route => route.fulfill({ json: [
+    { id: 'base', name: 'My base', date: '2026-10-01T00:00:00Z' },
+    { id: 'up', name: 'My upside', date: '2026-10-03T00:00:00Z' },
+    { id: 'down', name: 'My downside', date: '2026-10-02T00:00:00Z' }
+  ].map(item => ({ id: item.id, ticker: 'DEMO', name: item.name, createdAt: item.date, assumptions, modelVersion: 'fcff-v1', result: { projections: [], terminalValue: 1000000000, presentValueOfTerminalValue: 900000000, enterpriseValue: 1000000000, equityValue: 800000000, valuePerShare: 16, terminalValueShare: .9 } })) }));
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  const saved = page.getByRole('region', { name: 'Saved valuation scenarios' });
+  await expect(saved.locator('.scenario-list li strong')).toHaveText(['My upside', 'My downside', 'My base']);
+  await page.getByRole('checkbox', { name: 'Compare My base', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Compare My upside', exact: true }).check();
+  const search = page.getByRole('searchbox', { name: 'Search saved valuation cases' });
+  await search.fill('missing case');
+  await expect(saved.getByText('No saved cases match these filters.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Saved assumptions and valuation estimates' })).toBeVisible();
+  await search.fill('fcff-v1');
+  await page.getByRole('checkbox', { name: 'Show selected cases only' }).check();
+  await expect(saved.locator('.scenario-list li strong')).toHaveText(['My upside', 'My base']);
+  await page.getByRole('combobox', { name: 'Sort saved valuation cases' }).selectOption('oldest');
+  await expect(saved.locator('.scenario-list li strong')).toHaveText(['My base', 'My upside']);
+  await page.getByRole('button', { name: 'Reset case filters' }).click();
+  await expect(saved.locator('.scenario-list li strong')).toHaveText(['My upside', 'My downside', 'My base']);
+  await expect(page.getByRole('checkbox', { name: 'Compare My base', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Compare My upside', exact: true })).toBeChecked();
+  await page.getByRole('combobox', { name: 'Sort saved valuation cases' }).selectOption('name');
+  await expect(saved.locator('.scenario-list li strong')).toHaveText(['My base', 'My downside', 'My upside']);
+});

@@ -1,6 +1,6 @@
 import ValuationPriceContext from './ValuationPriceContext';
 import ScenarioComparison from './ScenarioComparison';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { money, request } from './api';
 import type { Assumptions, Scenario } from './types';
 
@@ -9,6 +9,9 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
 }) {
   const [compared, setCompared] = useState<string[]>([]);
   const [items, setItems] = useState<Scenario[]>([]);
+  const [query, setQuery] = useState('');
+  const [order, setOrder] = useState('newest');
+  const [selectedOnly, setSelectedOnly] = useState(false);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -29,6 +32,16 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
       return current.length < 4 && !current.includes(id) ? [...current, id] : current;
     });
   }
+
+  const visible = useMemo(() => {
+    const search = query.trim().toLowerCase();
+    return items.filter(item => (!selectedOnly || compared.includes(item.id)) &&
+      `${item.name} ${item.id} ${item.modelVersion}`.toLowerCase().includes(search)).sort((left, right) => {
+        if (order === 'name') return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+        const time = (Date.parse(left.createdAt) || 0) - (Date.parse(right.createdAt) || 0);
+        return (order === 'oldest' ? time : -time) || left.id.localeCompare(right.id);
+      });
+  }, [items, compared, query, order, selectedOnly]);
 
   async function save() {
     if (!assumptions) return;
@@ -58,8 +71,18 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
       <button type="button" className="primary" disabled={busy || !assumptions || !name.trim()} onClick={save}>Save scenario</button></div>
     {!assumptions && <p className="muted small">Calculate a valuation before saving.</p>}
     {error && <p className="notice error" role="alert">{error}</p>}
+    {!loading && items.length > 0 && <div className="saved-case-review">
+      <div className="comparison-controls"><label>Search saved valuation cases<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Case name, ID, or model version" /></label>
+        <label>Sort saved valuation cases<select value={order} onChange={event => setOrder(event.target.value)}><option value="newest">Newest saved first</option><option value="oldest">Oldest saved first</option><option value="name">Case name</option></select></label>
+        <label className="scenario-pick"><input type="checkbox" checked={selectedOnly} onChange={event => setSelectedOnly(event.target.checked)} />Show selected cases only</label>
+        {(query || selectedOnly || order !== 'newest') && <button type="button" className="secondary" onClick={() => { setQuery(''); setOrder('newest'); setSelectedOnly(false); }}>Reset case filters</button>}
+      </div>
+      <p className="muted small" aria-live="polite">{visible.length} of {items.length} saved cases shown · {compared.length} selected for comparison</p>
+      <p className="muted small">Filtering changes this list only. Selected comparisons and price evidence remain available below.</p>
+      {!visible.length && <p>No saved cases match these filters.</p>}
+    </div>}
     {loading ? <p>Loading saved scenarios…</p> : !items.length ? <p className="muted">No saved scenarios for this company.</p> :
-      <ul className="scenario-list">{items.map(item => <li key={item.id}><label className="scenario-pick"><input type="checkbox" checked={compared.includes(item.id)} disabled={busy || (!compared.includes(item.id) && compared.length >= 4)} onChange={event => toggleComparison(item.id, event.target.checked)} />Compare {item.name}</label><div><strong>{item.name}</strong><span className="muted small">{new Date(item.createdAt).toLocaleString()} · {item.modelVersion} · {money(item.result.valuePerShare, false)} / share</span></div>
+      <ul className="scenario-list">{visible.map(item => <li key={item.id}><label className="scenario-pick"><input type="checkbox" checked={compared.includes(item.id)} disabled={busy || (!compared.includes(item.id) && compared.length >= 4)} onChange={event => toggleComparison(item.id, event.target.checked)} />Compare {item.name}</label><div><strong>{item.name}</strong><span className="muted small">{new Date(item.createdAt).toLocaleString()} · {item.modelVersion} · {money(item.result.valuePerShare, false)} / share</span></div>
         <button type="button" disabled={busy} onClick={() => onLoad(item)}>Load {item.name}</button>
         <button type="button" disabled={busy} onClick={() => remove(item.id)}>Delete {item.name}</button></li>)}</ul>}
     {!loading && items.length > 0 && <ValuationPriceContext key={ticker} ticker={ticker} scenarios={items} />}
