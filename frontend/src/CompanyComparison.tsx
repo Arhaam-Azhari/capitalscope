@@ -1,3 +1,4 @@
+import PeerMeasureChart from './PeerMeasureChart';
 import FundamentalCoverage from './FundamentalCoverage';
 import { companyFundamentals, companyComparisonCsv, comparisonRatio } from './companyFundamentals';
 import EvidenceTable from './EvidenceTable';
@@ -79,6 +80,7 @@ export default function CompanyComparison({ companies, peers, onChange, contextT
     <p className="muted small">Margins use matching start and end dates within each company. Growth uses the preceding annual revenue period, 300–400 days earlier. Missing or mismatched inputs stay blank. Cash after capex is reported operating cash flow minus capex; it is not the unlevered cash flow used by the valuation model.</p>
     {busy && <p role="status">Loading comparison…</p>}
     {failures.length > 0 && <div className="notice error" role="alert">{failures.map(f => <p key={f}>{f}</p>)}<button className="secondary" onClick={() => setAttempt(n => n + 1)}>Retry comparison</button></div>}
+    {!busy && reports.length > 0 && <PeerMeasureChart reports={reports} />}
     {!busy && rows.length > 0 && <div className="export-actions"><button className="secondary" onClick={download}>Download fundamentals comparison CSV</button><span className="muted small">Loaded companies only · decimal ratios · dated inputs and filing sources · load failures included</span></div>}
     {exportError && <p role="alert" className="notice error">{exportError}</p>}
     {!busy && rows.length > 0 && <EvidenceTable label="Company fundamentals" pinFirstColumn><table className="comparison-table"><caption>Latest annual fundamentals and matched-period ratios</caption><thead><tr><th scope="col">Measure</th>{rows.map(({ report }) => <th scope="col" key={report.company.ticker}>{report.company.name}<small className="comparison-evidence">{report.company.ticker} · {report.company.sector}{report.retrievedAt && <span>Retrieved {new Date(report.retrievedAt).toLocaleString()}</span>}</small></th>)}</tr></thead><tbody>
