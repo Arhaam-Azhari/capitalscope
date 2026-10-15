@@ -1,4 +1,6 @@
-import { annualFundamentals, comparisonRatio } from './companyFundamentals';
+import { useState } from 'react';
+import AnnualRatioTrend from './AnnualRatioTrend';
+import { annualFundamentals, comparisonRatio, companyComparisonCsv } from './companyFundamentals';
 import { money } from './api';
 import EvidenceTable from './EvidenceTable';
 import type { FinancialReport } from './types';
@@ -7,9 +9,21 @@ const percent = (value: number | undefined) => value === undefined ? '—' : `${
 
 export default function FinancialRatios({ report }: { report: FinancialReport }) {
   const rows = annualFundamentals(report);
+  const [exportError, setExportError] = useState('');
+  function download() {
+    setExportError('');
+    try {
+      const csv = companyComparisonCsv(rows.map(row => row.report), [], new Date().toISOString());
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${report.company.ticker}-annual-performance.csv`;
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch { setExportError('The annual performance CSV could not be prepared. Please try again.'); }
+  }
   return <section className="panel financial-ratios" aria-labelledby="ratio-history-heading">
     <div className="panel-title"><div><span className="eyebrow">ANNUAL PERFORMANCE</span><h2 id="ratio-history-heading">Growth, margins & cash flow</h2></div><span className="pill">Matched periods</span></div>
     <p className="muted small">Margins use the same start and end dates as each annual revenue period. Growth compares revenue with a period ending 300–400 days earlier and requires positive prior revenue. Missing or mismatched inputs stay unavailable. Cash after capex is operating cash flow minus capex, not the unlevered cash flow used by the valuation model.</p>
+    {rows.length > 0 && <><AnnualRatioTrend rows={rows} /><div className="export-actions"><button type="button" className="secondary" onClick={download}>Download annual performance CSV</button><span className="muted small">Six measures per period · USD and decimal ratios · dated source inputs</span></div></>}
+    {exportError && <p role="alert" className="notice error">{exportError}</p>}
     {!rows.length ? <p>No supported annual revenue periods are available for ratio history.</p> : <EvidenceTable label="Annual performance history"><table><caption>Annual ratios and matched-period input evidence</caption><thead><tr><th>Period ended</th><th>Revenue growth</th><th>Net income margin</th><th>Operating cash flow margin</th><th>Cash after capex</th><th>Inputs</th></tr></thead><tbody>
       {rows.map(({ revenue, income, operating, capex, prior, afterCapex }) => <tr key={revenue!.periodEnd}>
         <th scope="row">{revenue!.periodEnd}</th>
