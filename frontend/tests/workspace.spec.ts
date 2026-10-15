@@ -2427,3 +2427,32 @@ test('I review historical ratios with missing income, signed cash flow, and peri
   await expect(page.getByRole('region', { name: 'Annual performance history' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('I leave a gap in annual margin history and export the missing input faithfully', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/examples/financials', route => route.fulfill({ json: {
+    ...example, metrics: example.metrics.map(metric => metric.name === 'Net income' ? { ...metric, annualValues: metric.annualValues.filter(point => point.periodEnd !== '2023-12-31') } : metric)
+  } }));
+  await page.reload();
+  const chart = page.getByRole('img', { name: 'Net income margin annual history; missing values leave gaps', exact: true });
+  await expect(chart).toBeVisible();
+  await expect(chart.locator('.ratio-trend-point')).toHaveCount(4);
+  await expect(chart.locator('.ratio-trend-segment')).toHaveCount(2);
+  await page.getByRole('combobox', { name: 'Annual trend measure' }).selectOption('growth');
+  await expect(page.getByRole('img', { name: 'Revenue growth annual history; missing values leave gaps', exact: true })).toBeVisible();
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download annual performance CSV' }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('DEMO-annual-performance.csv');
+  const { readFile } = await import('node:fs/promises');
+  const rows = readCsv(await readFile((await file.path())!, 'utf8'));
+  expect(rows).toHaveLength(30);
+  const missing = rows.find(row => row.measure === 'Net income margin' && row.input_2_period_end === '2023-12-31')!;
+  expect(missing.value).toBe('');
+  expect(missing.input_1_value_usd).toBe('');
+  expect(missing.data_mode).toBe('example');
+  const oldest = rows.find(row => row.measure === 'Annual revenue growth' && row.input_1_period_end === '2021-12-31')!;
+  expect(oldest.value).toBe('');
+  const latest = rows.find(row => row.measure === 'Revenue' && row.input_1_period_end === '2025-12-31')!;
+  expect(latest.value).toBe('1280000000');
+});
