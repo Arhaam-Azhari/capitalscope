@@ -2539,3 +2539,24 @@ test('I filter annual performance without dropping the prior period needed for g
   await expect(table.locator('tbody tr')).toHaveCount(5);
   await expect(page.getByRole('button', { name: 'Download annual performance CSV' })).toBeEnabled();
 });
+
+test('I summarize selected annual endpoints and distinguish percent from percentage points', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/examples/financials', route => route.fulfill({ json: {
+    ...example, metrics: example.metrics.map(metric => metric.name === 'Net income' ? { ...metric, annualValues: metric.annualValues.map((point, index) => index === 0 ? { ...point, value: -145000000 } : point) } : metric)
+  } }));
+  await page.reload();
+  const summary = page.getByRole('region', { name: 'Change across selected periods' });
+  await expect(summary).toContainText('2021-12-31 → 2025-12-31');
+  await expect(summary.locator('.window-change-grid > div').nth(0)).toContainText('+66.7%');
+  await expect(summary.locator('.window-change-grid > div').nth(1)).toContainText('-22.7 pp');
+  await expect(summary.locator('.window-change-grid > div').nth(2)).toContainText('0.0 pp');
+  await expect(summary.locator('.window-change-grid > div').nth(3)).toContainText('+$50M');
+  await page.getByRole('combobox', { name: 'First performance period' }).selectOption('2023-12-31');
+  await expect(summary).toContainText('2023-12-31 → 2025-12-31');
+  await expect(summary.locator('.window-change-grid > div').nth(0)).toContainText('+25.0%');
+  await expect(summary.locator('.window-change-grid > div').nth(3)).toContainText('+$25M');
+  await page.getByRole('combobox', { name: 'First performance period' }).selectOption('2025-12-31');
+  await expect(summary).toHaveCount(0);
+  await expect(page.getByText('Choose two or more performance periods to compare endpoint changes.', { exact: true })).toBeVisible();
+});
