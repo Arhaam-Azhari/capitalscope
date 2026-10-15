@@ -1,3 +1,4 @@
+import FundamentalCoverage from './FundamentalCoverage';
 import { companyFundamentals, companyComparisonCsv, comparisonRatio } from './companyFundamentals';
 import EvidenceTable from './EvidenceTable';
 import { comparisonLink } from './researchNavigation';
@@ -88,6 +89,7 @@ export default function CompanyComparison({ companies, peers, onChange, contextT
       <tr><th scope="row">Cash after capex</th>{rows.map(({ report, operating, capex, afterCapex }) => <td key={report.company.ticker}>{afterCapex !== undefined ? money(afterCapex) : '—'}<Evidence point={operating} example={mode === 'example'} /><Evidence point={capex} example={mode === 'example'} /></td>)}</tr>
       <tr><th scope="row">Cash after capex / revenue</th>{rows.map(({ report, revenue, afterCapex }) => <td key={report.company.ticker}>{percent(afterCapex, revenue?.value)}</td>)}</tr>
     </tbody></table></EvidenceTable>}
+    {!busy && reports.length > 0 && <FundamentalCoverage reports={reports} />}
     {!busy && !rows.length && <p>No company figures are available for this comparison.</p>}
     {mode === 'sec' && <SavedResearchComparison companies={companies} tickers={selected} onOpen={onOpen} />}
   </section>;

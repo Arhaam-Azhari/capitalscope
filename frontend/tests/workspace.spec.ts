@@ -2483,3 +2483,31 @@ test('I keep measure labels visible while scrolling mobile peer and valuation co
   expect(Math.abs(await assumptionLabel.evaluate(element => element.getBoundingClientRect().left) - savedLeft)).toBeLessThan(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('I distinguish unavailable comparison inputs and export the same reasons', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/companies/AAPL/financials', route => route.fulfill({ json: {
+    ...example, company: catalog.find(company => company.ticker === 'AAPL'), metrics: example.metrics.map(metric => ({ ...metric,
+      annualValues: metric.annualValues.map((point, index) => metric.name === 'Revenue' && index === 1 ? { ...point, value: 0 } : metric.name === 'Net income' ? { ...point, periodStart: '2025-02-01' } : point)
+    }))
+  } }));
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  await page.locator('.fundamental-coverage summary').click();
+  const table = page.getByRole('table', { name: 'Measure availability and missing-input reasons' });
+  await expect(table).toContainText('Prior revenue must be positive for growth.');
+  await expect(table).toContainText('Net income does not match the annual revenue period.');
+  await page.getByRole('checkbox', { name: 'Show unavailable measures only' }).check();
+  await expect(table.locator('tbody tr')).toHaveCount(2);
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download fundamentals comparison CSV' }).click();
+  const { readFile } = await import('node:fs/promises');
+  const rows = readCsv(await readFile((await (await pending).path())!, 'utf8'));
+  const growth = rows.find(row => row.ticker === 'AAPL' && row.measure === 'Annual revenue growth')!;
+  expect(growth.availability).toBe('unavailable');
+  expect(growth.unavailable_reason).toBe('Prior revenue must be positive for growth.');
+  expect(growth.value).toBe('');
+  const valid = rows.find(row => row.ticker === 'MSFT' && row.measure === 'Net income margin')!;
+  expect(valid.availability).toBe('available');
+  expect(valid.unavailable_reason).toBe('');
+});
