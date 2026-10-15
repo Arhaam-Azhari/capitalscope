@@ -397,3 +397,5 @@ I inspect a measure-availability checklist in peer comparisons and can show only
 I choose an inclusive first and last fiscal period for annual performance. I apply the same window to the chart, table, and CSV while retaining earlier loaded evidence for growth calculations. I reject reversed windows, disable their export, and can restore all periods. Filtered filenames record the selected period boundaries.
 
 I summarize endpoint changes across the selected annual window: revenue change in percent, margin changes in percentage points, and cash after capex change in USD. I show the starting and ending values and dates, require two periods, and retain unavailable endpoints rather than substituting other years. These changes are not annualized and are not stock returns.
+
+I compare one fundamentals measure across peers using a shared zero-based scale. I preserve the selected company order and negative values, expose unavailable-input reasons, and show each company’s annual fiscal period. I switch among the six existing measures using the same calculations as the evidence table and exports. This view is not an investment ranking.

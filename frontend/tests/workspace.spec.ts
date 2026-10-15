@@ -2560,3 +2560,30 @@ test('I summarize selected annual endpoints and distinguish percent from percent
   await expect(summary).toHaveCount(0);
   await expect(page.getByText('Choose two or more performance periods to compare endpoint changes.', { exact: true })).toBeVisible();
 });
+
+test('I compare signed peer measures on a common baseline and preserve unavailable inputs', async ({ page }) => {
+  await installApi(page);
+  for (const ticker of ['AAPL', 'MSFT']) await page.route(`**/api/companies/${ticker}/financials`, route => route.fulfill({ json: {
+    ...example, company: catalog.find(company => company.ticker === ticker), metrics: example.metrics.map(metric => metric.name === 'Net income' && ticker === 'AAPL' ? { ...metric, annualValues: metric.annualValues.map(point => ({ ...point, value: -point.value })) } : metric.name === 'Operating cash flow' && ticker === 'MSFT' ? { ...metric, annualValues: [] } : metric)
+  } }));
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  const chart = page.getByRole('region', { name: 'One measure across peers' });
+  await expect(chart.locator('.peer-measure-heading > div strong')).toHaveText(['AAPL', 'MSFT']);
+  const negative = chart.getByRole('img', { name: 'AAPL Net income margin: -11.3%', exact: true });
+  const positive = chart.getByRole('img', { name: 'MSFT Net income margin: 11.3%', exact: true });
+  await expect(negative).toBeVisible();
+  await expect(positive).toBeVisible();
+  for (const [track, sign] of [[negative, -1], [positive, 1]] as const) {
+    const geometry = await track.evaluate(element => { const bar = element.querySelector('.peer-value-bar')!.getBoundingClientRect(); const zero = element.querySelector('.peer-zero')!.getBoundingClientRect(); return { left: bar.left, right: bar.right, zero: zero.left }; });
+    if (sign < 0) { expect(geometry.left).toBeLessThan(geometry.zero); expect(Math.abs(geometry.right - geometry.zero)).toBeLessThan(2); }
+    else { expect(Math.abs(geometry.left - geometry.zero)).toBeLessThan(2); expect(geometry.right).toBeGreaterThan(geometry.zero); }
+  }
+  await page.getByRole('combobox', { name: 'Peer chart measure' }).selectOption('Operating cash flow margin');
+  const missing = chart.locator('li').filter({ hasText: 'MSFT' });
+  await expect(missing).toContainText('Unavailable');
+  await expect(missing).toContainText('No supported USD annual operating cash flow input.');
+  await expect(missing.getByRole('img')).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
