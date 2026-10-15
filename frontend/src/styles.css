@@ -310,3 +310,9 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .value-composition-labels { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 14px; margin-top: 12px; font-size: 13px; }
 .value-composition-labels strong { display: block; margin-top: 5px; }
 .value-composition p { margin: 16px 0 0; }
+
+.financial-ratios th, .financial-ratios td { vertical-align: top; }
+.financial-ratios details { padding-top: 0; margin-top: 0; min-width: 180px; }
+.ratio-inputs { list-style: none; padding: 0; margin: 12px 0 0; }
+.ratio-inputs li { display: grid; gap: 5px; font-size: 12px; margin-bottom: 18px; white-space: normal; overflow-wrap: anywhere; }
+.ratio-inputs span { color: var(--muted); }

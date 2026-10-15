@@ -53,3 +53,11 @@ export function companyComparisonCsv(reports: FinancialReport[], failures: strin
   });
   return [header.join(','), ...rows].join('\r\n') + '\r\n';
 }
+
+export function annualFundamentals(report: FinancialReport) {
+  const revenue = points(report, 'Revenue');
+  return revenue.map((_, index) => companyFundamentals({ ...report,
+    metrics: report.metrics.map(metric => metric.name === 'Revenue' && metric.unit === 'USD'
+      ? { ...metric, annualValues: revenue.slice(index) } : metric)
+  }));
+}

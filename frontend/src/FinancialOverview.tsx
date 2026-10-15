@@ -1,3 +1,4 @@
+import FinancialRatios from './FinancialRatios';
 import EvidenceTable from './EvidenceTable';
 import { useState } from 'react';
 import { money } from './api';
@@ -41,5 +42,6 @@ export default function FinancialOverview({ report }: { report: FinancialReport 
       </tbody></table></EvidenceTable></div>
       <details><summary>Accounting tags and data notes</summary><p className="small muted">{report.notes.join(' ')}</p><ul className="source-tags">{metric.annualValues.map(p => <li key={p.periodEnd}>{p.periodEnd}: <code>{p.tag}</code>{p.periodStart && ` · ${p.periodStart} to ${p.periodEnd}`}</li>)}</ul></details>
     </section>}
+    <FinancialRatios report={report} />
   </>;
 }
