@@ -2370,3 +2370,36 @@ test('I search and sort saved cases without losing my selected comparison', asyn
   await page.getByRole('combobox', { name: 'Sort saved valuation cases' }).selectOption('name');
   await expect(saved.locator('.scenario-list li strong')).toHaveText(['My base', 'My downside', 'My upside']);
 });
+
+test('I export all or filtered saved cases with safe text and unrounded signed inputs', async ({ page }) => {
+  await installApi(page);
+  const assumptions = { baseFreeCashFlow: 100000000, growthRate: .05123456789, discountRate: .1, terminalGrowthRate: .02, years: 5, netDebt: -200000000, sharesOutstanding: 50000000 };
+  await page.route('**/api/companies/DEMO/scenarios', route => route.fulfill({ json: [
+    { id: 'a', name: '=My base, "café"\nnotes', createdAt: '2026-10-01T00:00:00Z' },
+    { id: 'b', name: 'My upside', createdAt: '2026-10-03T00:00:00Z' }
+  ].map(item => ({ ...item, ticker: 'DEMO', assumptions, modelVersion: 'fcff-v1', result: { projections: [], terminalValue: 1000000000, presentValueOfTerminalValue: 900000000, enterpriseValue: 1000000000, equityValue: 1200000000, valuePerShare: 24, terminalValueShare: .9 } })) }));
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Sort saved valuation cases' }).selectOption('oldest');
+  const search = page.getByRole('searchbox', { name: 'Search saved valuation cases' });
+  await search.fill('upside');
+  const { readFile } = await import('node:fs/promises');
+  const allPending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download all saved cases CSV', exact: true }).click();
+  const all = await allPending;
+  expect(all.suggestedFilename()).toBe('DEMO-all-saved-valuation-cases.csv');
+  const records = readCsv(await readFile((await all.path())!, 'utf8'));
+  expect(records.map(row => row.scenario_id)).toEqual(['a', 'b']);
+  expect(records[0].scenario_name).toBe("'=My base, \"café\"\nnotes");
+  expect(records[0].net_debt_usd).toBe('-200000000');
+  expect(Number(records[0].annual_growth_rate_decimal)).toBe(.05123456789);
+  expect(records[0].value_per_share_usd).toBe('24');
+  const shownPending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download shown cases CSV', exact: true }).click();
+  const shown = await shownPending;
+  expect(shown.suggestedFilename()).toBe('DEMO-shown-saved-valuation-cases.csv');
+  expect(readCsv(await readFile((await shown.path())!, 'utf8')).map(row => row.scenario_id)).toEqual(['b']);
+  await expect(search).toHaveValue('upside');
+  await search.fill('no match');
+  await expect(page.getByRole('button', { name: 'Download shown cases CSV', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Download all saved cases CSV', exact: true })).toBeEnabled();
+});

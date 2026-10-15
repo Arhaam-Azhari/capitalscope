@@ -1,3 +1,4 @@
+import { savedScenarioCsv } from './savedScenarioCsv';
 import ValuationPriceContext from './ValuationPriceContext';
 import ScenarioComparison from './ScenarioComparison';
 import { useEffect, useMemo, useState } from 'react';
@@ -13,6 +14,7 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
   const [order, setOrder] = useState('newest');
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [name, setName] = useState('');
+  const [exportError, setExportError] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -33,15 +35,25 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
     });
   }
 
+  const ordered = useMemo(() => [...items].sort((left, right) => {
+    if (order === 'name') return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
+    const time = (Date.parse(left.createdAt) || 0) - (Date.parse(right.createdAt) || 0);
+    return (order === 'oldest' ? time : -time) || left.id.localeCompare(right.id);
+  }), [items, order]);
   const visible = useMemo(() => {
     const search = query.trim().toLowerCase();
-    return items.filter(item => (!selectedOnly || compared.includes(item.id)) &&
-      `${item.name} ${item.id} ${item.modelVersion}`.toLowerCase().includes(search)).sort((left, right) => {
-        if (order === 'name') return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
-        const time = (Date.parse(left.createdAt) || 0) - (Date.parse(right.createdAt) || 0);
-        return (order === 'oldest' ? time : -time) || left.id.localeCompare(right.id);
-      });
-  }, [items, compared, query, order, selectedOnly]);
+    return ordered.filter(item => (!selectedOnly || compared.includes(item.id)) &&
+      `${item.name} ${item.id} ${item.modelVersion}`.toLowerCase().includes(search));
+  }, [ordered, compared, query, selectedOnly]);
+
+  function download(shownOnly: boolean) {
+    setExportError('');
+    try {
+      const url = URL.createObjectURL(new Blob([savedScenarioCsv(shownOnly ? visible : ordered, new Date().toISOString())], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${ticker}-${shownOnly ? 'shown' : 'all'}-saved-valuation-cases.csv`;
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch { setExportError('The saved-case CSV could not be prepared. Please try again.'); }
+  }
 
   async function save() {
     if (!assumptions) return;
@@ -79,8 +91,11 @@ export default function SavedScenarios({ ticker, assumptions, onLoad }: {
       </div>
       <p className="muted small" aria-live="polite">{visible.length} of {items.length} saved cases shown · {compared.length} selected for comparison</p>
       <p className="muted small">Filtering changes this list only. Selected comparisons and price evidence remain available below.</p>
+      <div className="export-actions"><button type="button" className="secondary" disabled={busy || !ordered.length} onClick={() => download(false)}>Download all saved cases CSV</button><button type="button" className="secondary" disabled={busy || !visible.length} onClick={() => download(true)}>Download shown cases CSV</button></div>
+      <p className="muted small">Both CSVs follow the current sort order and contain saved inputs and estimates. Rates are decimal fractions; currency columns are USD. Exporting does not save or change the open model.</p>
       {!visible.length && <p>No saved cases match these filters.</p>}
     </div>}
+    {exportError && <p role="alert" className="notice error">{exportError}</p>}
     {loading ? <p>Loading saved scenarios…</p> : !items.length ? <p className="muted">No saved scenarios for this company.</p> :
       <ul className="scenario-list">{visible.map(item => <li key={item.id}><label className="scenario-pick"><input type="checkbox" checked={compared.includes(item.id)} disabled={busy || (!compared.includes(item.id) && compared.length >= 4)} onChange={event => toggleComparison(item.id, event.target.checked)} />Compare {item.name}</label><div><strong>{item.name}</strong><span className="muted small">{new Date(item.createdAt).toLocaleString()} · {item.modelVersion} · {money(item.result.valuePerShare, false)} / share</span></div>
         <button type="button" disabled={busy} onClick={() => onLoad(item)}>Load {item.name}</button>
