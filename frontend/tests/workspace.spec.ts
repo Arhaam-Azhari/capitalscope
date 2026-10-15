@@ -2170,7 +2170,7 @@ test('I reveal wide evidence columns on mobile and remove scroll controls when t
   await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
   await page.setViewportSize({ width: 1440, height: 1080 });
   await expect(right).toHaveCount(0);
-  await expect(page.getByRole('table')).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Revenue: values and filing sources', exact: true })).toBeVisible();
 });
 
 test('I reset catalog filters and dismiss the picker without losing my company', async ({ page }) => {
@@ -2402,4 +2402,28 @@ test('I export all or filtered saved cases with safe text and unrounded signed i
   await search.fill('no match');
   await expect(page.getByRole('button', { name: 'Download shown cases CSV', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Download all saved cases CSV', exact: true })).toBeEnabled();
+});
+
+test('I review historical ratios with missing income, signed cash flow, and period evidence', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/examples/financials', route => route.fulfill({ json: {
+    ...example, metrics: example.metrics.map(metric => metric.name === 'Net income' ? { ...metric, annualValues: [] } : metric.name === 'Capital expenditure' ? { ...metric, annualValues: metric.annualValues.map((point, index) => index === 0 ? { ...point, value: 200000000 } : point) } : metric)
+  } }));
+  await page.reload();
+  const table = page.getByRole('table', { name: 'Annual ratios and matched-period input evidence' });
+  await expect(table.locator('tbody tr')).toHaveCount(5);
+  const latest = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: '2025-12-31', exact: true }) });
+  await expect(latest.getByRole('cell').nth(0)).toHaveText('11.1%');
+  await expect(latest.getByRole('cell').nth(1)).toHaveText('—');
+  await expect(latest.getByRole('cell').nth(2)).toHaveText('14.4%');
+  await expect(latest.getByRole('cell').nth(3)).toHaveText('-$16M');
+  await latest.locator('summary').click();
+  await expect(latest.locator('.ratio-inputs')).toContainText('2025-01-01 to 2025-12-31');
+  await expect(latest.locator('.ratio-inputs')).toContainText('No matching annual input');
+  await expect(latest.locator('.ratio-inputs')).toContainText('Invented example');
+  const oldest = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: '2021-12-31', exact: true }) });
+  await expect(oldest.getByRole('cell').nth(0)).toHaveText('—');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('region', { name: 'Annual performance history' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
