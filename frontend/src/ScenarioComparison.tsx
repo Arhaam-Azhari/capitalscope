@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import { useEffect, useState } from 'react';
 import { money } from './api';
 import type { Scenario } from './types';
@@ -55,7 +56,7 @@ export default function ScenarioComparison({ selected }: { selected: Scenario[] 
     <label className="comparison-baseline">Comparison baseline<select value={baseline.id} onChange={event => setBaselineId(event.target.value)}>{selected.map(item => <option key={item.id} value={item.id}>{item.name} · {new Date(item.createdAt).toLocaleString()}</option>)}</select></label>
     <p className="muted small">These are saved assumptions for one company, not probabilities or market forecasts. Highlighted inputs differ from the selected baseline. Comparing cases does not change the open model.</p>
     {modelsDiffer && <p className="notice warning">These cases use different model versions. Deltas are unavailable for cases that differ from the baseline's model.</p>}
-    <div className="table-scroll"><table className="scenario-comparison-table"><caption>Saved assumptions and valuation estimates</caption><thead><tr><th>Assumption / estimate</th>{selected.map(item => <th key={item.id}>{item.name}<span className="comparison-evidence">{item.id === baseline.id ? 'Baseline · ' : ''}{item.modelVersion}<br />Saved {new Date(item.createdAt).toLocaleString()}</span></th>)}</tr></thead><tbody>
+    <EvidenceTable label="Saved valuation comparison" pinFirstColumn><table className="scenario-comparison-table"><caption>Saved assumptions and valuation estimates</caption><thead><tr><th scope="col">Assumption / estimate</th>{selected.map(item => <th scope="col" key={item.id}>{item.name}<span className="comparison-evidence">{item.id === baseline.id ? 'Baseline · ' : ''}{item.modelVersion}<br />Saved {new Date(item.createdAt).toLocaleString()}</span></th>)}</tr></thead><tbody>
       {assumptions.map(([key, label, format]) => <tr key={key}><th scope="row">{label}</th>{selected.map(item => {
         const changed = item.assumptions[key] !== baseline.assumptions[key];
         return <td key={item.id} className={changed ? 'assumption-changed' : ''}>{format(item.assumptions[key])}{changed && <span className="comparison-evidence">Changed from baseline</span>}</td>;
@@ -64,7 +65,7 @@ export default function ScenarioComparison({ selected }: { selected: Scenario[] 
       <tr><th scope="row">Terminal contribution</th>{selected.map(item => <td key={item.id}>{resultRate(item.result.terminalValueShare)}</td>)}</tr>
       <tr><th scope="row">Difference / share vs baseline</th>{selected.map(item => <td key={item.id}>{item.modelVersion === baseline.modelVersion ? difference(item, baseline).absolute === null ? 'Unavailable · numeric range' : money(difference(item, baseline).absolute!, false) : 'Unavailable · different model'}</td>)}</tr>
       <tr><th scope="row">Relative difference vs baseline</th>{selected.map(item => <td key={item.id}>{item.modelVersion !== baseline.modelVersion ? 'Unavailable · different model' : baseline.result.valuePerShare <= 0 ? 'Unavailable · baseline is not positive' : difference(item, baseline).relative === null ? 'Unavailable · numeric range' : resultRate(difference(item, baseline).relative!)}</td>)}</tr>
-    </tbody></table></div>
+    </tbody></table></EvidenceTable>
     <p className="muted small">Percentage differences need a positive baseline estimate. Absolute differences remain available for zero or negative baselines under the same model. Saved dates identify when the case was recorded; the inputs are not verified point-in-time market data. CSV rates are decimal fractions.</p>
   </section>;
 }
