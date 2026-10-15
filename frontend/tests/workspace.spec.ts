@@ -45,6 +45,7 @@ async function installApi(page: Page) {
     if (path.endsWith('/allocation-targets') && route.request().method() === 'GET') return route.fulfill({ json: [] });
     if (path.endsWith('/price-comparison-setups') && route.request().method() === 'GET') return route.fulfill({ json: [] });
     if (path.endsWith('/scenarios')) return route.fulfill({ json: [] });
+    if (path === '/api/research/comparison-setups' && route.request().method() === 'GET') return route.fulfill({ json: [] });
     if (path === '/api/companies') return route.fulfill({ json: catalog });
     if (path === '/api/universe') return route.fulfill({ json: { asOf: '2026-10-06', count: 50, dynamic: false } });
     if (path === '/api/examples/financials') return route.fulfill({ json: example });
@@ -2609,4 +2610,37 @@ test('I share and restore the selected peer chart measure through links and hist
     await page.goto(`/#research?company=DEMO&view=compare&peers=AAPL,MSFT&${suffix}`);
     await expect(page.getByText('This research link is invalid. The example workspace is open instead.', { exact: true })).toBeVisible();
   }
+});
+
+test('I save and reopen a named peer setup with its measure after reloading', async ({ page }) => {
+  await installApi(page);
+  let saved: { id: string; name: string; tickers: string[]; measure: string; createdAt: string; modelVersion: string }[] = [];
+  await page.route('**/api/research/comparison-setups**', async route => {
+    if (route.request().method() === 'DELETE') { saved = []; return route.fulfill({ status: 204 }); }
+    if (route.request().method() === 'POST') {
+      const input = route.request().postDataJSON();
+      expect(input.tickers).toEqual(['AAPL', 'MSFT']); expect(input.measure).toBe('growth');
+      const item = { ...input, id: 'my-peers', createdAt: '2026-10-15T19:00:00Z', modelVersion: 'fundamentals-comparison-v1' };
+      saved = [item]; return route.fulfill({ status: 201, json: item });
+    }
+    return route.fulfill({ json: saved });
+  });
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  const setups = page.getByRole('region', { name: 'Saved company comparison setups' });
+  await expect(setups.getByRole('button', { name: 'Save company comparison setup', exact: true })).toBeDisabled();
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  await page.getByRole('combobox', { name: 'Peer chart measure' }).selectOption('growth');
+  await setups.getByRole('textbox', { name: 'Company comparison setup name' }).fill('My tech peers');
+  await setups.getByRole('button', { name: 'Save company comparison setup', exact: true }).click();
+  await expect(setups.getByRole('button', { name: 'Open company setup My tech peers', exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Company 2', exact: true }).selectOption('NVDA');
+  await page.getByRole('combobox', { name: 'Peer chart measure' }).selectOption('revenue');
+  await setups.getByRole('button', { name: 'Open company setup My tech peers', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Company 2', exact: true })).toHaveValue('MSFT');
+  await expect(page.getByRole('combobox', { name: 'Peer chart measure' })).toHaveValue('growth');
+  await page.reload();
+  await expect(setups.getByRole('button', { name: 'Open company setup My tech peers', exact: true })).toBeVisible();
+  await setups.getByRole('button', { name: 'Delete company setup My tech peers', exact: true }).click();
+  await expect(setups.getByText('No saved company comparison setups.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Peer chart measure' })).toHaveValue('growth');
 });

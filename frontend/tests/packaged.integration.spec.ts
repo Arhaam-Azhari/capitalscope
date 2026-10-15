@@ -955,3 +955,22 @@ test('I reload saved allocation targets against a fresh packaged valuation', asy
   await expect(saved).toContainText('No saved allocation targets');
   expect(await (await page.request.get(`${path}/allocation-targets`)).json()).toEqual([]);
 });
+
+test('I reopen a database-backed company setup and delete it through the packaged app', async ({ page }) => {
+  const path = '/api/research/comparison-setups';
+  const response = await page.request.post(path, { data: { name: 'My packaged peer group', tickers: ['MSFT', 'AAPL'], measure: 'ocf-margin' } });
+  expect(response.status()).toBe(201);
+  const item = await response.json();
+  try {
+    await page.goto('/#research?company=DEMO&view=compare');
+    const setups = page.getByRole('region', { name: 'Saved company comparison setups' });
+    await setups.getByRole('button', { name: 'Open company setup My packaged peer group', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Company 1', exact: true })).toHaveValue('MSFT');
+    await expect(page.getByRole('combobox', { name: 'Company 2', exact: true })).toHaveValue('AAPL');
+    await expect(page).toHaveURL(/measure=ocf-margin/);
+    await page.reload();
+    await setups.getByRole('button', { name: 'Delete company setup My packaged peer group', exact: true }).click();
+    await expect(setups.getByRole('button', { name: 'Open company setup My packaged peer group', exact: true })).toHaveCount(0);
+    expect((await (await page.request.get(path)).json()).some((setup: { id: string }) => setup.id === item.id)).toBe(false);
+  } finally { await page.request.delete(`${path}/${item.id}`); }
+});

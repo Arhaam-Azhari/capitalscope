@@ -1,3 +1,4 @@
+import SavedFundamentalsSetups from './SavedFundamentalsSetups';
 import type { PeerMeasure } from './peerMeasures';
 import PeerMeasureChart from './PeerMeasureChart';
 import FundamentalCoverage from './FundamentalCoverage';
@@ -94,6 +95,7 @@ export default function CompanyComparison({ companies, peers, measure, onChange,
     </tbody></table></EvidenceTable>}
     {!busy && reports.length > 0 && <FundamentalCoverage reports={reports} />}
     {!busy && !rows.length && <p>No company figures are available for this comparison.</p>}
+    <SavedFundamentalsSetups companies={companies} tickers={peers} measure={measure} onLoad={onChange} />
     {mode === 'sec' && <SavedResearchComparison companies={companies} tickers={selected} onOpen={onOpen} />}
   </section>;
 }
