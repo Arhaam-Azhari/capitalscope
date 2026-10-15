@@ -1,3 +1,4 @@
+import type { PeerMeasure } from './peerMeasures';
 import PeerMeasureChart from './PeerMeasureChart';
 import FundamentalCoverage from './FundamentalCoverage';
 import { companyFundamentals, companyComparisonCsv, comparisonRatio } from './companyFundamentals';
@@ -19,12 +20,12 @@ function Evidence({ point, example }: { point: Point | undefined; example: boole
   </small>;
 }
 
-export default function CompanyComparison({ companies, peers, onChange, contextTicker, onOpen }: { companies: Company[]; peers: string[] | null; onChange: (peers: string[] | null) => void; contextTicker: string; onOpen: (ticker: string) => void }) {
+export default function CompanyComparison({ companies, peers, measure, onChange, contextTicker, onOpen }: { measure: PeerMeasure; companies: Company[]; peers: string[] | null; onChange: (peers: string[] | null, measure?: PeerMeasure) => void; contextTicker: string; onOpen: (ticker: string) => void }) {
   const mode = peers ? 'sec' : 'example';
   const selected = peers || ['AAPL', 'MSFT'];
   const [copyMessage, setCopyMessage] = useState('');
-  const link = comparisonLink(contextTicker, selected);
-  useEffect(() => setCopyMessage(''), [peers]);
+  const link = comparisonLink(contextTicker, selected, undefined, measure);
+  useEffect(() => setCopyMessage(''), [peers, measure]);
   const [reports, setReports] = useState<FinancialReport[]>([]);
   const [failures, setFailures] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -75,12 +76,12 @@ export default function CompanyComparison({ companies, peers, onChange, contextT
     {mode === 'sec' && <div className="summary-share"><button className="secondary" onClick={async () => {
       try { await navigator.clipboard.writeText(link); setCopyMessage('Comparison link copied.'); }
       catch { setCopyMessage('Copy is unavailable. Select and copy the link below.'); }
-    }}>Copy company comparison link</button><label>Company comparison link<input readOnly value={link} onFocus={event => event.target.select()} /></label><p className="muted small">Opens these companies in the same app instance with the latest available evidence, not a frozen report. The link contains company selections only and does not grant access. Localhost links remain local.</p>{copyMessage && <p role="status" className="save-status">{copyMessage}</p>}</div>}
+    }}>Copy company comparison link</button><label>Company comparison link<input readOnly value={link} onFocus={event => event.target.select()} /></label><p className="muted small">Opens these companies in the same app instance with the latest available evidence, not a frozen report. The link contains company selections and the chart measure only and does not grant access. Localhost links remain local.</p>{copyMessage && <p role="status" className="save-status">{copyMessage}</p>}</div>}
     <p className={`notice ${mode === 'example' ? 'example' : 'warning'}`}>{mode === 'example' ? 'All three companies and their figures are invented. They are separate from the real catalog.' : 'Latest annual periods may end on different dates. Compare businesses with similar economics; this table does not rank investments.'}</p>
     <p className="muted small">Margins use matching start and end dates within each company. Growth uses the preceding annual revenue period, 300–400 days earlier. Missing or mismatched inputs stay blank. Cash after capex is reported operating cash flow minus capex; it is not the unlevered cash flow used by the valuation model.</p>
     {busy && <p role="status">Loading comparison…</p>}
     {failures.length > 0 && <div className="notice error" role="alert">{failures.map(f => <p key={f}>{f}</p>)}<button className="secondary" onClick={() => setAttempt(n => n + 1)}>Retry comparison</button></div>}
-    {!busy && reports.length > 0 && <PeerMeasureChart reports={reports} />}
+    {!busy && reports.length > 0 && <PeerMeasureChart reports={reports} measure={measure} onChange={value => onChange(peers, value)} />}
     {!busy && rows.length > 0 && <div className="export-actions"><button className="secondary" onClick={download}>Download fundamentals comparison CSV</button><span className="muted small">Loaded companies only · decimal ratios · dated inputs and filing sources · load failures included</span></div>}
     {exportError && <p role="alert" className="notice error">{exportError}</p>}
     {!busy && rows.length > 0 && <EvidenceTable label="Company fundamentals" pinFirstColumn><table className="comparison-table"><caption>Latest annual fundamentals and matched-period ratios</caption><thead><tr><th scope="col">Measure</th>{rows.map(({ report }) => <th scope="col" key={report.company.ticker}>{report.company.name}<small className="comparison-evidence">{report.company.ticker} · {report.company.sector}{report.retrievedAt && <span>Retrieved {new Date(report.retrievedAt).toLocaleString()}</span>}</small></th>)}</tr></thead><tbody>

@@ -1,7 +1,8 @@
+import { defaultPeerMeasure, peerMeasures, type PeerMeasure } from './peerMeasures';
 export const tabs = ['Financials', 'Research summary', 'Valuation', 'Research notes', 'Compare companies', 'Prices', 'Portfolios', 'Watchlist'] as const;
 export type Section = typeof tabs[number];
 const views: Record<Section, string> = { Financials: 'financials', 'Research summary': 'summary', Valuation: 'valuation', 'Research notes': 'notes', 'Compare companies': 'compare', Prices: 'prices', Portfolios: 'portfolios', Watchlist: 'watchlist' };
-export function readResearchRoute(hash = window.location.hash): { ticker: string; section: Section; error: string; peers?: string[] } {
+export function readResearchRoute(hash = window.location.hash): { ticker: string; section: Section; error: string; peers?: string[]; peerMeasure?: PeerMeasure } {
   const fallback = { ticker: 'DEMO', section: 'Financials' as Section, error: '' };
   if (!hash || hash === '#') return fallback;
   const invalid = { ...fallback, error: 'This research link is invalid. The example workspace is open instead.' };
@@ -12,7 +13,9 @@ export function readResearchRoute(hash = window.location.hash): { ticker: string
   if (params.getAll('company').length !== 1 || params.getAll('view').length !== 1 || !/^[A-Z0-9-]{1,16}$/.test(ticker) || !section) return invalid;
   const peers = params.has('peers') ? params.get('peers')!.split(',').map(value => value.trim().toUpperCase()) : undefined;
   if (peers && (section !== 'Compare companies' || params.getAll('peers').length !== 1 || peers.length < 2 || peers.length > 4 || new Set(peers).size !== peers.length || peers.some(value => value === 'DEMO' || !/^[A-Z0-9-]{1,16}$/.test(value)))) return invalid;
-  return { ticker, section, error: '', peers };
+  const measure = params.get('measure');
+  if (params.has('measure') && (!peers || section !== 'Compare companies' || params.getAll('measure').length !== 1 || !Object.prototype.hasOwnProperty.call(peerMeasures, measure || ''))) return invalid;
+  return { ticker, section, error: '', peers, peerMeasure: measure ? measure as PeerMeasure : undefined };
 }
 export function researchLink(ticker: string, section: Section, base = window.location.href) {
   const url = new URL(base);
@@ -21,9 +24,11 @@ export function researchLink(ticker: string, section: Section, base = window.loc
   return url.href;
 }
 
-export function comparisonLink(ticker: string, peers: string[], base = window.location.href) {
+export function comparisonLink(ticker: string, peers: string[], base = window.location.href, measure: PeerMeasure = defaultPeerMeasure) {
   const url = new URL(researchLink(ticker, 'Compare companies', base));
   const params = new URLSearchParams(url.hash.slice('#research?'.length));
-  params.set('peers', peers.join(',')); url.hash = `research?${params}`;
+  params.set('peers', peers.join(','));
+  if (measure !== defaultPeerMeasure) params.set('measure', measure);
+  url.hash = `research?${params}`;
   return url.href;
 }

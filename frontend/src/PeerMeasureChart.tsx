@@ -1,11 +1,10 @@
-import { useState } from 'react';
+import { peerMeasures, type PeerMeasure } from './peerMeasures';
 import { companyFundamentals, fundamentalMeasures } from './companyFundamentals';
 import { money } from './api';
 import type { FinancialReport } from './types';
 
-const measures = ['Revenue', 'Annual revenue growth', 'Net income margin', 'Operating cash flow margin', 'Cash after capex', 'Cash after capex / revenue'];
-export default function PeerMeasureChart({ reports }: { reports: FinancialReport[] }) {
-  const [selected, setSelected] = useState('Net income margin');
+export default function PeerMeasureChart({ reports, measure, onChange }: { reports: FinancialReport[]; measure: PeerMeasure; onChange: (measure: PeerMeasure) => void }) {
+  const selected = peerMeasures[measure];
   const rows = reports.map(report => ({ report, revenue: companyFundamentals(report).revenue,
     measure: fundamentalMeasures(report).find(item => item.name === selected)! }));
   const values = rows.flatMap(row => row.measure.value === undefined ? [] : [row.measure.value]);
@@ -20,7 +19,7 @@ export default function PeerMeasureChart({ reports }: { reports: FinancialReport
   const format = (value: number) => unit === 'USD' ? money(value) : `${(value * 100).toFixed(1)}%`;
   return <section className="peer-measure-chart" aria-labelledby="peer-chart-heading">
     <h3 id="peer-chart-heading">One measure across peers</h3>
-    <label>Peer chart measure<select value={selected} onChange={event => setSelected(event.target.value)}>{measures.map(name => <option key={name}>{name}</option>)}</select></label>
+    <label>Peer chart measure<select value={measure} onChange={event => onChange(event.target.value as PeerMeasure)}>{Object.entries(peerMeasures).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label>
     <p className="muted small">Shared zero baseline · {unit === 'USD' ? 'USD' : 'percent'}. Companies stay in selection order. Fiscal periods may differ; exact inputs and filing sources remain in the table below.</p>
     {values.length > 0 && <div className="peer-scale" aria-hidden="true"><span>{format(low * scale)}</span><span>{format(high * scale)}</span></div>}
     <ul className="peer-measure-list">{rows.map(({ report, revenue, measure }) => <li key={report.company.ticker}>
