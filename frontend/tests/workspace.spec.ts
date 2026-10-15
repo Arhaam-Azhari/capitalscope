@@ -2579,11 +2579,34 @@ test('I compare signed peer measures on a common baseline and preserve unavailab
     if (sign < 0) { expect(geometry.left).toBeLessThan(geometry.zero); expect(Math.abs(geometry.right - geometry.zero)).toBeLessThan(2); }
     else { expect(Math.abs(geometry.left - geometry.zero)).toBeLessThan(2); expect(geometry.right).toBeGreaterThan(geometry.zero); }
   }
-  await page.getByRole('combobox', { name: 'Peer chart measure' }).selectOption('Operating cash flow margin');
+  await page.getByRole('combobox', { name: 'Peer chart measure' }).selectOption('ocf-margin');
   const missing = chart.locator('li').filter({ hasText: 'MSFT' });
   await expect(missing).toContainText('Unavailable');
   await expect(missing).toContainText('No supported USD annual operating cash flow input.');
   await expect(missing.getByRole('img')).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('I share and restore the selected peer chart measure through links and history', async ({ page }) => {
+  await installApi(page);
+  await page.goto('/#research?company=DEMO&view=compare&peers=AAPL,MSFT&measure=ocf-margin');
+  const picker = page.getByRole('combobox', { name: 'Peer chart measure' });
+  await expect(picker).toHaveValue('ocf-margin');
+  await expect(page.getByRole('textbox', { name: 'Company comparison link', exact: true })).toHaveValue(/measure=ocf-margin/);
+  await picker.selectOption('growth');
+  await expect(page).toHaveURL(/measure=growth/);
+  await page.goBack();
+  await expect(picker).toHaveValue('ocf-margin');
+  await page.goForward();
+  await expect(picker).toHaveValue('growth');
+  await page.getByRole('button', { name: 'Add company', exact: true }).click();
+  await expect(picker).toHaveValue('growth');
+  await expect(page).toHaveURL(/measure=growth/);
+  await page.reload();
+  await expect(picker).toHaveValue('growth');
+  for (const suffix of ['measure=unknown', 'measure=growth&measure=revenue']) {
+    await page.goto(`/#research?company=DEMO&view=compare&peers=AAPL,MSFT&${suffix}`);
+    await expect(page.getByText('This research link is invalid. The example workspace is open instead.', { exact: true })).toBeVisible();
+  }
 });
