@@ -2511,3 +2511,31 @@ test('I distinguish unavailable comparison inputs and export the same reasons', 
   expect(valid.availability).toBe('available');
   expect(valid.unavailable_reason).toBe('');
 });
+
+test('I filter annual performance without dropping the prior period needed for growth', async ({ page }) => {
+  await installApi(page);
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('combobox', { name: 'First performance period' }).selectOption('2023-12-31');
+  const table = page.getByRole('table', { name: 'Annual ratios and matched-period input evidence' });
+  await expect(table.locator('tbody tr')).toHaveCount(3);
+  const first = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: '2023-12-31', exact: true }) });
+  await expect(first.getByRole('cell').nth(0)).toHaveText('14.3%');
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download annual performance CSV' }).click();
+  const file = await pending;
+  expect(file.suggestedFilename()).toBe('DEMO-annual-performance-2023-12-31-2025-12-31.csv');
+  const { readFile } = await import('node:fs/promises');
+  const rows = readCsv(await readFile((await file.path())!, 'utf8'));
+  expect(rows).toHaveLength(18);
+  const growth = rows.find(row => row.measure === 'Annual revenue growth' && row.input_1_period_end === '2023-12-31')!;
+  expect(growth.input_2_period_end).toBe('2022-12-31');
+  expect(Number(growth.value)).toBeCloseTo(1 / 7, 12);
+  expect(growth.availability).toBe('available');
+  await page.getByRole('combobox', { name: 'Last performance period' }).selectOption('2022-12-31');
+  await expect(page.getByRole('alert')).toContainText('must be no later');
+  await expect(table).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Download annual performance CSV' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Show all performance periods' }).click();
+  await expect(table.locator('tbody tr')).toHaveCount(5);
+  await expect(page.getByRole('button', { name: 'Download annual performance CSV' })).toBeEnabled();
+});
