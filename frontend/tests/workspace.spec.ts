@@ -2456,3 +2456,30 @@ test('I leave a gap in annual margin history and export the missing input faithf
   const latest = rows.find(row => row.measure === 'Revenue' && row.input_1_period_end === '2025-12-31')!;
   expect(latest.value).toBe('1280000000');
 });
+
+test('I keep measure labels visible while scrolling mobile peer and valuation comparisons', async ({ page }) => {
+  await installApi(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  const region = page.getByRole('region', { name: 'Company fundamentals', exact: true });
+  await expect(region).toBeVisible();
+  const label = region.getByRole('rowheader', { name: 'Net income margin', exact: true });
+  const initialLeft = await label.evaluate(element => element.getBoundingClientRect().left);
+  await page.getByRole('button', { name: 'Scroll Company fundamentals right', exact: true }).click();
+  await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  expect(Math.abs(await label.evaluate(element => element.getBoundingClientRect().left) - initialLeft)).toBeLessThan(2);
+  const assumptions = { baseFreeCashFlow: 100000000, growthRate: .05, discountRate: .1, terminalGrowthRate: .02, years: 5, netDebt: 200000000, sharesOutstanding: 50000000 };
+  await page.route('**/api/companies/DEMO/scenarios', route => route.fulfill({ json: ['My base', 'My upside'].map((name, index) => ({ id: String(index), ticker: 'DEMO', name, createdAt: '2026-10-01T00:00:00Z', modelVersion: 'fcff-v1', assumptions, result: { projections: [], terminalValue: 1000000000, presentValueOfTerminalValue: 900000000, enterpriseValue: 1000000000, equityValue: 800000000, valuePerShare: 16, terminalValueShare: .9 } })) }));
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Compare My base', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'Compare My upside', exact: true }).check();
+  const saved = page.getByRole('region', { name: 'Saved valuation comparison', exact: true });
+  await expect(saved).toBeVisible();
+  const assumptionLabel = saved.getByRole('rowheader', { name: 'Annual growth', exact: true });
+  const savedLeft = await assumptionLabel.evaluate(element => element.getBoundingClientRect().left);
+  await page.getByRole('button', { name: 'Scroll Saved valuation comparison right', exact: true }).click();
+  await expect.poll(() => saved.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  expect(Math.abs(await assumptionLabel.evaluate(element => element.getBoundingClientRect().left) - savedLeft)).toBeLessThan(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

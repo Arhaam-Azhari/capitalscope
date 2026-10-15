@@ -321,3 +321,13 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .annual-ratio-trend > label { display: grid; gap: 8px; max-width: 360px; font-size: 13px; }
 .annual-ratio-trend svg { display: block; width: 100%; max-width: 900px; height: auto; margin: 18px auto; }
 .annual-ratio-trend svg text { fill: var(--muted); font: 12px Arial, sans-serif; }
+
+.pinned-column-hint { display: block; margin-top: 5px; font-size: 11px; }
+@media screen {
+  .pin-first-column table tr > th:first-child { width: 160px; min-width: 160px; max-width: 160px; white-space: normal; overflow-wrap: anywhere; }
+  .pinned-measures table tr > th:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); box-shadow: 2px 0 0 var(--line); }
+  .pinned-measures table thead tr > th:first-child { background: #f4f0e7; z-index: 2; }
+}
+@media screen and (max-width: 760px) {
+  .pin-first-column table tr > th:first-child { width: 112px; min-width: 112px; max-width: 112px; }
+}
