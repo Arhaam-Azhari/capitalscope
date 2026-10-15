@@ -333,3 +333,7 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 }
 
 .table-navigation > .table-position { display: block; min-width: 0; flex: 1; white-space: normal; }
+
+.fundamental-coverage { margin: 24px 0; }
+.coverage-filter { display: flex; align-items: center; gap: 8px; margin: 18px 0; font-size: 13px; }
+.fundamental-coverage td:last-child { white-space: normal; min-width: 200px; max-width: 420px; line-height: 1.6; }
