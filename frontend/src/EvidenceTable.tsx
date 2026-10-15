@@ -30,7 +30,7 @@ export default function EvidenceTable({ label, className = '', pinFirstColumn = 
   }
   return <div className={`evidence-table ${pinFirstColumn ? 'pin-first-column' : ''} ${pinFirstColumn && position.overflow ? 'pinned-measures' : ''} ${className}`}>
     {position.overflow && <div className="table-navigation">
-      <div><span id={hintId}>{position.start ? 'More columns to the right' : position.end ? 'Last columns in view' : 'More columns on both sides'}</span>{pinFirstColumn && <small className="pinned-column-hint">Measure column stays visible</small>}</div>
+      <div className="table-position"><span id={hintId}>{position.start ? 'More columns to the right' : position.end ? 'Last columns in view' : 'More columns on both sides'}</span>{pinFirstColumn && <small className="pinned-column-hint">Measure column stays visible</small>}</div>
       <div><button type="button" className="secondary" disabled={position.start} aria-label={`Scroll ${label} left`} onClick={() => move(-1)}>←</button><button type="button" className="secondary" disabled={position.end} aria-label={`Scroll ${label} right`} onClick={() => move(1)}>→</button></div>
     </div>}
     <div ref={viewport} className="table-scroll" onScroll={measure} tabIndex={position.overflow ? 0 : undefined} role={position.overflow ? 'region' : undefined} aria-label={position.overflow ? label : undefined} aria-describedby={position.overflow ? hintId : undefined}>{children}</div>

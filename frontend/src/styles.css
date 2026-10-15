@@ -331,3 +331,5 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 @media screen and (max-width: 760px) {
   .pin-first-column table tr > th:first-child { width: 112px; min-width: 112px; max-width: 112px; }
 }
+
+.table-navigation > .table-position { display: block; min-width: 0; flex: 1; white-space: normal; }
