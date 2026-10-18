@@ -1,3 +1,5 @@
+import { earningsCashReview, earningsCashReviewCsv } from '../src/earningsCashReview';
+import { annualFundamentals } from '../src/companyFundamentals';
 import { researchEvidence } from '../src/researchEvidence';
 import { peerPeriodReview, peerPeriodReviewCsv } from '../src/peerPeriodReview';
 import { compareSavedAllocations, savedAllocationComparisonCsv } from '../src/savedAllocationComparison';
@@ -2798,4 +2800,50 @@ test('I download loaded summary evidence with saved text and dates while excludi
   expect(data.savedValuationSummaries.data[0]).not.toHaveProperty('valueMinusClose');
   expect(content).not.toContain('My browser-only text stays out');
   await expect(summary).toContainText('My saved thesis, with evidence');
+});
+
+test('I keep loss-year cash differences while leaving unsupported conversion ratios unavailable', () => {
+  const base = annualFundamentals(example)[0];
+  const row = (income: number, operating: number) => ({ ...base, income: { ...base.income!, value: income }, operating: { ...base.operating!, value: operating } });
+  const reviewed = earningsCashReview([row(100, 150), row(-100, 50), row(0, -20), row(100, -50), row(Number.MAX_VALUE, -Number.MAX_VALUE)]);
+  expect(reviewed.map(item => item.gap)).toEqual([50, 150, -20, -150, undefined]);
+  expect(reviewed.map(item => item.ratio)).toEqual([1.5, undefined, undefined, -.5, -1]);
+  expect(reviewed[1].ratioReason).toBe('Net income must be positive for the cash-to-earnings ratio.');
+  expect(reviewed[4].gapReason).toContain('numeric range');
+  const mismatched = { ...example, metrics: example.metrics.map(metric => metric.name === 'Operating cash flow' ? { ...metric, annualValues: metric.annualValues.map(point => ({ ...point, periodStart: '2020-01-01' })) } : metric) };
+  const missing = earningsCashReview(annualFundamentals(mismatched))[0];
+  expect(missing.gap).toBeUndefined(); expect(missing.ratio).toBeUndefined();
+  expect(missing.gapReason).toBe('No operating cash flow input matches the revenue period.');
+  const undated = earningsCashReview([{ ...base, revenue: { ...base.revenue!, periodStart: null } }])[0];
+  expect(undated.ratio).toBeUndefined(); expect(undated.gapReason).toContain('start is unavailable');
+  const csv = readCsv(earningsCashReviewCsv([row(-100, 50), { ...base, operating: undefined }], '2026-10-18T21:00:00Z'));
+  expect(csv[0].ocf_minus_net_income_usd).toBe('150'); expect(csv[0].ocf_to_positive_net_income_decimal).toBe('');
+  expect(csv[0].net_income_value_usd).toBe('-100'); expect(csv[1].operating_cash_flow_value_usd).toBe('');
+  expect(csv[1].difference_issue).toContain('No operating cash flow input');
+});
+
+test('I review cash backing of earnings for the selected annual window and export its inputs', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/examples/financials', route => route.fulfill({ json: { ...example, metrics: example.metrics.map(metric => ({ ...metric, annualValues: metric.annualValues.map(point => ({ ...point, value: metric.name === 'Net income' ? point.periodEnd === '2025-12-31' ? -100000000 : 100000000 : metric.name === 'Operating cash flow' ? 150000000 : point.value })) })) } }));
+  await page.reload();
+  await page.getByText('Review earnings and operating cash flow', { exact: true }).click();
+  const table = page.getByRole('table', { name: 'Matched-period earnings and cash flow review', exact: true });
+  await expect(table.locator('tbody tr')).toHaveCount(5);
+  const latest = table.locator('tbody tr').first();
+  await expect(latest).toContainText('$250M'); await expect(latest).toContainText('Net income must be positive');
+  await page.getByRole('combobox', { name: 'First performance period' }).selectOption('2024-12-31');
+  await page.getByRole('combobox', { name: 'Last performance period' }).selectOption('2024-12-31');
+  await expect(table.locator('tbody tr')).toHaveCount(1);
+  await expect(table).toContainText('1.50×'); await expect(table).toContainText('$50M');
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download earnings and cash flow CSV' }).click();
+  const downloaded = await pending; expect(downloaded.suggestedFilename()).toBe('DEMO-earnings-cash-review.csv');
+  const { readFile } = await import('node:fs/promises');
+  const records = readCsv(await readFile((await downloaded.path())!, 'utf8'));
+  expect(records).toHaveLength(1); expect(records[0].period_end).toBe('2024-12-31');
+  expect(records[0].ocf_to_positive_net_income_decimal).toBe('1.5'); expect(records[0].ocf_minus_net_income_usd).toBe('50000000');
+  expect(records[0].net_income_period_start).toBe('2024-01-01'); expect(records[0].operating_cash_flow_tag).toBe('example');
+  expect(records[0].data_mode).toBe('example');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

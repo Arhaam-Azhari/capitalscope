@@ -1,3 +1,4 @@
+import EarningsCashReview from './EarningsCashReview';
 import AnnualWindowSummary from './AnnualWindowSummary';
 import { useState } from 'react';
 import AnnualRatioTrend from './AnnualRatioTrend';
@@ -36,7 +37,7 @@ export default function FinancialRatios({ report }: { report: FinancialReport })
         <label>Last performance period<select value={end} onChange={event => { setEnd(event.target.value); setExportError(''); }}>{periods.map(period => <option key={period}>{period}</option>)}</select></label>
         {narrowed && <button type="button" className="secondary" onClick={() => { setStart(periods[0]); setEnd(periods[periods.length - 1]); setExportError(''); }}>Show all performance periods</button>}
       </div>
-      {invalidWindow ? <p className="notice error" role="alert">The first performance period must be no later than the last period.</p> : <><p className="muted small">{rows.length} of {allRows.length} periods shown · {start} to {end}. Growth can use a preceding period outside this window.</p><AnnualWindowSummary rows={rows} /><AnnualRatioTrend rows={rows} /></>}
+      {invalidWindow ? <p className="notice error" role="alert">The first performance period must be no later than the last period.</p> : <><p className="muted small">{rows.length} of {allRows.length} periods shown · {start} to {end}. Growth can use a preceding period outside this window.</p><AnnualWindowSummary rows={rows} /><AnnualRatioTrend rows={rows} /><EarningsCashReview rows={rows} /></>}
       <div className="export-actions"><button type="button" className="secondary" disabled={invalidWindow || !rows.length} onClick={download}>Download annual performance CSV</button><span className="muted small">Shown periods only · six measures per period · USD and decimal ratios · dated source inputs</span></div>
     </>}
     {exportError && <p role="alert" className="notice error">{exportError}</p>}
