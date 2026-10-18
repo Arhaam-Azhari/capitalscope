@@ -2495,7 +2495,7 @@ test('I distinguish unavailable comparison inputs and export the same reasons', 
   } }));
   await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
   await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
-  await page.locator('.fundamental-coverage summary').click();
+  await page.getByText(/^Check measure availability \(\d+ unavailable\)$/).click();
   const table = page.getByRole('table', { name: 'Measure availability and missing-input reasons' });
   await expect(table).toContainText('Prior revenue must be positive for growth.');
   await expect(table).toContainText('Net income does not match the annual revenue period.');
