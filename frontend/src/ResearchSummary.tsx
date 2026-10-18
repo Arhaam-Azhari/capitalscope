@@ -1,3 +1,4 @@
+import { researchEvidence } from './researchEvidence';
 import EvidenceTable from './EvidenceTable';
 import { useEffect, useState } from 'react';
 import { researchChecks, reviewedCount } from './researchChecklist';
@@ -19,6 +20,7 @@ export default function ResearchSummary({ company, report, financialLoading, fin
   const [attempt, setAttempt] = useState(0);
   const [preparedAt, setPreparedAt] = useState(() => new Date().toISOString());
   const [printError, setPrintError] = useState('');
+  const [exportError, setExportError] = useState('');
   const [copyMessage, setCopyMessage] = useState(''); const [copying, setCopying] = useState(false);
   const link = researchLink(company.ticker, 'Research summary');
   const example = company.ticker === 'DEMO';
@@ -39,6 +41,16 @@ export default function ResearchSummary({ company, report, financialLoading, fin
     try { window.print(); }
     catch { setPrintError('The browser could not open printing. Try its Print command once the summary has loaded.'); }
     finally { document.title = originalTitle; }
+  }
+  function downloadEvidence() {
+    if (pending) return;
+    try {
+      const data = researchEvidence({ company, report: financials, financialError: financialMessage, entry, notesError, context, contextError, exportedAt: new Date().toISOString() });
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${company.ticker}-research-evidence.json`;
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+      setExportError('');
+    } catch { setExportError('The research evidence file could not be prepared. Please try again.'); }
   }
   async function copyResearchLink() {
     setCopyMessage(''); setCopying(true);
@@ -67,6 +79,8 @@ export default function ResearchSummary({ company, report, financialLoading, fin
     <div className="panel summary-intro"><div className="panel-title"><div><span className="eyebrow">MY RESEARCH / {company.ticker}</span><h2>My company research summary</h2></div><button className="secondary" onClick={() => setAttempt(value => value + 1)}>Reload saved research</button></div>
       <p className="muted small">A read-only view of saved watchlist research, loaded financial facts, valuation cases, and dated closes. Sections can reflect different dates and are not an atomic snapshot. Reloading here reads saved notes, models, and stored prices; it does not import new prices or refresh financial facts. Unsaved drafts and browser-only research notes are excluded.</p>
       <div className="summary-print-actions"><button className="secondary" type="button" disabled={pending} onClick={printResearch}>Print research summary</button><span className="muted small">Opens your browser's print dialog. Choose Save as PDF if available. Prints the displayed evidence, including unavailable sections, without fetching fresh data.</span></div>
+      <div className="summary-print-actions"><button className="secondary" type="button" disabled={pending} onClick={downloadEvidence}>Download research evidence JSON</button><span className="muted small">Preserves loaded annual facts, saved thesis and risks, dated close, and valuation summaries with sources and unavailable sections. Excludes drafts and full valuation assumptions. Sections retain different dates. Review saved text before sharing.</span></div>
+      {exportError && <p className="notice error" role="alert">{exportError}</p>}
       {printError && <p className="notice error" role="alert">{printError}</p>}
       <div className="summary-share"><button className="secondary" type="button" disabled={copying} onClick={copyResearchLink}>Copy company research link</button><label>Company research link<input readOnly value={link} onFocus={event => event.target.select()} /></label><p className="muted small">Opens this company's summary on the same app instance. The link points to the latest saved evidence, not a frozen report, and does not grant access. Localhost links work only on your computer.</p>{copyMessage && <p role="status" className="save-status">{copyMessage}</p>}</div>
     </div>

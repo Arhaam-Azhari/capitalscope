@@ -1,3 +1,4 @@
+import { researchEvidence } from '../src/researchEvidence';
 import { peerPeriodReview, peerPeriodReviewCsv } from '../src/peerPeriodReview';
 import { compareSavedAllocations, savedAllocationComparisonCsv } from '../src/savedAllocationComparison';
 import { priceDrawdown, priceDrawdownCsv } from '../src/priceDrawdown';
@@ -2742,4 +2743,59 @@ test('I review peer reporting-window differences and export the same dated evide
   expect(records[0].source_url).toBe('https://www.sec.gov/Archives/edgar/data/1/');
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('I label missing research evidence and reject mismatched companies and modes', () => {
+  const base = { company: example.company, report: example, financialError: '', entry: null, notesError: '', context: null, contextError: '', exportedAt: '2026-10-18T20:00:00Z' };
+  const missing = researchEvidence(base);
+  expect(missing.financialFacts.status).toBe('available');
+  expect(missing.financialFacts.data?.metrics[0].annualValues).toHaveLength(5);
+  expect(missing.savedResearch.status).toBe('not_saved');
+  expect(missing.storedClose.status).toBe('unavailable');
+  expect(missing.savedValuationSummaries.data).toBeNull();
+  const empty = researchEvidence({ ...base, context: { ticker: 'DEMO', dataMode: 'example', evaluatedAt: base.exportedAt, shareBasisConfirmed: false, quote: null, quoteError: 'My close is missing', scenarios: [] } });
+  expect(empty.savedValuationSummaries.status).toBe('not_saved'); expect(empty.savedValuationSummaries.data).toEqual([]);
+  expect(empty.storedClose.reason).toBe('My close is missing');
+  const wrong = researchEvidence({ ...base, report: { ...example, dataMode: 'sec' }, entry: { entryId: 'wrong', ticker: 'AAPL', thesis: 'My other company', risks: '', status: 'watching', reviewDate: null, version: 1, createdAt: '', updatedAt: '' }, context: { ticker: 'AAPL', dataMode: 'market', evaluatedAt: '', shareBasisConfirmed: false, quote: null, quoteError: null, scenarios: [] } });
+  expect(wrong.financialFacts.status).toBe('unavailable'); expect(wrong.financialFacts.data).toBeNull();
+  expect(wrong.savedResearch.status).toBe('unavailable'); expect(wrong.savedResearch.data).toBeNull();
+  expect(wrong.savedValuationSummaries.status).toBe('unavailable');
+  const failed = researchEvidence({ ...base, financialError: 'My facts failed', notesError: 'My notes failed', contextError: 'My cases failed' });
+  expect(failed.financialFacts.data).toBeNull(); expect(failed.financialFacts.reason).toBe('My facts failed');
+  expect(failed.savedResearch.reason).toBe('My notes failed'); expect(failed.savedValuationSummaries.reason).toBe('My cases failed');
+  expect(failed.exportedAt).toBe(base.exportedAt);
+});
+
+test('I download loaded summary evidence with saved text and dates while excluding browser notes', async ({ page }) => {
+  await installApi(page);
+  await page.evaluate(() => localStorage.setItem('capitalscope.note.DEMO', 'My browser-only text stays out'));
+  const entry = { entryId: 'my-research', ticker: 'DEMO', status: 'researching', thesis: 'My saved thesis, with evidence', risks: 'My saved risk', reviewDate: '2026-11-01', checks: ['business'], version: 3, createdAt: '2026-10-01T00:00:00Z', updatedAt: '2026-10-17T12:00:00Z' };
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [entry] }));
+  let release: () => void = () => {};
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/companies/DEMO/scenarios/price-context?*', async route => {
+    await delayed;
+    await route.fulfill({ json: { ticker: 'DEMO', dataMode: 'example', evaluatedAt: '2026-10-18T20:00:00Z', shareBasisConfirmed: false,
+      quote: { close: 12.345, priceDate: '2026-10-15', priceAgeDays: 3, source: 'Invented close', sourceUrl: null, retrievedAt: null }, quoteError: null,
+      scenarios: [{ id: 'my-case', name: 'My base case', createdAt: '2026-10-16T12:00:00Z', modelVersion: 'fcff-v1', modeledShares: 1000000, valuePerShare: 14.56789, valueMinusClose: 2, relativeGap: .2, unavailableReason: null }] } });
+  });
+  await page.getByRole('button', { name: 'Research summary', exact: true }).click();
+  const summary = page.getByRole('region', { name: 'Research summary for DEMO', exact: true });
+  const button = summary.getByRole('button', { name: 'Download research evidence JSON', exact: true });
+  await expect(button).toBeDisabled(); release(); await expect(button).toBeEnabled();
+  const pending = page.waitForEvent('download'); await button.click(); const downloaded = await pending;
+  expect(downloaded.suggestedFilename()).toBe('DEMO-research-evidence.json');
+  const { readFile } = await import('node:fs/promises');
+  const content = await readFile((await downloaded.path())!, 'utf8'); const data = JSON.parse(content);
+  expect(data.exportVersion).toBe('company-research-evidence-v1'); expect(data.company.ticker).toBe('DEMO');
+  expect(Number.isNaN(Date.parse(data.exportedAt))).toBe(false);
+  expect(data.savedResearch.data).toEqual(entry);
+  expect(data.financialFacts.data.metrics[0].annualValues).toHaveLength(5);
+  expect(data.storedClose.data.close).toBe(12.345); expect(data.storedClose.data.priceDate).toBe('2026-10-15');
+  expect(data.storedClose.evaluatedAt).toBe('2026-10-18T20:00:00Z');
+  expect(data.savedValuationSummaries.data[0].valuePerShare).toBe(14.56789);
+  expect(data.savedValuationSummaries.data[0]).not.toHaveProperty('relativeGap');
+  expect(data.savedValuationSummaries.data[0]).not.toHaveProperty('valueMinusClose');
+  expect(content).not.toContain('My browser-only text stays out');
+  await expect(summary).toContainText('My saved thesis, with evidence');
 });
