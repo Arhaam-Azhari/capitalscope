@@ -1,3 +1,4 @@
+import PeerPeriodReview from './PeerPeriodReview';
 import SavedFundamentalsSetups from './SavedFundamentalsSetups';
 import type { PeerMeasure } from './peerMeasures';
 import PeerMeasureChart from './PeerMeasureChart';
@@ -93,6 +94,7 @@ export default function CompanyComparison({ companies, peers, measure, onChange,
       <tr><th scope="row">Cash after capex</th>{rows.map(({ report, operating, capex, afterCapex }) => <td key={report.company.ticker}>{afterCapex !== undefined ? money(afterCapex) : '—'}<Evidence point={operating} example={mode === 'example'} /><Evidence point={capex} example={mode === 'example'} /></td>)}</tr>
       <tr><th scope="row">Cash after capex / revenue</th>{rows.map(({ report, revenue, afterCapex }) => <td key={report.company.ticker}>{percent(afterCapex, revenue?.value)}</td>)}</tr>
     </tbody></table></EvidenceTable>}
+    {!busy && reports.length > 0 && <PeerPeriodReview reports={reports} failures={failures} />}
     {!busy && reports.length > 0 && <FundamentalCoverage reports={reports} />}
     {!busy && !rows.length && <p>No company figures are available for this comparison.</p>}
     <SavedFundamentalsSetups companies={companies} tickers={peers} measure={measure} onLoad={onChange} />

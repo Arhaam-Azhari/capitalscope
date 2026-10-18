@@ -1,3 +1,4 @@
+import { peerPeriodReview, peerPeriodReviewCsv } from '../src/peerPeriodReview';
 import { compareSavedAllocations, savedAllocationComparisonCsv } from '../src/savedAllocationComparison';
 import { priceDrawdown, priceDrawdownCsv } from '../src/priceDrawdown';
 import { comparePrices, priceComparisonCsv, priceComparisonCoverage, priceCoverageCsv } from '../src/priceComparison';
@@ -2494,7 +2495,7 @@ test('I distinguish unavailable comparison inputs and export the same reasons', 
   } }));
   await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
   await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
-  await page.locator('.fundamental-coverage summary').click();
+  await page.getByText(/^Check measure availability \(\d+ unavailable\)$/).click();
   const table = page.getByRole('table', { name: 'Measure availability and missing-input reasons' });
   await expect(table).toContainText('Prior revenue must be positive for growth.');
   await expect(table).toContainText('Net income does not match the annual revenue period.');
@@ -2685,4 +2686,60 @@ test('I search saved peer setups without hiding records from the CSV export', as
   expect(field(rows[1], 'can_open')).toBe('false');
   await search.fill('');
   await expect(setups).toContainText('Showing 2 of 2 loaded setups.');
+});
+
+test('I distinguish fiscal windows, leap years, and unavailable dates without changing figures', () => {
+  const report = (ticker: string, start: string | null, end: string) => ({ ...example, company: { ticker, name: ticker, sector: 'Technology' }, metrics: [{ name: 'Revenue', unit: 'USD', annualValues: [{ ...example.metrics[0].annualValues[0], periodStart: start, periodEnd: end }] }] });
+  const a = report('A', '2024-01-01', '2024-12-31');
+  const b = report('B', '2024-07-01', '2025-06-30');
+  const review = peerPeriodReview([a, b]);
+  expect(review.rows.map(row => row.days)).toEqual([366, 365]);
+  expect(review.rows.map(row => row.endLagDays)).toEqual([181, 0]);
+  expect(review.endSpreadDays).toBe(181); expect(review.sameWindow).toBe(false);
+  expect(peerPeriodReview([a, { ...a, company: b.company }]).sameWindow).toBe(true);
+  expect(peerPeriodReview([a, report('B', '2024-01-02', '2024-12-31')]).sameWindow).toBe(false);
+  expect(peerPeriodReview([a]).endSpreadDays).toBeUndefined();
+  expect(peerPeriodReview([a]).sameWindow).toBe(false);
+  expect(peerPeriodReview([report('W', '2023-12-31', '2025-01-04')]).rows[0].days).toBe(371);
+  for (const [start, end] of [[null, '2024-12-31'], ['2024-02-30', '2024-12-31'], ['2025-01-01', '2024-12-31'], ['2024-01-01', 'invalid']] as const) {
+    const row = peerPeriodReview([report('M', start, end)]).rows[0];
+    expect(row.days).toBeUndefined(); expect(row.reason).not.toBe('');
+  }
+  const missing = { ...a, metrics: [] };
+  const incomplete = peerPeriodReview([a, missing]);
+  expect(incomplete.completePeriods).toBe(1); expect(incomplete.sameWindow).toBe(false);
+  expect(incomplete.rows[1].endLagDays).toBeUndefined();
+  const rows = readCsv(peerPeriodReviewCsv([a, missing], ['B: unavailable'], '2026-10-18T20:00:00Z'));
+  expect(rows[0].inclusive_period_days).toBe('366');
+  expect(rows[1].inclusive_period_days).toBe(''); expect(rows[1].period_issue).toBe('No supported annual revenue input.');
+  expect(rows[0].load_failures).toBe('B: unavailable');
+});
+
+test('I review peer reporting-window differences and export the same dated evidence', async ({ page }) => {
+  await installApi(page);
+  await page.route('**/api/companies/*/financials', route => {
+    const ticker = route.request().url().split('/').at(-2)!;
+    const start = ticker === 'AAPL' ? '2024-01-01' : '2024-07-01';
+    const end = ticker === 'AAPL' ? '2024-12-31' : '2025-06-30';
+    return route.fulfill({ json: { ...example, company: catalog.find(company => company.ticker === ticker), dataMode: 'sec', source: 'SEC EDGAR companyfacts', retrievedAt: '2026-10-18T19:00:00Z', metrics: [{ name: 'Revenue', unit: 'USD', annualValues: [{ ...example.metrics[0].annualValues[0], periodStart: start, periodEnd: end, filed: '2025-08-01', tag: 'Revenues', sourceUrl: 'https://www.sec.gov/Archives/edgar/data/1/' }] }] } });
+  });
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Comparison data' }).selectOption('sec');
+  await page.getByText('Review fiscal-period comparability', { exact: true }).click();
+  const table = page.getByRole('table', { name: 'Latest annual revenue periods across loaded peers' });
+  await expect(table).toContainText('2024-01-01 to 2024-12-31');
+  await expect(table).toContainText('366'); await expect(table).toContainText('181 days');
+  await expect(table.getByRole('link', { name: 'SEC revenue filing' })).toHaveCount(2);
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download fiscal-period review CSV' }).click();
+  const downloaded = await pending;
+  expect(downloaded.suggestedFilename()).toBe('peer-fiscal-period-review.csv');
+  const { readFile } = await import('node:fs/promises');
+  const records = readCsv(await readFile((await downloaded.path())!, 'utf8'));
+  expect(records.map(row => row.ticker)).toEqual(['AAPL', 'MSFT']);
+  expect(records.map(row => row.end_lag_days_vs_newest_loaded_peer)).toEqual(['181', '0']);
+  expect(records[0].filed).toBe('2025-08-01'); expect(records[0].data_mode).toBe('sec');
+  expect(records[0].source_url).toBe('https://www.sec.gov/Archives/edgar/data/1/');
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
