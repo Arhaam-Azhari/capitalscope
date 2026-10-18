@@ -2644,3 +2644,45 @@ test('I save and reopen a named peer setup with its measure after reloading', as
   await expect(setups.getByText('No saved company comparison setups.', { exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Peer chart measure' })).toHaveValue('growth');
 });
+
+test('I search saved peer setups without hiding records from the CSV export', async ({ page }) => {
+  await installApi(page);
+  const records = [
+    { id: 'ordered', name: '=My ordered peers', tickers: ['MSFT', 'AAPL'], measure: 'growth', createdAt: '2026-10-17T12:00:00Z', modelVersion: 'fundamentals-comparison-v1' },
+    { id: 'legacy', name: 'Legacy group', tickers: ['AAPL', 'UNKNOWN'], measure: 'retired', createdAt: '2026-10-16T12:00:00Z', modelVersion: 'future-version' }
+  ];
+  await page.route('**/api/research/comparison-setups', route => route.fulfill({ json: records }));
+  await page.getByRole('button', { name: 'Compare companies', exact: true }).click();
+  const setups = page.getByRole('region', { name: 'Saved company comparison setups' });
+  const search = setups.getByRole('searchbox', { name: 'Search saved company setups' });
+  await expect(setups).toContainText('Showing 2 of 2 loaded setups.');
+  await expect(setups.getByRole('button', { name: 'Open company setup Legacy group', exact: true })).toBeDisabled();
+  await search.fill('  microsoft  ');
+  await expect(setups).toContainText('Showing 1 of 2 loaded setups.');
+  await expect(setups.getByText('Legacy group', { exact: true })).toHaveCount(0);
+  await search.fill('Annual revenue growth');
+  await expect(setups).toContainText('Showing 1 of 2 loaded setups.');
+  await search.fill('does not exist');
+  await expect(setups).toContainText('Showing 0 of 2 loaded setups. No saved setups match this search.');
+  const downloadEvent = page.waitForEvent('download');
+  await setups.getByRole('button', { name: 'Download all saved company setups CSV' }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe('saved-company-comparison-setups.csv');
+  const stream = await download.createReadStream();
+  let content = ''; for await (const chunk of stream!) content += chunk.toString();
+  const rows = readCsv(content); const header = rows[0];
+  const field = (row: string[], name: string) => row[header.indexOf(name)];
+  expect(rows).toHaveLength(3);
+  expect(field(rows[1], 'setup_name')).toBe("'=My ordered peers");
+  expect(field(rows[1], 'peer_1_ticker')).toBe('MSFT');
+  expect(field(rows[1], 'peer_2_ticker')).toBe('AAPL');
+  expect(field(rows[1], 'peer_3_ticker')).toBe('');
+  expect(field(rows[1], 'measure_key')).toBe('growth');
+  expect(field(rows[1], 'can_open')).toBe('true');
+  expect(Number.isNaN(Date.parse(field(rows[1], 'list_updated_in_view_at')))).toBe(false);
+  expect(Number.isNaN(Date.parse(field(rows[1], 'exported_at')))).toBe(false);
+  expect(field(rows[2], 'setup_model_version')).toBe('future-version');
+  expect(field(rows[2], 'can_open')).toBe('false');
+  await search.fill('');
+  await expect(setups).toContainText('Showing 2 of 2 loaded setups.');
+});
