@@ -2847,3 +2847,38 @@ test('I review cash backing of earnings for the selected annual window and expor
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('I defer valuation code until opening it and keep navigation usable while it loads', async ({ page }) => {
+  let requested = 0; let release: () => void = () => {};
+  const delayed = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/src/ValuationPanel.tsx*', async route => { requested++; await delayed; await route.continue(); });
+  await installApi(page);
+  expect(requested).toBe(0);
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Opening Valuation' })).toBeVisible();
+  expect(requested).toBe(1);
+  await expect(page.getByRole('navigation', { name: 'Research sections' })).toBeVisible();
+  release();
+  await expect(page.getByRole('heading', { name: 'Build your assumptions', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Build your assumptions', exact: true })).toBeVisible();
+  expect(requested).toBe(1);
+});
+
+test('I recover from a failed section download without losing workspace navigation', async ({ page }) => {
+  await page.route('**/src/ValuationPanel.tsx*', route => route.abort('failed'));
+  await installApi(page);
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  const failed = page.getByRole('region', { name: 'Workspace section unavailable' });
+  await expect(failed).toContainText('This section could not be opened');
+  await expect(failed.getByRole('button', { name: 'Reload CapitalScope' })).toBeVisible();
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Growth, margins & cash flow', exact: true })).toBeVisible();
+  await expect(failed).toHaveCount(0);
+  await page.getByRole('button', { name: 'Valuation', exact: true }).click();
+  await expect(failed).toBeVisible();
+  await page.unroute('**/src/ValuationPanel.tsx*');
+  await failed.getByRole('button', { name: 'Reload CapitalScope' }).click();
+  await expect(page.getByRole('heading', { name: 'Build your assumptions', exact: true })).toBeVisible();
+});
