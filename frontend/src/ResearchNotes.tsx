@@ -1,6 +1,7 @@
 import { noteDrafts } from './researchDrafts';
 import { useState } from 'react';
 import type { Company } from './types';
+import NoteTransfer from './NoteTransfer';
 
 export default function ResearchNotes({ company }: { company: Company }) {
   const key = `capitalscope.note.${company.ticker}`;
@@ -49,6 +50,9 @@ ${text}`;
       noteDrafts.delete(key); setText(saved); setMessage('Draft discarded.'); setFailed(false);
     }}>Discard note draft</button><span className="muted small">Drafts stay available while this app is open. Refreshing or closing can lose unsaved drafts. Saved notes are stored on this browser only. No account or cloud sync yet.</span></div>
     <p className="muted small">The download includes the text currently shown, including unsaved edits. Downloading does not save the note in this browser.</p>
+    <NoteTransfer company={company} text={text} isDraft={noteDrafts.has(key)} onRestore={restored => {
+      setText(restored); noteDrafts.set(key, restored); setMessage('Backup restored as an unsaved draft. Choose Save note to keep it in this browser.'); setFailed(false);
+    }} />
     {downloadError && <p role="alert" className="notice error">{downloadError}</p>}
     {message && <p role={failed ? 'alert' : 'status'} className={failed ? 'notice error' : 'save-status'}>{message}</p>}
   </section>;
