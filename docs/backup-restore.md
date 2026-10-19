@@ -45,4 +45,6 @@ I remove only the check's uniquely named disposable resources. Docker is unavail
 
 ## My limits
 
-I verify a logical database restore, not off-site storage, automated retention, encryption, point-in-time recovery, or cross-version migration. I do not back up browser-local notes or unsaved drafts, because they are outside PostgreSQL. For the standalone H2 launch, I keep a stopped-app copy of the full data directory; the PostgreSQL scripts do not accept H2 files, and this CI check does not establish an H2 backup/restore route.
+I transfer browser-local notes separately: in Research notes I open Back up or restore this note and download its JSON backup. On the same company in another browser, I choose the file, review the preview, choose Restore into editor, then Save note. Reading a file leaves my editor unchanged; restoring replaces the editor draft but preserves the saved note until I save. I export one company’s note at a time, including any current unsaved edits. I can cancel a preview or discard a restored draft. I keep private research in these files private and treat their metadata as unverified labels.
+
+I verify a logical database restore, not off-site storage, automated retention, encryption, point-in-time recovery, or cross-version migration. My database archives exclude browser-local notes and unsaved drafts, because they are outside PostgreSQL. For the standalone H2 launch, I keep a stopped-app copy of the full data directory; the PostgreSQL scripts do not accept H2 files, and this CI check does not establish an H2 backup/restore route.
