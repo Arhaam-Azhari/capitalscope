@@ -15,3 +15,5 @@ backend/src/main/resources/static/
 data/
 *.mv.db
 *.trace.db
+
+backups/

@@ -404,3 +404,5 @@ I compare earnings with operating cash flow across the selected annual performan
 I load valuation, peer comparison, price analysis, portfolios, watchlist, and research-summary code when I open those sections. I keep the main navigation available during loading and show a reload action if a section cannot open. I retain the existing API errors and draft-exit warning.
 
 I recorded my final desktop/mobile review in [my workflow review](docs/workflow-review.md). I check all eight sections at 1440, 390, and 320 pixels and use labeled, keyboard-focusable scroll controls for the core daily-price and portfolio evidence tables.
+
+I back up the Compose/PostgreSQL database with a custom-format archive and restore it into a separate empty database. I verify saved research/revisions, valuation cases, and simulated portfolios after restoration in CI. I document the non-overwrite guards and limits in [my backup/restore route](docs/backup-restore.md).
