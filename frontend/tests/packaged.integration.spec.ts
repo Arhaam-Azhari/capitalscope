@@ -11,6 +11,9 @@ test('packaged dashboard serves its catalog and explicitly labeled example', asy
   await expect(page.locator('.metric-card').first()).toContainText('$1.28B');
   await expect(page.getByRole('cell', { name: '$840,000,000.00', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/packaged-research-dashboard.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/packaged-research-dashboard-mobile.png', fullPage: true });
 });
 
 test('dashboard sends percentage inputs to the real Java calculator', async ({ page }) => {

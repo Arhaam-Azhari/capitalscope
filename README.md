@@ -1,6 +1,8 @@
 # CapitalScope
 
-I'm building a workspace for company research, valuation, and practice portfolios. I can browse companies, inspect annual figures, save valuation scenarios, and keep research notes. SEC imports and valuation versions now live in a database.
+I built CapitalScope to connect SEC financial evidence, explicit valuation assumptions, saved research, and simulated portfolios in one finance workbench. I use React/TypeScript, Java/Spring Boot, API integrations, JDBC, Flyway, and PostgreSQL/H2.
+
+I have finished the scoped portfolio release. I describe the verified launch path, test coverage, and remaining provider/container checks in [my release notes](docs/portfolio-release.md). I keep accounts and broader product work separate from this release.
 
 I gave CapitalScope a warm ivory and copper identity, with serif company titles, an editorial metric strip, and horizontal navigation. I checked it against my LedgerDesk UI so the projects have different colors, typography, and layouts. I keep tables readable and let wide evidence tables scroll on smaller screens.
 
@@ -11,6 +13,20 @@ I also keep a [mobile screenshot](docs/research-dashboard-mobile.png) of the sam
 I use this [short demo walkthrough](docs/demo-walkthrough.md) to show the research, valuation, portfolio, and price-analysis flows. It includes a key-free route, a small calculation I can check, and the limits I explain when presenting the project.
 
 ## Run the app
+
+I can run the verified jar route with Java 17, Maven 3.9+, and Node.js 22:
+
+```bash
+bash scripts/build.sh
+java -jar backend/target/capitalscope-0.1.0.jar
+```
+
+I open http://localhost:8080. The default jar launch uses a local H2 database under `./data`; I keep that directory when I want to retain saved work. I use the no-key demo before configuring live providers.
+
+### Docker alternative
+
+I provide the Compose path below, but I have not verified the container build locally or in CI. I use the jar route for the verified demo.
+
 
 With Docker installed, copy `.env.example` to `.env` and set `DATABASE_PASSWORD` to a password for the local database:
 
@@ -24,49 +40,15 @@ For real SEC imports, copy `.env.example` to `.env`, set `SEC_USER_AGENT` to an 
 
 ## What I can do
 
-- Inspect daily price history with source, retrieval date, and raw-price caveats.
-- I export the full loaded raw OHLC and volume history as CSV, regardless of analysis windows or filters. I include source evidence and separate provider, view-load, and export dates, and reject invalid observations instead of silently omitting them.
-- I reload server-held price history without leaving the Prices view. I clear dependent calculations and pending comparisons, show the new view-load time separately from provider retrieval time, and leave server caching intact.
-- I compare two market companies on exact shared closing-price dates, starting both indices at 100. I inspect raw-price changes, shared-date drawdowns, excluded observations, and each source snapshot, then export the aligned evidence as CSV.
-- I save named company pairs and date windows in the shared database, then reload their inputs for a new price comparison. I save no price snapshots or results in these setups; old windows may no longer overlap the available observations.
-- I search saved price setups by name, reference company, ticker, or dates and export all loaded records as CSV. Search does not narrow the export, which includes saved dates, setup versions, and load compatibility without claiming to preserve price evidence.
-- I compare price changes between adjacent shared dates, inspect the highest and lowest intervals, and export the raw endpoints and percentage-point gaps. I show calendar spacing and keep unequal intervals separate from daily or total-return performance.
-- I review intervals by displayed minimum gap and direction, or sort by unrounded absolute gap. I keep summary metrics and CSV exports complete regardless of these review controls, and reset the controls when the comparison changes.
-- I inspect and export every stored date in a price-comparison window, including dates excluded from alignment. I keep unavailable closes blank, define overlap against each loaded snapshot, and retain the coverage audit when there are too few shared dates to calculate a comparison.
-- I analyze a chosen window of loaded raw closes for the largest observed peak-to-trough decline and its recovery, then export each observation with source evidence. I count observation intervals rather than trading days and keep split and dividend caveats explicit.
-- I chart declines below the running price peak and inspect every decline-and-recovery episode in the window, including unfinished recoveries. I export episode depths, dates, observation counts, and the full window's close-price evidence.
-- Compare two to four saved valuation cases, inspect changed assumptions, and download their comparison as CSV.
-- Download my calculated allocation plan as CSV with unrounded dollar values, entered targets, baseline and calculation dates, and per-holding stored price evidence. I keep cash price fields blank and include the simulation limits in the file.
-- Compare two to four compatible saved allocation mixes at one current valuation. I inspect cash, leading exposures, and gross holding changes beside the current mix, then export the target percentages and shared baseline evidence as CSV. Comparing leaves my planner inputs and trades unchanged.
-- I apply shared price shocks to my selected saved mixes, inspect each proposal beside the current mix, and export the assumptions and valuation evidence. Each mix keeps its own cash fixed; changing my selection or assumptions clears the previous result.
-- Save named allocation percentages in the shared database and load them into a new calculation. I reject changed holding sets instead of silently reallocating targets; saves contain no prices, recorded trades, or share-basis acknowledgment.
-- Apply my own default and sector price shocks to current and target dollar allocations at the same stored baseline. I keep each mix’s cash fixed, compare hypothetical totals, and export the assumptions and results without recording trades or implying forecast probabilities.
-- Compare my largest holding, largest sector bucket, and combined top three holdings before and after targets. I rank each side separately, exclude cash and zero weights from rankings, and download the concentration measures with dates and limits as CSV.
-- Compare current and target sector weights, dollar values, and percentage-point changes in my allocation plan. I group by the fixed catalog, keep cash separate and missing classifications explicit, and include bucket totals in the CSV without claiming to measure correlations or recommend allocations.
-- Review holding increases, reductions, gross movement as a percentage of baseline value, and the target cash reserve. I count both sides of holding changes, exclude cash from gross movement, and export the unrounded summary and balancing residual with each asset row.
-- Inspect optional fractional-share estimates after I check recorded shares against the stored raw-price basis. I export the acknowledgment and unrounded estimates, withhold inconsistent estimates, and keep this separate from recording trades or verifying split history.
-- Fill allocation targets from the current stored mix, rounded to exactly 100% using largest remainders. I break rounding ties by cash and then holding order, and keep the targets editable before calculation.
-- Enter my own target allocations for cash and current holdings, then inspect the dollar changes against a complete stored valuation. I require targets to total exactly 100%; this planner does not execute trades or model fees, taxes, or share rounding.
-- Inspect cash, company, and sector weights, largest exposures, and the combined top three holdings.
-- Download all current holdings and their last loaded saved research as CSV, including full notes, manual checks, review flags, entry versions, and load/export dates. I export all holdings regardless of the filter and label the separate positions and research reads.
-- Select two to four current real holdings and open their company comparison, including shared saved theses, risks, and manual checks. I keep selections visible above the table when filters hide rows; the comparison loads current saved research and financials separately.
-- Search holdings research by ticker, company, or sector and narrow the review to due entries, missing notes, open manual checks, archived research, or unsupported instruments. I combine search with the selected gap filter; totals and CSV still cover every holding.
-- Sort holdings into a research review queue, with overdue and due-today notes first, explicit reasons for missing research, and unsupported instruments last. I use dates and tickers to break ties; this orders my workflow rather than ranking investments.
-- Review current simulated holdings against saved research, spot missing notes, open manual checks, archived entries, and due dates, then open each company’s research summary. I load shared saved notes on demand; drafts and closed positions stay outside this review.
-- Keep a saved company watchlist with theses, risks, research status, and review dates.
-- Value current holdings using stored daily closes, with dated price evidence, partial coverage, and unrealized P&L.
-- Record simulated splits and cash dividends in the same ordered history as trades.
-- Create practice portfolios, record manual simulated buys/sells and fees, and inspect cash, holdings, and realized P&L.
-- Download financial facts and ordered portfolio events as CSV files.
-- Search 50 companies by name or ticker and filter by sector.
-- Request annual revenue, net income, operating cash flow, capex, and cash balances from SEC EDGAR.
-- Inspect charts, exact values, filing dates, source links, and accounting tags.
-- Inspect a 5 × 5 sensitivity table across discount rates and terminal growth assumptions.
-- Enter assumptions in a DCF model and inspect projections, estimated value, and terminal contribution.
-- Compare two to four companies with matching-period margins, revenue growth, cash after capex, and filing evidence.
-- Explore a separate fictional peer set without configuring SEC access.
-- Save, reload, and delete named valuation scenarios for each company.
-- Save research notes separately for each company in the current browser.
+- I research 50 catalog companies using SEC annual facts, accounting tags, source links, matched-period ratios, and explicit missing-data states.
+- I compare two to four companies, inspect fiscal-period differences, and save reusable peer groups and chart measures.
+- I build FCFF valuation cases, inspect projected cash flows and sensitivity, save assumptions, and compare modeled results.
+- I keep shared theses, risks, review dates, manual checklists, and revision history, with separate browser-only notes.
+- I inspect dated raw prices, drawdowns, shared-date comparisons, coverage gaps, and saved comparison setups.
+- I record manual simulated portfolio events, inspect cash/holdings and dated valuations, and explore allocation targets and explicit price shocks.
+- I export source-aware CSVs, download a loaded research-evidence JSON file, and print a company summary. I retain sources, timestamps, assumptions, and unavailable-value reasons where relevant.
+
+I start with a clearly labeled fictional workspace for a key-free demo. I do not send broker orders, provide live intraday quotes, or present the shared database as private user accounts.
 
 I selected the top 50 American companies from the CompaniesMarketCap ranking observed on October 6, 2026, using one ticker per company. This is a fixed snapshot, not a live ranking. [Company universe](docs/company-universe.md).
 
@@ -107,6 +89,9 @@ java -jar backend/target/capitalscope-0.1.0.jar
 
 | Endpoint | Purpose |
 | --- | --- |
+| `GET /api/research/comparison-setups` | I list shared saved peer groups and chart measures |
+| `POST /api/research/comparison-setups` | I save `{name, tickers, measure}` selections without financial figures |
+| `DELETE /api/research/comparison-setups/{id}` | I remove a saved peer setup |
 | `GET /api/companies/{ticker}/price-comparison-setups` | I list saved comparison inputs for a market company |
 | `POST /api/companies/{ticker}/price-comparison-setups` | I save `{name, referenceTicker, startDate, endDate}` without fetching prices |
 | `DELETE /api/companies/{ticker}/price-comparison-setups/{id}` | I delete a setup scoped to its current company |
@@ -210,7 +195,7 @@ GitHub Actions runs backend/package checks and frontend/browser checks on pushes
 
 ## My portfolio release finish line
 
-I am freezing feature scope and finishing performance, workflow review, and release documentation. I track the remaining passes and later product work in [my release checklist](docs/release-checklist.md).
+I completed the performance, workflow-review, and release-documentation passes. I record the completed scope and later product work in [my release checklist](docs/release-checklist.md).
 
 ## Later product work
 
