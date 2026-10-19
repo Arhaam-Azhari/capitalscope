@@ -1,4 +1,5 @@
 import FinancialRatios from './FinancialRatios';
+import MetricChange from './MetricChange';
 import EvidenceTable from './EvidenceTable';
 import { useState } from 'react';
 import { money } from './api';
@@ -40,6 +41,7 @@ export default function FinancialOverview({ report }: { report: FinancialReport 
         {metric.annualValues.map(p => <tr key={p.periodEnd}><th scope="row">{p.periodEnd}</th><td>{money(p.value, false)}</td><td>{p.filed || '—'}</td><td>{p.sourceUrl && report.dataMode === 'sec' ? <a href={p.sourceUrl} target="_blank" rel="noreferrer">SEC filing ↗</a> : 'Example only'}</td></tr>)}
         {!metric.annualValues.length && <tr><td colSpan={4}>No supported annual facts were found. Missing data is not zero.</td></tr>}
       </tbody></table></EvidenceTable></div>
+      <MetricChange metric={metric} />
       <details><summary>Accounting tags and data notes</summary><p className="small muted">{report.notes.join(' ')}</p><ul className="source-tags">{metric.annualValues.map(p => <li key={p.periodEnd}>{p.periodEnd}: <code>{p.tag}</code>{p.periodStart && ` · ${p.periodStart} to ${p.periodEnd}`}</li>)}</ul></details>
     </section>}
     <FinancialRatios report={report} />
