@@ -2,11 +2,11 @@
 
 I am finishing a shared, locally runnable finance research workbench. I am freezing the feature scope for this release so I can review the whole experience instead of adding more panels.
 
-## My remaining release passes
+## My release passes
 
-1. I reduce the initial download, load larger sections on demand, and verify loading/failure recovery through browser and packaged-app checks.
-2. I review the main desktop and mobile journeys: company selection, sources, valuation and saved cases, comparisons, research, prices, and practice portfolios. I fix blocking behavior and presentation issues that this review finds.
-3. I finish the setup/demo documentation and screenshots, check the documented launch path, and verify configured live imports where credentials and provider access are available. I record any unverified provider or packaging coverage explicitly before calling the portfolio release complete.
+1. **Completed:** I reduced the initial download and verified loading/failure recovery in [PR #85](https://github.com/Arhaam-Azhari/capitalscope/pull/85).
+2. **Reviewed:** I checked all eight sections at desktop, phone, and narrow-phone widths and improved price/portfolio table access. I recorded the scope and checks in [my workflow review](workflow-review.md). I require full CI before merging the review changes.
+3. **Remaining:** I finish the setup/demo documentation and screenshots, check the documented launch path, and verify configured live imports where credentials and provider access are available. I record any unverified provider or packaging coverage explicitly before calling the portfolio release complete.
 
 I treat these as three focused passes, not a promised number of hours. The final review can reveal fixes. I use passing CI as a release requirement, and I keep live-provider checks separate from synthetic fixtures and packaged-app tests.
 

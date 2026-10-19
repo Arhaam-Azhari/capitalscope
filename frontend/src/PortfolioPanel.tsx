@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import PortfolioResearchReview from './PortfolioResearchReview';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import PortfolioValuation from './PortfolioValuation';
@@ -67,7 +68,7 @@ export default function PortfolioPanel({ companies, onOpen, onCompare }: { compa
     {summary && <>
       <div className="panel-title"><h3>{summary.portfolio.name}</h3><a className="secondary export-link" href={`/api/portfolios/${summary.portfolio.id}/export.csv`}>Download event CSV</a></div>
       <div className="result-summary"><div><span>Available cash</span><strong data-testid="portfolio-cash">{money(summary.cash, false)}</strong></div><div><span>Realized P&amp;L</span><strong data-testid="portfolio-realized">{money(summary.realizedPnl, false)}</strong></div><div><span>Cash dividends received</span><strong data-testid="portfolio-dividends">{money(summary.dividendIncome, false)}</strong></div><div><span>Starting cash</span><strong>{money(summary.portfolio.initialCash, false)}</strong></div></div>
-      <div className="table-scroll"><table><caption>Holdings at weighted-average cost</caption><thead><tr><th>Ticker</th><th>Shares</th><th>Cost basis</th><th>Average cost / share</th></tr></thead><tbody>{summary.positions.map(position => <tr key={position.ticker}><th scope="row">{position.ticker}</th><td>{position.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{money(position.costBasis, false)}</td><td>{money(position.averageCost, false)}</td></tr>)}{!summary.positions.length && <tr><td colSpan={4}>No open positions.</td></tr>}</tbody></table></div>
+      <EvidenceTable label="Portfolio cost-basis holdings"><table><caption>Holdings at weighted-average cost</caption><thead><tr><th scope="col">Ticker</th><th scope="col">Shares</th><th scope="col">Cost basis</th><th scope="col">Average cost / share</th></tr></thead><tbody>{summary.positions.map(position => <tr key={position.ticker}><th scope="row">{position.ticker}</th><td>{position.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{money(position.costBasis, false)}</td><td>{money(position.averageCost, false)}</td></tr>)}{!summary.positions.length && <tr><td colSpan={4}>No open positions.</td></tr>}</tbody></table></EvidenceTable>
       <p className="muted small">Cost basis includes buy fees. Realized P&amp;L deducts sell fees using weighted-average cost. This is a practice convention, not a tax-lot calculation. The valuation below uses stored daily closes separately from the trade ledger.</p>
       <PortfolioValuation summary={summary} companies={companies} />
       <PortfolioResearchReview key={summary.portfolio.id} summary={summary} companies={companies} onOpen={onOpen} onCompare={onCompare} />
@@ -79,7 +80,7 @@ export default function PortfolioPanel({ companies, onOpen, onCompare }: { compa
         <label>Trade fee (USD)<input disabled={busy} type="number" required min="0" max="1000000000" step="0.01" value={fee} onChange={e => setFee(e.target.value)} /></label>
       </div><button className="primary" type="submit" disabled={busy}>{busy ? 'Recording…' : 'Record simulated fill'}</button></form>
       <PortfolioActions key={summary.portfolio.id} summary={summary} busy={busy} setBusy={setBusy} onSaved={setSummary} />
-      <div className="table-scroll"><table><caption>Recorded simulated fills, oldest first</caption><thead><tr><th>Recorded</th><th>Ticker</th><th>Side</th><th>Shares</th><th>Manual price</th><th>Fee</th></tr></thead><tbody>{summary.trades.map(fill => <tr key={fill.requestId}><td>{new Date(fill.recordedAt).toLocaleString()}</td><td>{fill.ticker}</td><td>{fill.side}</td><td>{fill.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{money(fill.price, false)}</td><td>{money(fill.fee, false)}</td></tr>)}</tbody></table></div>
+      <EvidenceTable label="Simulated fill history"><table><caption>Recorded simulated fills, oldest first</caption><thead><tr><th scope="col">Recorded</th><th scope="col">Ticker</th><th scope="col">Side</th><th scope="col">Shares</th><th scope="col">Manual price</th><th scope="col">Fee</th></tr></thead><tbody>{summary.trades.map(fill => <tr key={fill.requestId}><td>{new Date(fill.recordedAt).toLocaleString()}</td><td>{fill.ticker}</td><td>{fill.side}</td><td>{fill.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{money(fill.price, false)}</td><td>{money(fill.fee, false)}</td></tr>)}</tbody></table></EvidenceTable>
     </>}
   </section>;
 }
