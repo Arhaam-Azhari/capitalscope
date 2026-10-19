@@ -7,7 +7,7 @@ docker build --tag capitalscope:container-check .
 bash scripts/check-container.sh capitalscope:container-check
 ```
 
-I need Docker with the Compose plugin, Node.js 22, curl, and free local ports 8080 and 8098. I run this with no SEC identity or price-provider key. I use uniquely named disposable containers, networks, and volumes, and remove those check resources when the script exits. I do not run it against my normal saved-work volumes.
+I need Docker with the Compose plugin, Node.js 22, curl, and free local ports 8080, 8098, and 8099. I run this with no SEC identity or price-provider key. I use uniquely named disposable containers, networks, and volumes, and remove those check resources when the script exits. I do not run it against my normal saved-work volumes.
 
 ## What I check
 
@@ -20,6 +20,6 @@ I prepare `/app/data` for the non-root runtime user in the image. I exclude loca
 
 ## My scope
 
-I run these checks in CI because Docker is unavailable in the local release environment. This covers image build, startup, non-root data writes, packaged APIs/assets, and persistence across recreation with named volumes. It does not establish live-provider coverage, public-hosting readiness, backup/restore recovery, or private user accounts.
+I run these checks in CI because Docker is unavailable in the local release environment. This covers image build, startup, non-root data writes, packaged APIs/assets, and persistence across recreation with named volumes. It does not establish live-provider coverage, public-hosting readiness, off-site disaster recovery or private user accounts. I separately verify a PostgreSQL logical [backup/restore round trip](backup-restore.md).
 
 I keep the Compose port bound to localhost. My normal Compose data remains in its `research-data` volume. I avoid `docker compose down --volumes` on my normal workspace when I want to keep saved records; the check script removes only its own uniquely named test resources.

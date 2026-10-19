@@ -8,3 +8,5 @@
 **/playwright-report
 **/*.tsbuildinfo
 backend/src/main/resources/static
+
+backups/
