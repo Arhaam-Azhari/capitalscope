@@ -4,13 +4,24 @@ I use this route when I want to show the project in about five minutes. I start 
 
 ## I start the app
 
-I copy `.env.example` to `.env`, set `DATABASE_PASSWORD`, and run:
+I use the jar path with Java 17, Maven 3.9+, and Node.js 22:
 
 ```bash
-docker compose up --build
+bash scripts/build.sh
+java -jar backend/target/capitalscope-0.1.0.jar
 ```
 
-I open http://localhost:8080. I leave credentials out of screenshots and commits. The initial Example Manufacturing workspace uses invented financial figures and prices.
+I open http://localhost:8080. I need no live credentials for the fictional workspace. I keep `./data` if I want to retain saved work between launches. I provide Docker as an alternative, but my verified release demo uses the jar; [my release notes](portfolio-release.md) record the container and provider checks I have not performed.
+
+## My short presentation route
+
+1. I show the example label, annual figures, and dated input evidence in Financials.
+2. I open Valuation and calculate the $90-per-share case below, then change an assumption to clear the previous result.
+3. I open the fictional peer comparison, switch the chart measure, and review the companies' fiscal periods.
+4. I show a saved watchlist thesis and its research summary, then download research-evidence JSON or use Print. I explain that sections retain different source dates.
+5. I open a prepared fictional practice portfolio and distinguish recorded fills, available cash, and dated holdings marks. I show Prices as a raw-price analysis view.
+
+I prepare the saved thesis, valuation case, and example portfolio before presenting if I want to keep the live walkthrough to about five minutes. I use the detailed flows below for a longer discussion.
 
 ## I inspect financial evidence
 

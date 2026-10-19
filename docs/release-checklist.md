@@ -1,14 +1,14 @@
 # My portfolio release finish line
 
-I am finishing a shared, locally runnable finance research workbench. I am freezing the feature scope for this release so I can review the whole experience instead of adding more panels.
+I finished the scoped shared, locally runnable finance research workbench. I froze the feature scope, completed the review, and recorded the checks and limits in my release notes.
 
 ## My release passes
 
 1. **Completed:** I reduced the initial download and verified loading/failure recovery in [PR #85](https://github.com/Arhaam-Azhari/capitalscope/pull/85).
-2. **Reviewed:** I checked all eight sections at desktop, phone, and narrow-phone widths and improved price/portfolio table access. I recorded the scope and checks in [my workflow review](workflow-review.md). I require full CI before merging the review changes.
-3. **Remaining:** I finish the setup/demo documentation and screenshots, check the documented launch path, and verify configured live imports where credentials and provider access are available. I record any unverified provider or packaging coverage explicitly before calling the portfolio release complete.
+2. **Completed:** I checked all eight sections at desktop, phone, and narrow-phone widths and improved price/portfolio table access. I recorded the scope and checks in [my workflow review](workflow-review.md). I merged the review after full CI passed in [PR #86](https://github.com/Arhaam-Azhari/capitalscope/pull/86).
+3. **Completed for the scoped portfolio release:** I built from a clean checkout, checked the packaged launch and demo, refreshed the screenshots, and recorded live-provider and container verification limits in [my release notes](portfolio-release.md). I retain the full CI gate for the release changes.
 
-I treat these as three focused passes, not a promised number of hours. The final review can reveal fixes. I use passing CI as a release requirement, and I keep live-provider checks separate from synthetic fixtures and packaged-app tests.
+I completed these three focused passes. I use passing CI as a release requirement, and I keep live-provider checks separate from synthetic fixtures and packaged-app tests.
 
 ## My release scope
 

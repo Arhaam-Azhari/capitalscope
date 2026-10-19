@@ -25,4 +25,4 @@ I also require the full browser and backend/package workflows on the feature PR.
 
 ## What I still need before the portfolio release
 
-I still need the release/demo documentation and screenshot pass, a check of the documented launch path, and an honest record of configured live-provider and Docker verification. This review uses fixtures and does not establish live SEC or price-provider coverage.
+I completed the follow-up release/demo documentation, screenshots, and packaged launch check in [my release notes](portfolio-release.md). I recorded the live-provider and Docker checks I could not perform. This layout review uses fixtures and does not establish live SEC or price-provider coverage.
