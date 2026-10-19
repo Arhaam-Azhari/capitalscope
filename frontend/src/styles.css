@@ -362,3 +362,11 @@ main{min-width:0}.context-bar{display:flex;align-items:center;justify-content:sp
 .peer-measure-track { position: relative; height: 18px; background: #eee9df; }
 .peer-zero { position: absolute; top: -4px; bottom: -4px; width: 1px; background: var(--ink); z-index: 1; }
 .peer-value-bar { position: absolute; top: 3px; height: 12px; background: var(--accent); }
+
+.data-connections { margin: 0 0 24px; border: 1px solid var(--line); padding: 14px 16px; background: var(--panel); overflow-wrap: anywhere; }
+.data-connections > summary { font-size: 13px; }
+.connection-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 16px 0; }
+.connection-grid dt { font-size: 12px; color: var(--muted); }
+.connection-grid dd { margin: 6px 0 0; font-size: 16px; font-weight: 600; }
+@media screen and (max-width: 480px) { .connection-grid { grid-template-columns: 1fr; gap: 12px; } }
+@media print { .data-connections { display: none; } }
