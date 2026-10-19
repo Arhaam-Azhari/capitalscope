@@ -2945,3 +2945,44 @@ test('I reach narrow price and portfolio evidence columns with labeled scroll co
   await page.setViewportSize({ width: 1440, height: 1000 });
   for (const label of ['Portfolio cost-basis holdings', 'Portfolio price evidence', 'Simulated fill history']) await expect(page.getByRole('button', { name: `Scroll ${label} right`, exact: true })).toHaveCount(0);
 });
+
+test('I inspect independent connection setup on demand without importing provider data', async ({ page }) => {
+  await installApi(page);
+  let checks = 0;
+  const providerReads: string[] = [];
+  page.on('request', request => { if (/\/api\/companies\/[^/]+\/(financials|prices)(?:\?|$)/.test(request.url())) providerReads.push(request.url()); });
+  await page.route('**/api/data-connections', route => {
+    checks++;
+    return route.fulfill({ json: { secConfigured: checks === 1, marketPricesConfigured: checks > 1, checkedAt: '2026-10-19T23:00:00Z' } });
+  });
+  expect(checks).toBe(0);
+  await page.locator('.company-browser > summary').press('Escape');
+  const details = page.locator('.data-connections');
+  await details.locator('summary').click();
+  await expect(details.locator('.connection-grid > div').nth(0)).toHaveText('SEC annual filingsConfigured');
+  await expect(details.locator('.connection-grid > div').nth(1)).toHaveText('Market-price importsSetup needed');
+  await expect(details).toContainText('This does not contact the providers');
+  await details.getByRole('button', { name: 'Check data connections' }).click();
+  await expect(details.locator('.connection-grid > div').nth(0)).toHaveText('SEC annual filingsSetup needed');
+  await expect(details.locator('.connection-grid > div').nth(1)).toHaveText('Market-price importsConfigured');
+  expect(checks).toBe(2); expect(providerReads).toEqual([]);
+  await page.setViewportSize({ width: 320, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await details.locator('summary').click(); await details.locator('summary').click();
+  await expect.poll(() => checks).toBe(3);
+  await page.emulateMedia({ media: 'print' }); await expect(details).toBeHidden();
+});
+
+test('I retry unavailable connection status without blocking financial research', async ({ page }) => {
+  await installApi(page);
+  let checks = 0;
+  await page.route('**/api/data-connections', route => ++checks === 1 ? route.fulfill({ status: 503, json: { error: 'My unavailable fixture' } }) : route.fulfill({ json: { secConfigured: false, marketPricesConfigured: false, checkedAt: '2026-10-19T23:00:00Z' } }));
+  await page.locator('.company-browser > summary').press('Escape');
+  const details = page.locator('.data-connections'); await details.locator('summary').click();
+  await expect(details.getByRole('alert')).toHaveText('Connection status could not be read. Try again.');
+  await expect(page.getByRole('heading', { name: 'Growth, margins & cash flow', exact: true })).toBeVisible();
+  await details.getByRole('button', { name: 'Check data connections' }).click();
+  await expect(details.locator('.connection-grid dd')).toHaveText(['Setup needed', 'Setup needed']);
+  await expect(details.getByRole('alert')).toHaveCount(0);
+  await expect(details).toContainText('Fictional examples work without live connections');
+});

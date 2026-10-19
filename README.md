@@ -89,6 +89,7 @@ java -jar backend/target/capitalscope-0.1.0.jar
 
 | Endpoint | Purpose |
 | --- | --- |
+| `GET /api/data-connections` | I read configuration-presence flags and a check timestamp, without contacting providers or exposing values |
 | `GET /api/research/comparison-setups` | I list shared saved peer groups and chart measures |
 | `POST /api/research/comparison-setups` | I save `{name, tickers, measure}` selections without financial figures |
 | `DELETE /api/research/comparison-setups/{id}` | I remove a saved peer setup |
@@ -406,3 +407,5 @@ I load valuation, peer comparison, price analysis, portfolios, watchlist, and re
 I recorded my final desktop/mobile review in [my workflow review](docs/workflow-review.md). I check all eight sections at 1440, 390, and 320 pixels and use labeled, keyboard-focusable scroll controls for the core daily-price and portfolio evidence tables.
 
 I back up the Compose/PostgreSQL database with a custom-format archive and restore it into a separate empty database. I verify saved research/revisions, valuation cases, and simulated portfolios after restoration in CI. I document the non-overwrite guards and limits in [my backup/restore route](docs/backup-restore.md).
+
+I open Data connections to see whether SEC filings and market-price imports are configured independently. I read configuration-presence flags only when I open or refresh the panel; I do not contact providers or expose keys/contact details. I distinguish configured imports from verified access or company coverage, and I keep stored evidence and key-free examples available even when setup is missing.

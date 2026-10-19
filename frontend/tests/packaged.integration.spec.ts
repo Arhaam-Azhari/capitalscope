@@ -992,3 +992,17 @@ test('I download the packaged portfolio section only when I open it', async ({ p
   await expect(page.getByRole('heading', { name: 'Simulated portfolios', exact: true })).toBeVisible();
   expect(downloaded).toHaveLength(1);
 });
+
+test('I read connection setup through the packaged app without exposing configuration values', async ({ page, request }) => {
+  const response = await request.get('/api/data-connections');
+  expect(response.ok()).toBe(true); expect(response.headers()['cache-control']).toBe('no-store');
+  const data = await response.json();
+  expect(Object.keys(data).sort()).toEqual(['checkedAt', 'marketPricesConfigured', 'secConfigured']);
+  expect(data.secConfigured).toBe(false); expect(data.marketPricesConfigured).toBe(false);
+  expect(Number.isNaN(Date.parse(data.checkedAt))).toBe(false);
+  await page.goto('/');
+  const details = page.locator('.data-connections'); await details.locator('summary').click();
+  await expect(details.locator('.connection-grid dd')).toHaveText(['Setup needed', 'Setup needed']);
+  await expect(page.getByRole('heading', { name: 'Growth, margins & cash flow', exact: true })).toBeVisible();
+  await expect(details).toContainText('stored evidence may still be available');
+});
