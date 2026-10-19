@@ -13,7 +13,8 @@ RUN mvn --batch-mode verify
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app
+RUN mkdir -p /app/data && chown 10001:10001 /app/data
 COPY --from=backend /app/backend/target/capitalscope-0.1.0.jar app.jar
-USER 10001
+USER 10001:10001
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

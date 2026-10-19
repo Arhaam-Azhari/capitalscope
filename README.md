@@ -25,7 +25,7 @@ I open http://localhost:8080. The default jar launch uses a local H2 database un
 
 ### Docker alternative
 
-I provide the Compose path below, but I have not verified the container build locally or in CI. I use the jar route for the verified demo.
+I verify the Docker image and Compose/PostgreSQL path in CI with [my container check](docs/container-check.md), including non-root database writes and saved-work persistence across container recreation. My original local release verification used the jar route.
 
 
 With Docker installed, copy `.env.example` to `.env` and set `DATABASE_PASSWORD` to a password for the local database:
@@ -191,7 +191,7 @@ npm run test:integration --prefix frontend
 
 I check valuation math against a constant-cash-flow perpetuity, annual selection against synthetic filings, and HTTP behavior in a Spring application context. Browser tests use stubbed APIs to check search, sources, stale requests, missing data, percentage conversion, notes, and mobile layout. Persistence checks reopen a file database and verify stored snapshots, timestamps, assumptions, and outputs. CI runs the API checks against PostgreSQL. Separate integration tests run against the packaged Spring app without intercepting API requests. They do not establish live SEC coverage. The packaged-app check starts the jar and verifies dashboard assets and APIs together.
 
-GitHub Actions runs backend/package checks and frontend/browser checks on pushes and pull requests. Docker packaging is provided but has not yet been tested in CI.
+GitHub Actions runs backend/package checks and frontend/browser checks on pushes and pull requests. A separate Backend checks job builds the Docker image and verifies standalone H2 and Compose/PostgreSQL persistence; I describe its scope in [my container check](docs/container-check.md).
 
 ## My portfolio release finish line
 

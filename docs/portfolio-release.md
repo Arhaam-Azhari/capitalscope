@@ -39,7 +39,7 @@ I distinguish a successful example demo and synthetic/provider-contract tests fr
 ## What I leave explicit
 
 - I did not configure a real SEC contact identity or Alpha Vantage key in this release environment, so I did not verify live imports or all 50 companies' coverage.
-- I provide Docker/Compose configuration, but Docker was unavailable locally and container packaging is not exercised in the current CI workflows. I use the verified jar route for the demo.
+- Docker was unavailable during my local release checks. I subsequently added a [container CI check](container-check.md) for image build, standalone H2 and Compose/PostgreSQL startup, and persistence across recreation; I keep the original local jar evidence separate.
 - I keep the database shared, without login or private workspaces. I do not present this release as a hosted private multi-user service.
 - I use dated, unadjusted closes and manual simulated events. I do not claim broker execution, total-return portfolio performance, verified corporate actions, or point-in-time backtesting data.
 

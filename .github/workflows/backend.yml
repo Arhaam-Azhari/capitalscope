@@ -44,3 +44,13 @@ jobs:
         working-directory: frontend
       - run: npm run test:integration
         working-directory: frontend
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: docker build --tag capitalscope:container-check .
+      - run: bash scripts/check-container.sh capitalscope:container-check
