@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import { useEffect, useState } from 'react';
 import { money, request } from './api';
 import type { Company, PriceHistory } from './types';
@@ -54,7 +55,7 @@ export default function PricePanel({ company, companies }: { company: Company; c
         <polyline fill="none" stroke="var(--accent)" strokeWidth="3" points={days.map((d, i) => `${x(i)},${y(d.close)}`).join(' ')} />
         <text x="45" y="215">{days[0].date}</text><text x="485" y="215" textAnchor="end">{days[days.length - 1].date}</text>
       </svg><p className="muted small">Vertical axis spans the observed close-price range; it does not start at zero.</p></div>}
-      <div className="table-scroll"><table><caption>Daily raw prices, newest first</caption><thead><tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr></thead><tbody>{history.days.map(d => <tr key={d.date}><th scope="row">{d.date}</th><td>{money(d.open, false)}</td><td>{money(d.high, false)}</td><td>{money(d.low, false)}</td><td>{money(d.close, false)}</td><td>{d.volume.toLocaleString()}</td></tr>)}</tbody></table></div>
+      <EvidenceTable label="Daily price evidence"><table><caption>Daily raw prices, newest first</caption><thead><tr><th scope="col">Date</th><th scope="col">Open</th><th scope="col">High</th><th scope="col">Low</th><th scope="col">Close</th><th scope="col">Volume</th></tr></thead><tbody>{history.days.map(d => <tr key={d.date}><th scope="row">{d.date}</th><td>{money(d.open, false)}</td><td>{money(d.high, false)}</td><td>{money(d.low, false)}</td><td>{money(d.close, false)}</td><td>{d.volume.toLocaleString()}</td></tr>)}</tbody></table></EvidenceTable>
     </>}
   </section>;
 }

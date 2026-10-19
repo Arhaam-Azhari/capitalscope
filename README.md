@@ -417,3 +417,5 @@ I download a company research-evidence JSON file from the summary after its read
 I compare earnings with operating cash flow across the selected annual performance window. I show matched-period net income, operating cash flow, their dollar difference, and operating cash flow divided by positive net income. I keep negative cash flow, leave loss/zero-income ratios unavailable, and export both inputs with dates, accounting tags, filing sources, and missing-value reasons. I treat these as descriptive measures, not an earnings-quality score, working-capital reconciliation, or free cash flow.
 
 I load valuation, peer comparison, price analysis, portfolios, watchlist, and research-summary code when I open those sections. I keep the main navigation available during loading and show a reload action if a section cannot open. I retain the existing API errors and draft-exit warning.
+
+I recorded my final desktop/mobile review in [my workflow review](docs/workflow-review.md). I check all eight sections at 1440, 390, and 320 pixels and use labeled, keyboard-focusable scroll controls for the core daily-price and portfolio evidence tables.

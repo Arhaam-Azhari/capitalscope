@@ -2882,3 +2882,66 @@ test('I recover from a failed section download without losing workspace navigati
   await failed.getByRole('button', { name: 'Reload CapitalScope' }).click();
   await expect(page.getByRole('heading', { name: 'Build your assumptions', exact: true })).toBeVisible();
 });
+
+test('I review every workspace section at desktop, phone, and narrow-phone widths', async ({ page }) => {
+  test.setTimeout(60000);
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await installApi(page);
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  await page.route('**/api/portfolios', route => route.fulfill({ json: [] }));
+  await page.route('**/api/examples/comparisons', route => route.fulfill({ json: ['EX-A', 'EX-B', 'EX-C'].map((ticker, index) => ({ ...example, company: { ticker, name: `Example peer ${index + 1}`, sector: 'Industrials' } })) }));
+  await page.route('**/api/examples/prices', route => route.fulfill({ json: { ticker: 'DEMO', dataMode: 'example', source: 'Invented review prices', sourceUrl: null, retrievedAt: null, currency: 'USD', adjusted: false, days: [3, 2, 1].map(day => ({ date: `2026-10-0${day}`, open: 123.45, high: 126.78, low: 120.12, close: 124.56, volume: 123456789 })) } }));
+  const sections = [
+    ['Financials', 'Growth, margins & cash flow'], ['Valuation', 'Build your assumptions'],
+    ['Compare companies', 'Compare company fundamentals'], ['Prices', 'Daily prices'],
+    ['Portfolios', 'Simulated portfolios'], ['Watchlist', 'My watchlist'],
+    ['Research summary', 'My company research summary'], ['Research notes', 'Write the investment thesis']
+  ];
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const [section, heading] of sections) {
+      await page.getByRole('button', { name: section, exact: true }).click();
+      await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Workspace section unavailable' })).toHaveCount(0);
+      await expect(page.getByRole('alert')).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${section} at ${width}px`).toBe(true);
+      await expect(page.getByRole('button', { name: section, exact: true })).toHaveAttribute('aria-current', 'page');
+      if (process.env.CAPITALSCOPE_REVIEW_SCREENSHOTS) await page.screenshot({ path: `${process.env.CAPITALSCOPE_REVIEW_SCREENSHOTS}/release-review-${width}-${section.toLowerCase().replaceAll(' ', '-')}.png`, fullPage: true });
+    }
+  }
+  expect(errors).toEqual([]);
+});
+
+test('I reach narrow price and portfolio evidence columns with labeled scroll controls', async ({ page }) => {
+  await installApi(page); await page.setViewportSize({ width: 320, height: 844 });
+  await page.route('**/api/examples/prices', route => route.fulfill({ json: { ticker: 'DEMO', dataMode: 'example', source: 'Invented review prices', sourceUrl: null, retrievedAt: null, currency: 'USD', adjusted: false, days: [{ date: '2026-10-03', open: 123.45, high: 126.78, low: 120.12, close: 124.56, volume: 123456789 }] } }));
+  async function reviewScroll(label: string) {
+    const region = page.getByRole('region', { name: label, exact: true });
+    await expect(region).toHaveAttribute('tabindex', '0');
+    await region.focus(); await expect(region).toBeFocused();
+    await page.getByRole('button', { name: `Scroll ${label} right`, exact: true }).click();
+    await expect.poll(() => region.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+  }
+  await page.getByRole('button', { name: 'Prices', exact: true }).click();
+  await reviewScroll('Daily price evidence');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await expect(page.getByRole('button', { name: 'Scroll Daily price evidence right' })).toHaveCount(0);
+  const portfolio = { id: 'review', name: 'My keyboard review', mode: 'example', initialCash: 10000, createdAt: '2026-10-01T00:00:00Z' };
+  const summary = { portfolio, cash: 9000, realizedPnl: 0, dividendIncome: 0, positions: [{ ticker: 'DEMO', quantity: 100, costBasis: 1000, averageCost: 10 }], trades: [{ requestId: 'review-fill', ticker: 'DEMO', side: 'BUY', quantity: 100, price: 10, fee: 0, recordedAt: '2026-10-01T12:34:56Z' }], events: [] };
+  const marks = { portfolioId: 'review', dataMode: 'example', evaluatedAt: '2026-10-18T20:00:00Z', cash: 9000, pricedPositions: 0, totalPositions: 1, complete: false, pricedHoldingsValue: 0, totalValue: null, unrealizedPnl: null,
+    holdings: [{ ticker: 'DEMO', quantity: 100, costBasis: 1000, close: null, priceDate: null, priceAgeDays: null, source: null, sourceUrl: null, retrievedAt: null, value: null, unrealizedPnl: null, error: 'No stored review close.' }],
+    allocation: { available: false, unavailableReason: 'No stored review close.', cashWeight: null, largestHolding: null, largestSector: null, topThreeHoldingsWeight: null, companies: [], sectors: [] } };
+  await page.route('**/api/watchlist', route => route.fulfill({ json: [] }));
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (!path.startsWith('/api/portfolios')) return route.fallback();
+    return route.fulfill({ json: path === '/api/portfolios' ? [portfolio] : path.endsWith('/valuation') ? marks : path === '/api/portfolios/review' ? summary : [] });
+  });
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  for (const label of ['Portfolio cost-basis holdings', 'Portfolio price evidence', 'Simulated fill history']) await reviewScroll(label);
+  await expect(page.getByTestId('portfolio-total-value')).toHaveText('Unavailable');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  for (const label of ['Portfolio cost-basis holdings', 'Portfolio price evidence', 'Simulated fill history']) await expect(page.getByRole('button', { name: `Scroll ${label} right`, exact: true })).toHaveCount(0);
+});
