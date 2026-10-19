@@ -208,7 +208,11 @@ I check valuation math against a constant-cash-flow perpetuity, annual selection
 
 GitHub Actions runs backend/package checks and frontend/browser checks on pushes and pull requests. Docker packaging is provided but has not yet been tested in CI.
 
-## Next steps
+## My portfolio release finish line
+
+I am freezing feature scope and finishing performance, workflow review, and release documentation. I track the remaining passes and later product work in [my release checklist](docs/release-checklist.md).
+
+## Later product work
 
 1. Verify live imports and improve accounting-tag coverage.
 2. Add accounts and move notes into private research workspaces.
@@ -411,3 +415,5 @@ I review peer fiscal periods before interpreting differences in fundamentals. I 
 I download a company research-evidence JSON file from the summary after its reads finish. I capture loaded annual history, saved watchlist text, dated close evidence, and saved valuation summaries with their source dates, explicit unavailable/not-saved states, an export timestamp, and a version. I do not fetch new data or export browser-only notes, unsaved drafts, full valuation assumptions, or value-versus-close gaps. I keep sections’ different dates visible and review saved text before sharing the file.
 
 I compare earnings with operating cash flow across the selected annual performance window. I show matched-period net income, operating cash flow, their dollar difference, and operating cash flow divided by positive net income. I keep negative cash flow, leave loss/zero-income ratios unavailable, and export both inputs with dates, accounting tags, filing sources, and missing-value reasons. I treat these as descriptive measures, not an earnings-quality score, working-capital reconciliation, or free cash flow.
+
+I load valuation, peer comparison, price analysis, portfolios, watchlist, and research-summary code when I open those sections. I keep the main navigation available during loading and show a reload action if a section cannot open. I retain the existing API errors and draft-exit warning.

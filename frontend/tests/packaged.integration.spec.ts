@@ -974,3 +974,18 @@ test('I reopen a database-backed company setup and delete it through the package
     expect((await (await page.request.get(path)).json()).some((setup: { id: string }) => setup.id === item.id)).toBe(false);
   } finally { await page.request.delete(`${path}/${item.id}`); }
 });
+
+test('I download the packaged portfolio section only when I open it', async ({ page }) => {
+  const downloaded: string[] = [];
+  page.on('request', request => { if (/\/assets\/PortfolioPanel-[^/]+\.js(?:\?|$)/.test(request.url())) downloaded.push(request.url()); });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Growth, margins & cash flow', exact: true })).toBeVisible();
+  expect(downloaded).toHaveLength(0);
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Simulated portfolios', exact: true })).toBeVisible();
+  expect(downloaded).toHaveLength(1);
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  await page.getByRole('button', { name: 'Portfolios', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Simulated portfolios', exact: true })).toBeVisible();
+  expect(downloaded).toHaveLength(1);
+});
