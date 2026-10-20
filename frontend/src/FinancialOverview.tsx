@@ -1,5 +1,6 @@
 import FinancialRatios from './FinancialRatios';
 import MetricChange from './MetricChange';
+import { metricChangeCsv } from './metricChangeCsv';
 import EvidenceTable from './EvidenceTable';
 import { useState } from 'react';
 import { money } from './api';
@@ -26,9 +27,21 @@ function Trend({ metric }: { metric: Metric }) {
 
 export default function FinancialOverview({ report }: { report: FinancialReport }) {
   const [metricName, setMetricName] = useState('Revenue');
+  const [exportError, setExportError] = useState('');
   const metric = report.metrics.find(m => m.name === metricName) || report.metrics[0];
+  function downloadChanges() {
+    setExportError('');
+    try {
+      const csv = metricChangeCsv(report, new Date().toISOString());
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${report.company.ticker}-annual-changes.csv`;
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch { setExportError('The annual changes CSV could not be prepared. Please try again.'); }
+  }
   return <>
     <div className="export-actions"><a className="secondary export-link" href={report.dataMode === 'example' ? '/api/examples/financials/export.csv' : `/api/companies/${report.company.ticker}/financials/export.csv`}>Download financial CSV</a><span className="muted small">Includes source links, dates, tags, and data mode.</span></div>
+    <div className="export-actions"><button type="button" className="secondary" disabled={!report.metrics.length} onClick={downloadChanges}>Download annual changes CSV</button><span className="muted small">All loaded metrics · latest year-over-year comparisons · reported inputs, dates, and unavailable reasons · uses loaded evidence without fetching new data.</span></div>
+    {exportError && <p className="notice error" role="alert">{exportError}</p>}
     <div className="metric-grid">{report.metrics.map(m => {
       const latest = m.annualValues[0];
       return <button key={m.name} className={`metric-card ${m.name === metricName ? 'active' : ''}`} onClick={() => setMetricName(m.name)} aria-pressed={m.name === metricName}>

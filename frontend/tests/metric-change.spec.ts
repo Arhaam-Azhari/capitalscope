@@ -2,6 +2,10 @@ import { expect, test } from '@playwright/test';
 import { metricChange } from '../src/metricChange';
 import type { Metric, Point } from '../src/types';
 import catalog from './catalog';
+import { metricChangeCsv } from '../src/metricChangeCsv';
+import { readCsv } from './readCsv';
+import { readFile } from 'node:fs/promises';
+import type { FinancialReport } from '../src/types';
 
 const point = (value: number, periodEnd: string, periodStart: string | null): Point => ({ value, periodEnd, periodStart, filed: null, accession: null, sourceUrl: null, tag: 'InventedTestFact' });
 const metric = (latest = 120, prior = 100): Metric => ({ name: 'Net income', unit: 'USD', annualValues: [point(latest, '2025-12-31', '2025-01-01'), point(prior, '2024-12-31', '2024-01-01')] });
@@ -76,6 +80,34 @@ test('selected metric comparison changes with the evidence and fits a small phon
   await expect(income.getByTestId('metric-dollar-change')).toHaveText('+$30.00');
   await expect(income.getByTestId('metric-percentage-change')).toHaveText('Unavailable');
   await expect(income).toContainText('positive prior value');
+  const exportRequests: string[] = [];
+  page.on('request', request => { if (request.url().includes('/api/')) exportRequests.push(request.url()); });
+  const downloadEvent = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download annual changes CSV', exact: true }).click();
+  const download = await downloadEvent;
+  expect(download.suggestedFilename()).toBe('DEMO-annual-changes.csv');
+  const records = readCsv(await readFile((await download.path())!, 'utf8'));
+  expect(records).toHaveLength(4);
+  expect(records.map(row => row.metric)).toEqual(metrics.map(metric => metric.name));
+  expect(records[0]).toMatchObject({ ticker: 'DEMO', data_mode: 'example', dollar_change_usd: '20', percentage_change_percent: '20', latest_period_end: '2025-12-31', prior_period_end: '2024-12-31' });
+  expect(records[1]).toMatchObject({ dollar_change_usd: '30', percentage_change_percent: '', percentage_change_availability: 'unavailable' });
+  expect(records[2]).toMatchObject({ comparison_kind: 'dated_balance', dollar_change_usd: '-20', latest_period_start: '' });
+  expect(records[3]).toMatchObject({ dollar_change_usd: '', dollar_change_availability: 'unavailable' });
+  expect(records[3].dollar_change_issue).toContain('windows do not qualify');
+  expect(Number.isFinite(Date.parse(records[0].exported_at))).toBe(true);
+  expect(exportRequests).toEqual([]);
+  await expect(income).toBeVisible();
+  await expect(page.locator('.metric-card').filter({ hasText: 'Net income' })).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => {
+    const original = URL.createObjectURL;
+    URL.createObjectURL = () => { URL.createObjectURL = original; throw new Error('Download unavailable in this check'); };
+  });
+  await page.getByRole('button', { name: 'Download annual changes CSV', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('annual changes CSV could not be prepared');
+  const retry = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download annual changes CSV', exact: true }).click();
+  await retry;
+  await expect(page.getByRole('alert')).toHaveCount(0);
   await page.locator('.metric-card').filter({ hasText: 'Cash and equivalents' }).click();
   const cash = page.getByRole('region', { name: 'Cash and equivalents year-over-year comparison' });
   await expect(cash.getByTestId('metric-dollar-change')).toHaveText('-$20.00');
@@ -86,4 +118,30 @@ test('selected metric comparison changes with the evidence and fits a small phon
   const capex = page.getByRole('region', { name: 'Capital expenditure year-over-year comparison' });
   await expect(capex).toContainText('These windows do not qualify');
   await expect(capex.getByTestId('metric-dollar-change')).toHaveCount(0);
+});
+
+
+test('annual changes CSV preserves evidence, signed numbers, zeros and formula-safe labels', () => {
+  const revenue = { ...metric(100, 100), name: 'Revenue' };
+  revenue.annualValues[0] = { ...revenue.annualValues[0], filed: '2026-02-01', accession: '0000000001-26-000001', tag: 'RevenueTag', sourceUrl: 'https://www.sec.gov/Archives/edgar/data/1/000000000126000001/' };
+  const report: FinancialReport = {
+    company: { ticker: 'AAPL', name: '=Unsafe, "label"\nsecond line', sector: 'Technology' }, cik: '0000000001',
+    dataMode: 'sec', source: 'SEC EDGAR companyfacts', retrievedAt: '2026-10-18T01:00:00Z', servedAt: '2026-10-19T01:00:00Z', notes: [],
+    metrics: [revenue, metric(-10, 20), metric(20, 0), { name: '+Unsupported', unit: 'EUR', annualValues: [] }, { name: 'Operating cash flow', unit: 'USD', annualValues: [] }, metric(Infinity, 20)]
+  };
+  const serializedBefore = JSON.stringify(report);
+  const rows = readCsv(metricChangeCsv(report, '2026-10-20T00:00:00Z'));
+  expect(rows).toHaveLength(6);
+  expect(rows[0]).toMatchObject({ schema_version: 'reported-metric-changes-v1', ticker: 'AAPL', company_name: '\'=Unsafe, "label"\nsecond line', sector: 'Technology', data_mode: 'sec', retrieved_at: report.retrievedAt!, served_at: report.servedAt, exported_at: '2026-10-20T00:00:00Z', dollar_change_usd: '0', percentage_change_percent: '0', dollar_change_availability: 'available', percentage_change_availability: 'available', latest_reported_value: '100', latest_filed: '2026-02-01', latest_accession: '0000000001-26-000001', latest_tag: 'RevenueTag', latest_source_url: revenue.annualValues[0].sourceUrl!, prior_reported_value: '100', prior_period_start: '2024-01-01' });
+  expect(rows[1]).toMatchObject({ dollar_change_usd: '-30', percentage_change_percent: '-150' });
+  expect(rows[2]).toMatchObject({ dollar_change_usd: '20', percentage_change_percent: '', percentage_change_availability: 'unavailable' });
+  expect(rows[2].percentage_change_issue).toContain('positive prior value');
+  expect(rows[3]).toMatchObject({ metric: "'+Unsupported", reported_unit: 'EUR', dollar_change_usd: '' });
+  expect(rows[3].dollar_change_issue).toContain('USD');
+  expect(rows[4].dollar_change_issue).toContain('No reported');
+  expect(rows[5]).toMatchObject({ latest_reported_value: '', dollar_change_usd: '', dollar_change_availability: 'unavailable' });
+  expect(rows[5].dollar_change_issue).toContain('numeric range');
+  expect(rows[0].scope).toContain('one latest-year comparison');
+  expect(JSON.stringify(report)).toBe(serializedBefore);
+  expect(readCsv(metricChangeCsv({ ...report, metrics: [] }, '2026-10-20T00:00:00Z'))).toEqual([]);
 });
