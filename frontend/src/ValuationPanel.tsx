@@ -32,6 +32,7 @@ export default function ValuationPanel({ company }: { company: Company }) {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const active = useRef<AbortController | null>(null);
+  const editor = useRef<HTMLFormElement | null>(null);
   useEffect(() => () => active.current?.abort(), []);
 
   function edit(key: keyof Assumptions, value: string) {
@@ -59,6 +60,15 @@ export default function ValuationPanel({ company }: { company: Company }) {
     active.current?.abort(); setBusy(false); setResult(null); setSnapshot(null); setError(''); setExportError('');
     sessionValuationInputs.delete(company.ticker); setValues(defaults);
     setInputMessage(company.ticker === 'DEMO' ? 'Fictional example inputs restored.' : 'Valuation inputs cleared for this company.');
+  }
+
+  function useSensitivityRates(discountRate: number, terminalGrowthRate: number) {
+    active.current?.abort(); setBusy(false); setResult(null); setSnapshot(null); setError(''); setExportError('');
+    // I replace both rates together so a cell selection keeps every other input intact.
+    const next = { ...values, discountRate: String(discountRate * 100), terminalGrowthRate: String(terminalGrowthRate * 100) };
+    sessionValuationInputs.set(company.ticker, next); setValues(next);
+    setInputMessage('Sensitivity rates loaded as editable inputs. Recalculate to review or save this case.');
+    editor.current?.querySelector<HTMLInputElement>('input[name="discountRate"]')?.focus();
   }
 
   async function calculate(event: FormEvent) {
@@ -105,9 +115,9 @@ export default function ValuationPanel({ company }: { company: Company }) {
       {company.ticker === 'DEMO' && <div className="notice example">These starting assumptions are invented examples. Change them to explore the model.</div>}
       <p className="muted small">Inputs stay available for each company while this app is open. Refreshing or closing can lose them. Save a scenario to keep a model across sessions.</p>
       {inputMessage && <p role="status" className="save-status">{inputMessage}</p>}
-      <form onSubmit={calculate}>
+      <form ref={editor} onSubmit={calculate}>
         <div className="model-fields">{fields.map(field => <label key={field.key}>
-          <span>{field.label}</span><input type="number" required value={values[field.key]} onChange={e => edit(field.key, e.target.value)} min={field.min} max={field.max} step={field.step} />
+          <span>{field.label}</span><input type="number" name={field.key} required value={values[field.key]} onChange={e => edit(field.key, e.target.value)} min={field.min} max={field.max} step={field.step} />
           <small>{field.hint}</small>
         </label>)}</div>
         {error && <p className="notice error" role="alert">{error}</p>}
@@ -134,7 +144,7 @@ export default function ValuationPanel({ company }: { company: Company }) {
         </section>
         <ValuationForecast result={result} />
         <EvidenceTable label="Valuation forecast evidence"><table><caption>Forecast cash flow and present value</caption><thead><tr><th>Year</th><th>Unlevered cash flow</th><th>Present value</th></tr></thead><tbody>{result.projections.map(p => <tr key={p.year}><th scope="row">{p.year}</th><td>{money(p.freeCashFlow)}</td><td>{money(p.presentValue)}</td></tr>)}</tbody></table></EvidenceTable>
-        <SensitivityTable assumptions={assumptions} company={company} />
+        <SensitivityTable assumptions={assumptions} company={company} onUseRates={useSensitivityRates} />
         <p className="muted small">A model estimate is not a market quote. This version does not adjust for dilution, excess assets, or all non-debt claims.</p>
       </div>}
       <SavedScenarios ticker={company.ticker} assumptions={result ? assumptions : null} onLoad={load} />

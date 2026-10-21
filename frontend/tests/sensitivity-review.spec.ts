@@ -39,6 +39,7 @@ test('sensitivity CSV retains fixed inputs, decimal cell rates, unavailable reas
 async function openValuation(page: Page, failed = false, unavailable = false) {
   let sensitivityRequests = 0;
   let failSensitivity = failed;
+  let lastInputs: unknown;
   // I stub only this model workflow so the check never imports real-company evidence.
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
@@ -46,7 +47,7 @@ async function openValuation(page: Page, failed = false, unavailable = false) {
     if (path === '/api/universe') return route.fulfill({ json: { asOf: '2026-10-06', count: 50, dynamic: false } });
     if (path.endsWith('/scenarios')) return route.fulfill({ json: [] });
     if (path.endsWith('/scenarios/price-context')) return route.fulfill({ json: { ticker: 'DEMO', dataMode: 'example', evaluatedAt: '2026-10-21T01:00:00Z', shareBasisConfirmed: false, quote: null, quoteError: 'No stored close', scenarios: [] } });
-    if (path === '/api/valuations/dcf') return route.fulfill({ json: { projections: [{ year: 1, freeCashFlow: 105000000, presentValue: 95454545 }], terminalValue: 1600000000, presentValueOfTerminalValue: 990000000, enterpriseValue: 1300000000, equityValue: 1100000000, valuePerShare: 22, terminalValueShare: .76 } });
+    if (path === '/api/valuations/dcf') { lastInputs = route.request().postDataJSON(); return route.fulfill({ json: { projections: [{ year: 1, freeCashFlow: 105000000, presentValue: 95454545 }], terminalValue: 1600000000, presentValueOfTerminalValue: 990000000, enterpriseValue: 1300000000, equityValue: 1100000000, valuePerShare: 22, terminalValueShare: .76 } }); }
     if (path === '/api/valuations/dcf/sensitivity') {
       sensitivityRequests++;
       if (failSensitivity) return route.fulfill({ status: 503, json: { error: 'Sensitivity temporarily unavailable' } });
@@ -58,7 +59,7 @@ async function openValuation(page: Page, failed = false, unavailable = false) {
   await expect(page.getByRole('button', { name: /Calculate valuation/ })).toBeVisible();
   await page.locator('.company-browser > summary').press('Escape');
   await page.getByRole('button', { name: /Calculate valuation/ }).click();
-  return { requests: () => sensitivityRequests, recover: () => { failSensitivity = false; } };
+  return { lastInputs: () => lastInputs, requests: () => sensitivityRequests, recover: () => { failSensitivity = false; } };
 }
 
 test('sensitivity range and CSV share the calculated grid and clear when inputs change', async ({ page }) => {
@@ -108,4 +109,34 @@ test('an unavailable sensitivity grid remains exportable without inventing a mod
   const download = await event;
   const rows = readCsv(await readFile((await download.path())!, 'utf8'));
   expect(rows[0]).toMatchObject({ modeled_value_per_share_usd: '', availability: 'unavailable', unavailable_reason: 'Invalid model inputs' });
+});
+
+
+test('a sensitivity cell loads both editable rates, clears results, and recalculates only on request', async ({ page }) => {
+  const control = await openValuation(page);
+  const section = page.locator('.sensitivity-section');
+  await expect(section.getByRole('button', { name: 'Use WACC 11.00% and terminal growth 2.50%', exact: true })).toHaveText('$0.00');
+  const before = control.requests();
+  await page.getByLabel('Scenario name').fill('My next sensitivity case');
+  await section.getByRole('button', { name: 'Use WACC 11.00% and terminal growth 2.50%', exact: true }).click();
+  await expect(page.getByLabel('Discount rate / WACC')).toHaveValue('11');
+  await expect(page.getByLabel('Discount rate / WACC')).toBeFocused();
+  await expect(page.getByLabel('Terminal growth', { exact: false }).first()).toHaveValue('2.5');
+  await expect(page.getByLabel('Starting unlevered cash flow')).toHaveValue('100000000');
+  await expect(page.getByLabel('Annual growth', { exact: false }).first()).toHaveValue('5');
+  await expect(page.getByLabel('Forecast horizon')).toHaveValue('5');
+  await expect(page.getByLabel('Net debt', { exact: false }).first()).toHaveValue('200000000');
+  await expect(page.getByLabel('Shares outstanding')).toHaveValue('50000000');
+  await expect(page.locator('.valuation-result')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Save scenario', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Scenario name')).toHaveValue('My next sensitivity case');
+  await expect(page.getByText('Sensitivity rates loaded as editable inputs. Recalculate to review or save this case.', { exact: true })).toBeVisible();
+  expect(control.requests()).toBe(before);
+  expect(control.lastInputs()).toEqual(assumptions);
+  await page.getByRole('button', { name: /Calculate valuation/ }).click();
+  await expect(page.locator('.valuation-result')).toBeVisible();
+  expect(control.lastInputs()).toEqual({ ...assumptions, discountRate: .11, terminalGrowthRate: .025 });
+  await expect(page.getByRole('button', { name: 'Save scenario', exact: true })).toBeEnabled();
+  await expect(section.getByRole('button', { name: 'Use WACC 10.00% and terminal growth 2.50%', exact: true })).toHaveCount(0);
+  await expect(section.getByRole('cell', { name: /Unavailable.*An invented unavailable cell/ })).toBeVisible();
 });
