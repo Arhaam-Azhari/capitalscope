@@ -6,7 +6,7 @@ import { sensitivityCsv, sensitivityReview, type SensitivityGrid } from './sensi
 
 const rate = (value: number) => `${(value * 100).toFixed(2)}%`;
 
-export default function SensitivityTable({ assumptions, company }: { assumptions: Assumptions; company: Company }) {
+export default function SensitivityTable({ assumptions, company, onUseRates }: { assumptions: Assumptions; company: Company; onUseRates: (discountRate: number, terminalGrowthRate: number) => void }) {
   const [loaded, setLoaded] = useState<{ payload: string; grid: SensitivityGrid; evaluatedAt: string } | null>(null);
   const [error, setError] = useState('');
   const [exportError, setExportError] = useState('');
@@ -35,6 +35,7 @@ export default function SensitivityTable({ assumptions, company }: { assumptions
   return <section className="sensitivity-section" aria-labelledby="sensitivity-heading">
     <h3 id="sensitivity-heading">How much do the assumptions matter?</h3>
     <p className="muted small">Per-share estimates in USD. Rows vary WACC by one percentage point; columns vary terminal growth by half a percentage point. Starting cash flow, forecast growth, horizon, net debt, and shares stay fixed.</p>
+    <p className="muted small">Choose a valid modeled value to load its WACC and terminal growth into the editor. Recalculate to review or save that case. Other inputs stay fixed.</p>
     {review && <>
       <p className="muted small">FCFF sensitivity calculated from the current inputs · {new Date(snapshot!.evaluatedAt).toLocaleString()}. Loading a saved case calculates a fresh grid; this is not its historical sensitivity result.</p>
       <p className="muted small">{review.valid} of {review.cells.length} cells available · {review.unavailable} unavailable. This is the range of valid cells in this grid, not a confidence interval. When values tie, the first cell in grid order is shown below.</p>
@@ -45,7 +46,7 @@ export default function SensitivityTable({ assumptions, company }: { assumptions
     {error ? <div className="notice error" role="alert">{error}<button className="secondary" onClick={() => setAttempt(n => n + 1)}>Retry sensitivity</button></div> : !grid ? <p role="status">Calculating sensitivity…</p> :
       <EvidenceTable label="Valuation sensitivity"><table className="sensitivity-table"><caption>Discount rate versus terminal growth: estimated value per share</caption><thead><tr><th>WACC / terminal growth</th>{grid.terminalGrowthRates.map((value, i) => <th key={i}>{rate(value)}</th>)}</tr></thead><tbody>
         {grid.rows.map((row, i) => <tr key={i}><th scope="row">{rate(row.discountRate)}</th>{row.cells.map((cell, j) => <td key={j} className={cell.baseCase ? 'base-case' : ''}>
-          {cell.valuePerShare === null ? <span title={cell.error || 'Invalid inputs'}>Unavailable<small className="comparison-evidence">{cell.error}</small></span> : money(cell.valuePerShare, false)}
+          {cell.valuePerShare === null || cell.error || !Number.isFinite(cell.valuePerShare) || !Number.isFinite(row.discountRate) || !Number.isFinite(cell.terminalGrowthRate) ? <span title={cell.error || 'Invalid inputs'}>Unavailable<small className="comparison-evidence">{cell.error}</small></span> : <button type="button" className="text-button sensitivity-cell" aria-label={`Use WACC ${rate(row.discountRate)} and terminal growth ${rate(cell.terminalGrowthRate)}`} onClick={() => onUseRates(row.discountRate, cell.terminalGrowthRate)}>{money(cell.valuePerShare, false)}</button>}
           {cell.baseCase && <small className="comparison-evidence">Base case</small>}
         </td>)}</tr>)}
       </tbody></table></EvidenceTable>}
