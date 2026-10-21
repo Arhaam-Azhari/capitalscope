@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import catalog from './catalog';
+import { readFile } from 'node:fs/promises';
+import { readCsv } from './readCsv';
 
 const assumptions = { baseFreeCashFlow: 100000000, growthRate: .05, discountRate: .1, terminalGrowthRate: .02, years: 5, netDebt: 200000000, sharesOutstanding: 50000000 };
 const result = { projections: [{ year: 1, freeCashFlow: 105000000, presentValue: 95454545 }], terminalValue: 1600000000, presentValueOfTerminalValue: 990000000, enterpriseValue: 1300000000, equityValue: 1100000000, valuePerShare: 22, terminalValueShare: .76 };
@@ -131,4 +133,59 @@ test('valuation-price evidence is keyboard scrollable at 320px and hides control
   await page.emulateMedia({ media: 'print' });
   await expect(context.locator('.table-navigation')).toBeHidden();
   await expect(context.getByRole('table')).toBeVisible();
+});
+
+
+test('changed-assumption review keeps estimates visible and exports every input with the selected baseline', async ({ page }) => {
+  const control = await setup(page);
+  control.replace([scenario('base'), { ...scenario('lower'), assumptions: { ...assumptions, growthRate: .07 }, result: { ...result, valuePerShare: 33 } }]);
+  control.recover();
+  await control.saved.getByRole('button', { name: 'Reload saved scenarios' }).click();
+  await control.saved.getByLabel('Compare My base case', { exact: true }).check();
+  await control.saved.getByLabel('Compare My lower case', { exact: true }).check();
+  const comparison = control.saved.getByRole('region', { name: 'Compare my valuation cases', exact: true });
+  await expect(comparison).toContainText('1 of 7 assumptions differ');
+  await expect(comparison.getByRole('row', { name: /^Starting unlevered cash flow/ })).toBeVisible();
+  await comparison.getByLabel('Show changed assumptions only').check();
+  await expect(comparison.getByRole('row', { name: /^Starting unlevered cash flow/ })).toHaveCount(0);
+  await expect(comparison.getByRole('row', { name: /^Annual growth/ })).toBeVisible();
+  await expect(comparison.getByRole('row', { name: /^Estimated value \/ share/ })).toContainText('$33.00');
+  await comparison.getByRole('combobox', { name: /Comparison baseline/ }).selectOption('lower');
+  await expect(comparison.getByRole('row', { name: /^Difference \/ share vs baseline/ }).getByRole('cell').nth(0)).toHaveText('-$11.00');
+  await page.evaluate(() => {
+    const original = URL.createObjectURL;
+    URL.createObjectURL = () => { URL.createObjectURL = original; throw new Error('Download unavailable in this check'); };
+  });
+  await comparison.getByRole('button', { name: 'Download comparison CSV' }).click();
+  await expect(comparison.getByRole('alert')).toContainText('comparison CSV could not be prepared');
+  const event = page.waitForEvent('download');
+  await comparison.getByRole('button', { name: 'Download comparison CSV' }).click();
+  const download = await event;
+  expect(download.suggestedFilename()).toBe('valuation-comparison.csv');
+  const records = readCsv(await readFile((await download.path())!, 'utf8'));
+  expect(records).toHaveLength(2);
+  expect(records[0]).toMatchObject({ baseline_id: 'lower', base_free_cash_flow_usd: '100000000', annual_growth_rate: '0.05', net_debt_usd: '200000000', shares_outstanding: '50000000', delta_per_share_usd: '-11' });
+  expect(records[1]).toMatchObject({ baseline_id: 'lower', annual_growth_rate: '0.07', delta_per_share_usd: '0' });
+  await expect(comparison.getByRole('alert')).toHaveCount(0);
+  await expect(comparison.getByLabel('Show changed assumptions only')).toBeChecked();
+  await comparison.getByLabel('Show changed assumptions only').uncheck();
+  await expect(comparison.getByRole('row', { name: /^Starting unlevered cash flow/ })).toBeVisible();
+  expect(control.writes()).toBe(0);
+});
+
+test('identical input values leave model warnings and valuation results visible in changed-only review', async ({ page }) => {
+  const control = await setup(page);
+  control.replace([scenario('base'), { ...scenario('lower'), modelVersion: 'future-model' }]);
+  control.recover();
+  await control.saved.getByRole('button', { name: 'Reload saved scenarios' }).click();
+  await control.saved.getByLabel('Compare My base case', { exact: true }).check();
+  await control.saved.getByLabel('Compare My lower case', { exact: true }).check();
+  const comparison = control.saved.getByRole('region', { name: 'Compare my valuation cases', exact: true });
+  await comparison.getByLabel('Show changed assumptions only').check();
+  await expect(comparison).toContainText('0 of 7 assumptions differ');
+  await expect(comparison).toContainText('All selected cases use the same input values');
+  await expect(comparison).toContainText('These cases use different model versions');
+  await expect(comparison.getByRole('row', { name: /^Annual growth/ })).toHaveCount(0);
+  await expect(comparison.getByRole('row', { name: /^Estimated value \/ share/ })).toBeVisible();
+  await expect(comparison.getByRole('row', { name: /^Difference \/ share vs baseline/ })).toContainText('Unavailable · different model');
 });
