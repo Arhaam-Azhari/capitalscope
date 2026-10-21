@@ -134,7 +134,7 @@ export default function ValuationPanel({ company }: { company: Company }) {
         </section>
         <ValuationForecast result={result} />
         <EvidenceTable label="Valuation forecast evidence"><table><caption>Forecast cash flow and present value</caption><thead><tr><th>Year</th><th>Unlevered cash flow</th><th>Present value</th></tr></thead><tbody>{result.projections.map(p => <tr key={p.year}><th scope="row">{p.year}</th><td>{money(p.freeCashFlow)}</td><td>{money(p.presentValue)}</td></tr>)}</tbody></table></EvidenceTable>
-        <SensitivityTable assumptions={assumptions} />
+        <SensitivityTable assumptions={assumptions} company={company} />
         <p className="muted small">A model estimate is not a market quote. This version does not adjust for dilution, excess assets, or all non-debt claims.</p>
       </div>}
       <SavedScenarios ticker={company.ticker} assumptions={result ? assumptions : null} onLoad={load} />
