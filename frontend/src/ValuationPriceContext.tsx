@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import { useEffect, useRef, useState } from 'react';
 import { money, request } from './api';
 import type { Scenario, ValuationPriceEvidence as Context } from './types';
@@ -20,6 +21,10 @@ export default function ValuationPriceContext({ ticker, scenarios }: { ticker: s
     request<Context>(`/api/companies/${ticker}/scenarios/price-context?shareBasisConfirmed=${confirmed}`, { signal: controller.signal })
       .then(data => {
         if (controller.signal.aborted) return;
+        if (data.ticker !== ticker || data.dataMode !== (ticker === 'DEMO' ? 'example' : 'market')
+          || data.shareBasisConfirmed !== confirmed) {
+          throw new Error('The comparison evidence does not match this company, data mode, or share-basis confirmation. Recheck valuation price to try again.');
+        }
         if (confirmed && evidenceKey(data) !== confirmedEvidence.current) {
           setConfirmed(false); setNotice('The stored comparison evidence changed. Review the close and saved cases, then confirm the share basis again.'); return;
         }
@@ -39,7 +44,7 @@ export default function ValuationPriceContext({ ticker, scenarios }: { ticker: s
     {context && <>
       {context.quoteError && <p className="notice warning" role="status">{context.quoteError} Valuation gaps are unavailable.</p>}
       {context.quote && <p className={`notice ${context.dataMode === 'example' ? 'example' : 'warning'}`} data-testid="valuation-price-evidence">{context.dataMode === 'example' ? 'Invented example close' : 'Stored market close'}: {money(context.quote.close, false)} · {context.quote.priceDate} · {context.quote.priceAgeDays} calendar days old. {context.quote.sourceUrl ? <a href={context.quote.sourceUrl} target="_blank" rel="noreferrer">{context.quote.source} ↗</a> : context.quote.source}. {context.quote.retrievedAt ? `Imported ${new Date(context.quote.retrievedAt).toLocaleString()}.` : 'Fictional data · no market import.'} Evaluated {new Date(context.evaluatedAt).toLocaleString()}.</p>}
-      <div className="table-scroll"><table><caption>Saved per-share valuations versus a dated close</caption><thead><tr><th>Saved case / model</th><th>Modeled shares</th><th>Modeled value / share</th><th>Value − close</th><th>(Value − close) / close</th><th>Comparability</th></tr></thead><tbody>{context.scenarios.map(item => <tr key={item.id}><th scope="row">{item.name}<small className="comparison-evidence">{item.modelVersion} · saved {new Date(item.createdAt).toLocaleString()}</small></th><td>{item.modeledShares === null || !Number.isFinite(item.modeledShares) ? 'Unavailable' : item.modeledShares.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{dollars(item.valuePerShare)}</td><td>{dollars(item.valueMinusClose)}</td><td>{item.relativeGap === null || !Number.isFinite(item.relativeGap * 100) ? 'Unavailable' : `${(item.relativeGap * 100).toFixed(2)}%`}</td><td className="mark-evidence">{item.unavailableReason || 'Share basis confirmed by you; not provider-verified.'}</td></tr>)}{!context.scenarios.length && <tr><td colSpan={6}>Save a valuation scenario to inspect it here.</td></tr>}</tbody></table></div>
+      <EvidenceTable label="Saved valuation price evidence"><table><caption>Saved per-share valuations versus a dated close</caption><thead><tr><th scope="col">Saved case / model</th><th scope="col">Modeled shares</th><th scope="col">Modeled value / share</th><th scope="col">Value − close</th><th scope="col">(Value − close) / close</th><th scope="col">Comparability</th></tr></thead><tbody>{context.scenarios.map(item => <tr key={item.id}><th scope="row">{item.name}<small className="comparison-evidence">{item.modelVersion} · saved {new Date(item.createdAt).toLocaleString()}</small></th><td>{item.modeledShares === null || !Number.isFinite(item.modeledShares) ? 'Unavailable' : item.modeledShares.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td><td>{dollars(item.valuePerShare)}</td><td>{dollars(item.valueMinusClose)}</td><td>{item.relativeGap === null || !Number.isFinite(item.relativeGap * 100) ? 'Unavailable' : `${(item.relativeGap * 100).toFixed(2)}%`}</td><td className="mark-evidence">{item.unavailableReason || 'Share basis confirmed by you; not provider-verified.'}</td></tr>)}{!context.scenarios.length && <tr><td colSpan={6}>Save a valuation scenario to inspect it here.</td></tr>}</tbody></table></EvidenceTable>
       <p className="muted small">The gap uses (modeled value per share − stored close) / stored close. Negative modeled equity values remain negative, so a gap can be below −100%. Saved assumptions can predate the close; this is not a point-in-time backtest. Later price imports change this view without rewriting saved valuations.</p>
     </>}
   </section>;
