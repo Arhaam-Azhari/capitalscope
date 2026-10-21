@@ -42,22 +42,33 @@ export function comparisonCsv(selected: Scenario[], baseline: Scenario) {
 
 export default function ScenarioComparison({ selected }: { selected: Scenario[] }) {
   const [baselineId, setBaselineId] = useState('');
+  const [changedOnly, setChangedOnly] = useState(false);
+  const [exportError, setExportError] = useState('');
   const baseline = selected.find(item => item.id === baselineId) || selected[0];
   useEffect(() => { if (!selected.some(item => item.id === baselineId)) setBaselineId(selected[0]?.id || ''); }, [selected, baselineId]);
   if (selected.length < 2) return <p className="muted small">Select two to four saved cases to compare their assumptions and estimates.</p>;
   const modelsDiffer = selected.some(item => item.modelVersion !== baseline.modelVersion);
+  const changed = assumptions.filter(([key]) => selected.some(item => item.assumptions[key] !== baseline.assumptions[key]));
+  const shown = changedOnly ? changed : assumptions;
   function download() {
-    const url = URL.createObjectURL(new Blob([comparisonCsv(selected, baseline)], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a'); link.href = url; link.download = 'valuation-comparison.csv'; link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExportError('');
+    try {
+      const url = URL.createObjectURL(new Blob([comparisonCsv(selected, baseline)], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = 'valuation-comparison.csv';
+      try { link.click(); } finally { window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch { setExportError('The valuation comparison CSV could not be prepared. Please try again.'); }
   }
   return <section className="scenario-comparison" aria-labelledby="scenario-comparison-heading">
     <div className="panel-title"><div><span className="eyebrow">SAVED CASES / ASSUMPTIONS</span><h3 id="scenario-comparison-heading">Compare my valuation cases</h3></div><button type="button" className="secondary" onClick={download}>Download comparison CSV</button></div>
     <label className="comparison-baseline">Comparison baseline<select value={baseline.id} onChange={event => setBaselineId(event.target.value)}>{selected.map(item => <option key={item.id} value={item.id}>{item.name} · {new Date(item.createdAt).toLocaleString()}</option>)}</select></label>
     <p className="muted small">These are saved assumptions for one company, not probabilities or market forecasts. Highlighted inputs differ from the selected baseline. Comparing cases does not change the open model.</p>
+    <label className="scenario-pick"><input type="checkbox" checked={changedOnly} onChange={event => setChangedOnly(event.target.checked)} />Show changed assumptions only</label>
+    <p className="muted small">{changed.length} of {assumptions.length} assumptions differ from the baseline across the selected cases. This filter affects assumption rows only; estimates remain visible and the comparison CSV includes every assumption.</p>
+    {changedOnly && !changed.length && <p className="notice">All selected cases use the same input values. Saved estimates or model versions may still differ.</p>}
+    {exportError && <p className="notice error" role="alert">{exportError}</p>}
     {modelsDiffer && <p className="notice warning">These cases use different model versions. Deltas are unavailable for cases that differ from the baseline's model.</p>}
     <EvidenceTable label="Saved valuation comparison" pinFirstColumn><table className="scenario-comparison-table"><caption>Saved assumptions and valuation estimates</caption><thead><tr><th scope="col">Assumption / estimate</th>{selected.map(item => <th scope="col" key={item.id}>{item.name}<span className="comparison-evidence">{item.id === baseline.id ? 'Baseline · ' : ''}{item.modelVersion}<br />Saved {new Date(item.createdAt).toLocaleString()}</span></th>)}</tr></thead><tbody>
-      {assumptions.map(([key, label, format]) => <tr key={key}><th scope="row">{label}</th>{selected.map(item => {
+      {shown.map(([key, label, format]) => <tr key={key}><th scope="row">{label}</th>{selected.map(item => {
         const changed = item.assumptions[key] !== baseline.assumptions[key];
         return <td key={item.id} className={changed ? 'assumption-changed' : ''}>{format(item.assumptions[key])}{changed && <span className="comparison-evidence">Changed from baseline</span>}</td>;
       })}</tr>)}
