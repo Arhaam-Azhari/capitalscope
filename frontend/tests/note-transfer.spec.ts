@@ -86,3 +86,62 @@ test('empty note restoration is explicit and the preview fits a small phone', as
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('.note-transfer')).toBeHidden();
 });
+
+test('notes changed in another tab are reviewed before an explicit replacement and checked again', async ({ page, context }) => {
+  await openNotes(page);
+  const other = await context.newPage();
+  await openNotes(other);
+  const draft = page.getByLabel('Your notes for Example Manufacturing');
+  const otherNote = other.getByLabel('Your notes for Example Manufacturing');
+  await draft.fill('My draft in the first tab');
+  await otherNote.fill('My newer saved note');
+  await other.getByRole('button', { name: 'Save note', exact: true }).click();
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('saved note changed');
+  await expect(draft).toHaveValue('My draft in the first tab');
+  expect(await page.evaluate(() => localStorage.getItem('capitalscope.note.DEMO'))).toBe('My newer saved note');
+  await page.getByText('Review changed saved note', { exact: true }).click();
+  await expect(page.getByLabel('Changed saved note')).toHaveText('My newer saved note');
+  await otherNote.fill('My saved note changed again');
+  await other.getByRole('button', { name: 'Save note', exact: true }).click();
+  await page.getByRole('button', { name: 'Replace saved note with my draft', exact: true }).click();
+  await expect(page.getByLabel('Changed saved note')).toHaveText('My saved note changed again');
+  expect(await page.evaluate(() => localStorage.getItem('capitalscope.note.DEMO'))).toBe('My saved note changed again');
+  await page.getByRole('button', { name: 'Replace saved note with my draft', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('status')).toContainText('Saved in this browser');
+  expect(await page.evaluate(() => localStorage.getItem('capitalscope.note.DEMO'))).toBe('My draft in the first tab');
+});
+
+test('restored navigation drafts retain their original saved-text baseline and can accept the latest note', async ({ page, context }) => {
+  await openNotes(page);
+  await page.getByLabel('Your notes for Example Manufacturing').fill('My draft before navigating');
+  await page.getByRole('button', { name: 'Financials', exact: true }).click();
+  const other = await context.newPage();
+  await openNotes(other);
+  await other.getByLabel('Your notes for Example Manufacturing').fill('My saved note from another tab');
+  await other.getByRole('button', { name: 'Save note', exact: true }).click();
+  await page.getByRole('button', { name: 'Research notes', exact: true }).click();
+  await expect(page.getByLabel('Your notes for Example Manufacturing')).toHaveValue('My draft before navigating');
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('saved note changed');
+  await page.getByRole('button', { name: 'Use latest saved note', exact: true }).click();
+  await expect(page.getByLabel('Your notes for Example Manufacturing')).toHaveValue('My saved note from another tab');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByLabel('Your notes for Example Manufacturing').fill('My edit after accepting the latest');
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Saved in this browser');
+});
+
+test('a removed saved note is detected as an empty conflict without erasing the draft', async ({ page }) => {
+  await openNotes(page);
+  await page.getByLabel('Your notes for Example Manufacturing').fill('My retained draft');
+  await page.evaluate(() => localStorage.removeItem('capitalscope.note.DEMO'));
+  await page.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('saved note changed');
+  expect(await page.evaluate(() => localStorage.getItem('capitalscope.note.DEMO'))).toBeNull();
+  await page.getByText('Review changed saved note', { exact: true }).click();
+  await expect(page.getByLabel('Changed saved note')).toHaveText('(Empty saved note)');
+  await page.getByRole('button', { name: 'Use latest saved note', exact: true }).click();
+  await expect(page.getByLabel('Your notes for Example Manufacturing')).toHaveValue('');
+});
