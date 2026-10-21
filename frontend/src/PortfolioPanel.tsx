@@ -9,7 +9,9 @@ import type { Company, Portfolio, PortfolioSummary } from './types';
 export default function PortfolioPanel({ companies, onOpen, onCompare }: { companies: Company[]; onOpen: (ticker: string) => void; onCompare: (tickers: string[]) => void }) {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([]);
   const [selected, setSelected] = useState('');
-  const [summary, setSummary] = useState<PortfolioSummary | null>(null);
+  const [loadedSummary, setSummary] = useState<PortfolioSummary | null>(null);
+  const selectedMode = portfolios.find(item => item.id === selected)?.mode;
+  const summary = loadedSummary?.portfolio.id === selected && loadedSummary.portfolio.mode === selectedMode ? loadedSummary : null;
   const [name, setName] = useState(''); const [mode, setMode] = useState('example'); const [cash, setCash] = useState('100000');
   const [side, setSide] = useState('BUY'); const [ticker, setTicker] = useState('AAPL');
   const [quantity, setQuantity] = useState(''); const [price, setPrice] = useState(''); const [fee, setFee] = useState('0');
@@ -27,10 +29,14 @@ export default function PortfolioPanel({ companies, onOpen, onCompare }: { compa
   useEffect(() => {
     const controller = new AbortController(); setSummary(null);
     if (selected) request<PortfolioSummary>(`/api/portfolios/${selected}`, { signal: controller.signal })
-      .then(data => { if (!controller.signal.aborted) setSummary(data); })
+      .then(data => {
+        if (data.portfolio.id !== selected || data.portfolio.mode !== selectedMode)
+          throw new Error('The returned ledger does not match the selected portfolio and instrument mode. Reload portfolios to try again.');
+        if (!controller.signal.aborted) setSummary(data);
+      })
       .catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
-  }, [selected, attempt]);
+  }, [selected, selectedMode, attempt]);
   async function create(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {

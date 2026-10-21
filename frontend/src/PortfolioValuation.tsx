@@ -7,13 +7,18 @@ import { money, request } from './api';
 import type { Company, PortfolioSummary, PortfolioMarks } from './types';
 
 export default function PortfolioValuation({ summary, companies }: { summary: PortfolioSummary; companies: Company[] }) {
-  const [marks, setMarks] = useState<PortfolioMarks | null>(null);
+  const [loaded, setLoaded] = useState<{ summary: PortfolioSummary; marks: PortfolioMarks } | null>(null);
+  const marks = loaded?.summary === summary ? loaded.marks : null;
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    const controller = new AbortController(); setMarks(null); setError('');
+    const controller = new AbortController(); setLoaded(null); setError('');
     request<PortfolioMarks>(`/api/portfolios/${summary.portfolio.id}/valuation`, { signal: controller.signal })
-      .then(data => { if (!controller.signal.aborted) setMarks(data); })
+      .then(data => {
+        if (data.portfolioId !== summary.portfolio.id || data.dataMode !== summary.portfolio.mode)
+          throw new Error('The returned price evidence does not match this portfolio and instrument mode. Recheck stored prices to try again.');
+        if (!controller.signal.aborted) setLoaded({ summary, marks: data });
+      })
       .catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
   }, [summary, attempt]);
