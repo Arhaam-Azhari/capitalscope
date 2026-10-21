@@ -1,3 +1,4 @@
+import EvidenceTable from './EvidenceTable';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { comparePrices, priceComparisonCsv, priceComparisonCoverage } from './priceComparison';
 import PriceCoveragePanel from './PriceCoveragePanel';
@@ -63,17 +64,17 @@ export default function PriceComparisonPanel({ history, companies }: { history: 
     {snapshot && result && <>
       <p className="muted small">{result.rows.length} shared observations: {result.rows[0].date} through {result.rows[result.rows.length - 1].date}. Excluded in-window observations: {history.ticker} {result.currentExcluded}; {snapshot.reference.ticker} {result.referenceExcluded}. No dates are filled in.</p>
       <p className="muted small">{history.ticker}: {history.source} · Retrieved {history.retrievedAt || 'Not supplied'}. {snapshot.reference.ticker}: {snapshot.reference.source} · Retrieved {snapshot.reference.retrievedAt || 'Not supplied'}. The current series is the already loaded snapshot; reference prices are read separately. Calculated {new Date(snapshot.calculatedAt).toLocaleString()}.</p>
-      <div className="table-scroll"><table><caption>Shared-date price comparison summary</caption><thead><tr><th>Company</th><th>Window raw-price change</th><th>Shared-date maximum decline</th></tr></thead><tbody>
+      <EvidenceTable label="Price comparison summary"><table><caption>Shared-date price comparison summary</caption><thead><tr><th scope="col">Company</th><th scope="col">Window raw-price change</th><th scope="col">Shared-date maximum decline</th></tr></thead><tbody>
         <tr><th scope="row">{history.ticker}</th><td>{result.currentChangePercent.toFixed(2)}%</td><td>{result.currentMaximumDeclinePercent.toFixed(2)}%</td></tr>
         <tr><th scope="row">{snapshot.reference.ticker}</th><td>{result.referenceChangePercent.toFixed(2)}%</td><td>{result.referenceMaximumDeclinePercent.toFixed(2)}%</td></tr>
-      </tbody></table></div>
+      </tbody></table></EvidenceTable>
       <div className="trend"><svg viewBox="0 0 520 220" role="img" aria-label="Company raw closes indexed to 100; exact shared-date values are in the table">
         <text x="45" y="25">{high.toFixed(2)}</text><text x="45" y="195">{low.toFixed(2)}</text>
         <polyline fill="none" stroke="var(--accent)" strokeWidth="3" points={points('currentIndex')} />
         <polyline fill="none" stroke="var(--reference)" strokeWidth="3" strokeDasharray="6 4" points={points('referenceIndex')} />
         <text x="45" y="215">{result.rows[0].date}</text><text x="485" y="215" textAnchor="end">{result.rows[result.rows.length - 1].date}</text>
       </svg><p className="muted small">{history.ticker}: solid copper; {snapshot.reference.ticker}: dashed slate. Vertical axis spans observed index values and does not start at zero. Dates are spaced by observation order, not calendar time.</p></div>
-      <div className="table-scroll"><table><caption>Shared-date raw closes and index values</caption><thead><tr><th>Date</th><th>{history.ticker} raw close</th><th>{snapshot.reference.ticker} raw close</th><th>{history.ticker} index</th><th>{snapshot.reference.ticker} index</th></tr></thead><tbody>{result.rows.map(row => <tr key={row.date}><th scope="row">{row.date}</th><td>{money(row.currentClose, false)}</td><td>{money(row.referenceClose, false)}</td><td>{row.currentIndex.toFixed(2)}</td><td>{row.referenceIndex.toFixed(2)}</td></tr>)}</tbody></table></div>
+      <EvidenceTable label="Shared-date price evidence"><table><caption>Shared-date raw closes and index values</caption><thead><tr><th scope="col">Date</th><th scope="col">{history.ticker} raw close</th><th scope="col">{snapshot.reference.ticker} raw close</th><th scope="col">{history.ticker} index</th><th scope="col">{snapshot.reference.ticker} index</th></tr></thead><tbody>{result.rows.map(row => <tr key={row.date}><th scope="row">{row.date}</th><td>{money(row.currentClose, false)}</td><td>{money(row.referenceClose, false)}</td><td>{row.currentIndex.toFixed(2)}</td><td>{row.referenceIndex.toFixed(2)}</td></tr>)}</tbody></table></EvidenceTable>
       <div className="export-actions"><button className="secondary" onClick={download}>Download price comparison CSV</button><p className="muted small">Exports shared closes, unrounded indices and metrics, coverage counts, each source and retrieval date, and model limits.</p></div>
       <PriceIntervalPanel key={snapshot.calculatedAt} current={history} reference={snapshot.reference} result={result} calculatedAt={snapshot.calculatedAt} />
     </>}

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: ['workspace.spec.ts', 'note-transfer.spec.ts', 'metric-change.spec.ts', 'sensitivity-review.spec.ts', 'saved-case-recovery.spec.ts', 'portfolio-evidence.spec.ts'],
+  testMatch: ['workspace.spec.ts', 'note-transfer.spec.ts', 'metric-change.spec.ts', 'sensitivity-review.spec.ts', 'saved-case-recovery.spec.ts', 'portfolio-evidence.spec.ts', 'price-table-access.spec.ts'],
   workers: 2,
   use: { baseURL: 'http://127.0.0.1:5186', screenshot: 'only-on-failure', trace: 'retain-on-failure' },
   webServer: {
