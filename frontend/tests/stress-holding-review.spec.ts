@@ -123,3 +123,80 @@ test('I filter saved shock assumptions without hiding baseline differences or ex
   await page.emulateMedia({ media: 'print' });
   await expect(comparison.locator('.table-navigation')).toBeHidden();
 });
+
+test('I recover saved stress reads while keeping my preview and draft separate from unavailable evidence', async ({ page }) => {
+  const base = { id: 'base', portfolioId: portfolio.id, name: 'My saved downside', createdAt: '2026-10-23T00:00:00Z', modelVersion: 'price-shock-v1', result };
+  const other = { ...base, id: 'other', name: 'My removed downside' };
+  let reads = 0, writes = 0, runs = 0, phase = 1;
+  let releaseRead!: () => void;
+  const pendingRead = new Promise<void>(resolve => { releaseRead = resolve; });
+  await page.route('**/api/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/stress')) { runs++; return route.fulfill({ json: result }); }
+    if (route.request().method() !== 'GET') writes++;
+    if (path === '/api/companies') return route.fulfill({ json: catalog });
+    if (path === '/api/universe') return route.fulfill({ json: { count: 50, asOf: '2026-10-06', dynamic: false } });
+    if (path === '/api/portfolios') return route.fulfill({ json: [portfolio] });
+    if (path === `/api/portfolios/${portfolio.id}`) return route.fulfill({ json: { portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, positions: [], trades: [], events: [] } });
+    if (path.endsWith('/valuation')) return route.fulfill({ json: marks });
+    if (path.endsWith('/stress-scenarios')) {
+      reads++;
+      if (phase === 1) return route.fulfill({ status: 503, json: { error: 'My temporary saved stress failure' } });
+      if (phase === 2) return route.fulfill({ json: [base, other] });
+      if (phase === 3) { await pendingRead; return route.fulfill({ status: 503, json: { error: 'My reload failed' } }); }
+      if (phase === 4) return route.fulfill({ json: [{ ...base, portfolioId: 'another-portfolio' }] });
+      if (phase === 5) return route.fulfill({ json: [{ ...base, result: { ...result, baseline: { ...marks, portfolioId: 'another-portfolio' } } }] });
+      return route.fulfill({ json: phase === 6 ? [base] : [] });
+    }
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/#research?company=DEMO&view=portfolios');
+  await page.locator('.company-browser > summary').press('Escape');
+  const saved = page.getByRole('region', { name: 'Saved portfolio stress scenarios', exact: true });
+  const reload = saved.getByRole('button', { name: 'Reload saved stress scenarios', exact: true });
+  const save = saved.getByRole('button', { name: 'Save stress scenario', exact: true });
+  await expect(saved.getByRole('alert')).toHaveText('My temporary saved stress failure');
+  await expect(saved).not.toContainText('No saved stress scenarios for this portfolio.');
+  await page.getByRole('button', { name: 'Run stress test', exact: true }).click();
+  await expect(page.getByTestId('stress-total')).toHaveText('Unavailable');
+  await saved.getByLabel('Stress scenario name', { exact: true }).fill('My retained name draft');
+  await expect(save).toBeDisabled();
+  phase = 2;
+  await reload.click();
+  await expect(save).toBeEnabled();
+  for (const name of [base.name, other.name]) await saved.getByRole('checkbox', { name: `Compare ${name}`, exact: true }).check();
+  await saved.getByRole('button', { name: `Review ${other.name}`, exact: true }).click();
+  const comparison = saved.getByRole('region', { name: 'Saved stress scenario comparison', exact: true });
+  const snapshot = saved.getByRole('region', { name: `Saved snapshot ${other.name}`, exact: true });
+  await expect(comparison).toBeVisible(); await expect(snapshot).toBeVisible();
+  phase = 3;
+  await reload.click();
+  await expect(saved.getByRole('status')).toHaveText('Loading saved stress scenarios…');
+  await expect(comparison).toHaveCount(0); await expect(snapshot).toHaveCount(0);
+  await expect(saved.getByRole('link', { name: /^Download CSV for/ })).toHaveCount(0);
+  await expect(reload).toBeDisabled(); await expect(save).toBeDisabled();
+  releaseRead();
+  await expect(saved.getByRole('alert')).toHaveText('My reload failed');
+  await expect(saved.getByLabel('Stress scenario name', { exact: true })).toHaveValue('My retained name draft');
+  await expect(page.getByTestId('stress-total')).toHaveText('Unavailable');
+  for (let i = 0; i < 2; i++) {
+    phase = 4 + i;
+    await reload.click();
+    await expect(saved.getByRole('alert')).toContainText('do not match this portfolio');
+    await expect(save).toBeDisabled();
+    await expect(saved.getByRole('link', { name: /^Download CSV for/ })).toHaveCount(0);
+  }
+  phase = 6;
+  await reload.click();
+  await expect(saved.getByRole('checkbox', { name: `Compare ${base.name}`, exact: true })).toBeChecked();
+  await expect(saved.getByRole('checkbox', { name: `Compare ${other.name}`, exact: true })).toHaveCount(0);
+  await expect(snapshot).toHaveCount(0); await expect(comparison).toHaveCount(0);
+  await expect(save).toBeEnabled();
+  await expect(saved.getByLabel('Stress scenario name', { exact: true })).toHaveValue('My retained name draft');
+  await expect(page.getByLabel('Default price change (%)', { exact: true })).toHaveValue('-20');
+  phase = 7;
+  await reload.click();
+  await expect(saved).toContainText('No saved stress scenarios for this portfolio.');
+  await expect(saved.getByRole('alert')).toHaveCount(0);
+  expect(reads).toBeGreaterThanOrEqual(7); expect(runs).toBe(1); expect(writes).toBe(0);
+});
