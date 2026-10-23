@@ -127,6 +127,8 @@ I keep exact decimal money and share values and express rates as decimal fractio
 
 ## How I compare stress scenarios
 
+I can hide identical shock assumption rows while keeping saved results and baseline evidence visible. I treat an explicit sector override as different from inheriting the default, even if their rates match. Identical assumptions do not imply identical saved baselines or results. I use pinned measure labels and keyboard or arrow-button scrolling on narrow screens; each case’s CSV still contains its complete original snapshot.
+
 I can select two to four saved stress scenarios for one portfolio and choose a reference case. I compare their defaults and sector overrides, cash, complete baseline totals, stressed totals, changes against each case's own baseline, coverage, model version, and holding-level price evidence. I keep each case's original saved values visible.
 
 I show a stressed-value difference versus the reference only when both cases have complete coverage, the supported `price-shock-v1` model, and identical saved cash, shares, cost basis, sector labels, closes, price dates, source evidence, and baseline values. I ignore evaluation timestamps and holding order when checking this match. I withhold differences for changed holdings, changed price evidence, missing prices, unsupported versions, or numeric overflow; I do not interpret these differences as investment returns. I can remove selected cases or delete a saved case, and the reference falls back to a remaining selection. Comparing does not import prices, recalculate saved snapshots, or change my ledger.
