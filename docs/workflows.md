@@ -127,6 +127,8 @@ I keep exact decimal money and share values and express rates as decimal fractio
 
 ## How I compare stress scenarios
 
+I can search saved stress scenarios by name, ID, model version, holding ticker, or sector; sort by newest, oldest, or name; and show only selected cases. I keep at most four cases in a comparison. List filters leave hidden selections and my open snapshot available below, and each CSV retains the complete saved snapshot. I can clear the comparison separately from resetting list filters. Reloading preserves my list filters while reconciling removed cases.
+
 I can reload saved stress scenarios after a failed read or a change elsewhere in the shared workspace. I keep my current preview, price assumptions, and scenario-name draft. I hide saved lists, comparisons, snapshots, and CSV links while a reload is pending or unavailable, and pause saving until a matching list loads. I reject records whose scenario or baseline belongs to another portfolio. After a successful reload, I remove missing cases from my review selection.
 
 I can hide identical shock assumption rows while keeping saved results and baseline evidence visible. I treat an explicit sector override as different from inheriting the default, even if their rates match. Identical assumptions do not imply identical saved baselines or results. I use pinned measure labels and keyboard or arrow-button scrolling on narrow screens; each case’s CSV still contains its complete original snapshot.
