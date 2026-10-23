@@ -1,4 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { readCsv } from './readCsv';
+import { stressComparisonCsv, stressReferenceDifference } from '../src/stressComparisonCsv';
+import type { SavedStress } from '../src/SavedPortfolioStress';
 import { reviewStressHoldings } from '../src/stressHoldingReview';
 import type { StressResult } from '../src/PortfolioStressResult';
 import type { PortfolioMarks } from '../src/types';
@@ -267,4 +271,93 @@ test('I organize saved stress cases without losing hidden selections or the open
   await expect(list.getByRole('checkbox', { checked: true })).toHaveCount(0);
   expect(writes).toBe(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+function myComparisonCases(): SavedStress[] {
+  const baseline = { ...marks, complete: true, totalPositions: 2, totalValue: 350, holdings: holdings.slice(0, 2) };
+  const make = (id: string, shock: number): SavedStress => ({ id, portfolioId: portfolio.id, name: `My ${id} case`, createdAt: '2026-10-23T00:00:00Z', modelVersion: 'price-shock-v1',
+    result: { baseline, assumptions: { defaultShock: 0, sectorShocks: { Healthcare: -.1, Technology: shock } },
+      holdings: baseline.holdings.map(mark => ({ baseline: mark, sector: 'Technology', shock, stressedValue: mark.value! * (1 + shock), change: mark.value! * shock })),
+      stressedPricedHoldingsValue: 250 * (1 + shock), stressedTotalValue: 350 + 250 * shock, change: 250 * shock, relativeChange: 250 * shock / 350 } });
+  return [make('base', 0), make('downside', -.2)];
+}
+
+test('I export selected stress evidence with safe text, signed values, missing data and guarded reference differences', () => {
+  const [base, downside] = myComparisonCases();
+  base.name = '=My, "quoted" case\nwith a second line';
+  delete downside.result.assumptions.sectorShocks.Healthcare;
+  const original = JSON.stringify([base, downside]);
+  const rows = readCsv(stressComparisonCsv([base, downside], base.id, '2026-10-23T20:00:00Z'));
+  const summary = rows.filter(row => row.record_type === 'scenario');
+  expect(summary).toHaveLength(2);
+  expect(summary[0]).toMatchObject({ schema_version: 'stress-comparison-v1', scenario_name: "'" + base.name, reference_scenario_id: 'base', reference_difference: '0', baseline_matches_reference: 'true', default_shock: '0', currency: 'USD' });
+  expect(summary[1]).toMatchObject({ stressed_total: '300', change: '-50', reference_difference: '-50', reference_difference_unavailable_reason: '' });
+  expect(rows.find(row => row.scenario_id === 'downside' && row.record_type === 'sector_assumption' && row.sector === 'Healthcare')).toMatchObject({ override_kind: 'inherit_default', sector_override: '', applied_shock: '0' });
+  expect(rows.find(row => row.scenario_id === 'base' && row.record_type === 'sector_assumption' && row.sector === 'Technology')).toMatchObject({ override_kind: 'explicit', sector_override: '0', applied_shock: '0' });
+  expect(rows.find(row => row.scenario_id === 'downside' && row.record_type === 'holding' && row.ticker === 'AAPL')).toMatchObject({ quantity: '2', cost_basis: '100', raw_close: '50', price_date: '2026-10-20', price_age_days: '3', source: 'Invented check prices', retrieved_at: '2026-10-21T00:00:00Z', baseline_value: '100', stressed_value: '80', holding_change: '-20', applied_shock: '-0.2' });
+  expect(JSON.stringify([base, downside])).toBe(original);
+  expect(stressReferenceDifference(base, downside).value).toBe(50);
+  for (const change of ['cash', 'partial', 'model', 'total', 'overflow']) {
+    const changed = structuredClone(downside);
+    if (change === 'cash') changed.result.baseline.cash++;
+    if (change === 'partial') changed.result.baseline.complete = false;
+    if (change === 'model') changed.modelVersion = 'price-shock-v2';
+    if (change === 'total') changed.result.stressedTotalValue = NaN;
+    if (change === 'overflow') { changed.result.stressedTotalValue = -Number.MAX_VALUE; }
+    const reference = structuredClone(base);
+    if (change === 'overflow') reference.result.stressedTotalValue = Number.MAX_VALUE;
+    const row = readCsv(stressComparisonCsv([reference, changed], reference.id, 'now')).find(row => row.record_type === 'scenario' && row.scenario_id === changed.id)!;
+    expect(row.reference_difference).toBe(''); expect(row.reference_difference_unavailable_reason).not.toBe('');
+    if (change === 'total') expect(row.stressed_total).toBe('');
+  }
+  const partial: SavedStress = { ...downside, result };
+  const missing = readCsv(stressComparisonCsv([base, partial], base.id, 'now')).find(row => row.record_type === 'holding' && row.ticker === 'V')!;
+  expect(missing).toMatchObject({ baseline_value: '', raw_close: '', stressed_value: '', holding_change: '', price_error: 'No stored close in this check' });
+  for (const invalid of [[], [base], [base, base], [...Array(5)].map((_, i) => ({ ...base, id: String(i) })), [base, { ...downside, portfolioId: 'other' }], [base, { ...downside, result: { ...downside.result, baseline: { ...marks, portfolioId: 'other' } } }]])
+    expect(() => stressComparisonCsv(invalid, base.id, 'now')).toThrow('two to four different saved stress cases');
+  expect(() => stressComparisonCsv([base, downside], 'missing', 'now')).toThrow('Choose a reference');
+});
+
+test('I download the complete selected stress comparison despite filters and can retry a failed download', async ({ page }) => {
+  const cases = myComparisonCases();
+  let writes = 0, requests = 0;
+  await page.route('**/api/**', route => {
+    requests++;
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() !== 'GET') writes++;
+    if (path === '/api/companies') return route.fulfill({ json: catalog });
+    if (path === '/api/universe') return route.fulfill({ json: { count: 50, asOf: '2026-10-06', dynamic: false } });
+    if (path === '/api/portfolios') return route.fulfill({ json: [portfolio] });
+    if (path === `/api/portfolios/${portfolio.id}`) return route.fulfill({ json: { portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, positions: [], trades: [], events: [] } });
+    if (path.endsWith('/valuation')) return route.fulfill({ json: cases[0].result.baseline });
+    if (path.endsWith('/stress-scenarios')) return route.fulfill({ json: cases });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/#research?company=DEMO&view=portfolios');
+  await page.locator('.company-browser > summary').press('Escape');
+  const saved = page.getByRole('region', { name: 'Saved portfolio stress scenarios', exact: true });
+  for (const item of cases) await saved.getByRole('checkbox', { name: `Compare ${item.name}`, exact: true }).check();
+  const comparison = saved.getByRole('region', { name: 'Saved stress scenario comparison', exact: true });
+  await saved.getByRole('searchbox', { name: 'Search saved stress scenarios', exact: true }).fill('no matching case');
+  await comparison.getByLabel('Show differing shock assumptions only', { exact: true }).check();
+  await expect(comparison.getByRole('row', { name: /^Default price change/ })).toHaveCount(0);
+  await expect(comparison.getByRole('row', { name: /^Healthcare override/ })).toHaveCount(0);
+  await comparison.getByRole('combobox', { name: /^Reference stress scenario/ }).selectOption('downside');
+  const before = requests;
+  await page.evaluate(() => { const original = URL.createObjectURL; URL.createObjectURL = () => { URL.createObjectURL = original; throw new Error('My download failure'); }; });
+  const button = comparison.getByRole('button', { name: 'Download stress comparison CSV', exact: true });
+  await button.click();
+  await expect(comparison.getByRole('alert')).toHaveText('The stress comparison CSV could not be prepared. Please try again.');
+  const pending = page.waitForEvent('download'); await button.click(); const download = await pending;
+  expect(download.suggestedFilename()).toBe('saved-stress-comparison.csv');
+  const rows = readCsv(await readFile((await download.path())!, 'utf8'));
+  expect(rows.filter(row => row.record_type === 'scenario')).toHaveLength(2);
+  expect(rows.every(row => row.reference_scenario_id === 'downside')).toBe(true);
+  expect(rows.find(row => row.scenario_id === 'base' && row.record_type === 'scenario')).toMatchObject({ reference_difference: '50', default_shock: '0' });
+  expect(rows.filter(row => row.record_type === 'sector_assumption' && row.sector === 'Healthcare')).toHaveLength(2);
+  expect(rows.filter(row => row.record_type === 'holding')).toHaveLength(4);
+  await expect(comparison.getByRole('alert')).toHaveCount(0);
+  await expect(saved.getByRole('searchbox', { name: 'Search saved stress scenarios', exact: true })).toHaveValue('no matching case');
+  await expect(comparison.getByLabel('Show differing shock assumptions only', { exact: true })).toBeChecked();
+  expect(writes).toBe(0); expect(requests).toBe(before);
 });
