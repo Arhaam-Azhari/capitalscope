@@ -110,6 +110,9 @@ I can apply a hypothetical price change from -100% to +100%, with optional overr
 
 I reload the ledger and stored snapshots for each run without importing prices or writing trades. I show the actual baseline dates, sources, import times, and price coverage used for the calculation. If any holding is unpriced, I retain the priced subtotal but withhold complete totals and changes. I leave the relative change unavailable for a zero baseline. These are user-entered price assumptions, not forecasts or historical event replays; I do not model correlations, taxes, trading costs, liquidity, or currency changes.
 
+
+I review stress holding rows in their original order, by lowest modeled value change, or by largest absolute change, with unavailable changes last in numeric sorts and ticker tie-breaks. I can isolate unavailable holding changes and inspect their evidence with keyboard/mobile table controls. These controls only change the visible table; totals, saved snapshots, and CSV exports retain all holdings.
+
 ## How I keep stress scenarios
 
 I can name and save a stress scenario in the database, then review its original cash, share counts, holding values, quote evidence, assumptions, and stressed results. I recalculate on the server when saving, so the saved baseline may differ from an earlier preview. Every save gets its own ID, timestamp, and `price-shock-v1` model version; later trades and price imports do not rewrite earlier snapshots. I can also save incomplete coverage without inventing missing values.
