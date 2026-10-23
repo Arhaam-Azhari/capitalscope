@@ -200,3 +200,71 @@ test('I recover saved stress reads while keeping my preview and draft separate f
   await expect(saved.getByRole('alert')).toHaveCount(0);
   expect(reads).toBeGreaterThanOrEqual(7); expect(runs).toBe(1); expect(writes).toBe(0);
 });
+
+test('I organize saved stress cases without losing hidden selections or the open snapshot', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 740 });
+  const cases = [
+    { id: 'c', name: 'My copper case', createdAt: '2026-10-21T00:00:00Z' },
+    { id: 'a', name: 'My amber case', createdAt: '2026-10-22T00:00:00Z' },
+    { id: 'b', name: 'My amber case', createdAt: '2026-10-22T00:00:00Z' },
+    { id: 'd', name: 'My downside case', createdAt: '2026-10-20T00:00:00Z' },
+    { id: 'e', name: 'My energy case', createdAt: '2026-10-19T00:00:00Z' }
+  ].map((item, i) => ({ ...item, portfolioId: portfolio.id, modelVersion: i === 4 ? 'my-future-model' : 'price-shock-v1', result: { ...result,
+    holdings: i === 4 ? [{ ...result.holdings[0], sector: 'Energy', baseline: { ...holdings[0], ticker: 'XOM' } }] : result.holdings } }));
+  let current = cases, writes = 0;
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    if (route.request().method() !== 'GET') writes++;
+    if (path === '/api/companies') return route.fulfill({ json: catalog });
+    if (path === '/api/universe') return route.fulfill({ json: { count: 50, asOf: '2026-10-06', dynamic: false } });
+    if (path === '/api/portfolios') return route.fulfill({ json: [portfolio] });
+    if (path === `/api/portfolios/${portfolio.id}`) return route.fulfill({ json: { portfolio, cash: 100, realizedPnl: 0, dividendIncome: 0, positions: [], trades: [], events: [] } });
+    if (path.endsWith('/valuation')) return route.fulfill({ json: marks });
+    if (path.endsWith('/stress-scenarios')) return route.fulfill({ json: current });
+    return route.fulfill({ json: [] });
+  });
+  await page.goto('/#research?company=DEMO&view=portfolios');
+  await page.locator('.company-browser > summary').press('Escape');
+  const saved = page.getByRole('region', { name: 'Saved portfolio stress scenarios', exact: true });
+  const list = saved.locator(':scope > .scenario-list');
+  const links = list.getByRole('link', { name: /^Download CSV for/ });
+  const ids = async () => (await links.evaluateAll(elements => elements.map(element => element.getAttribute('href')!.split('/').at(-2))));
+  const query = saved.getByRole('searchbox', { name: 'Search saved stress scenarios', exact: true });
+  const sort = saved.getByRole('combobox', { name: 'Sort saved stress scenarios', exact: true });
+  await expect(links).toHaveCount(5);
+  expect(await ids()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  await sort.selectOption('oldest'); expect(await ids()).toEqual(['e', 'd', 'c', 'a', 'b']);
+  await sort.selectOption('name'); expect(await ids()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  for (const text of [' XoM ', 'energy', 'my-future-model']) {
+    await query.fill(text); await expect(links).toHaveCount(1); expect(await ids()).toEqual(['e']);
+  }
+  await query.fill('copper'); await expect(links).toHaveCount(1);
+  await query.fill('not present'); await expect(saved).toContainText('No saved stress scenarios match these filters.');
+  await expect(saved).not.toContainText('No saved stress scenarios for this portfolio.');
+  await saved.getByRole('button', { name: 'Reset stress list filters', exact: true }).click();
+  await expect(sort).toHaveValue('newest'); await expect(query).toHaveValue('');
+  for (const checkbox of (await list.getByRole('checkbox').all()).slice(0, 4)) await checkbox.check();
+  await expect(list.getByRole('checkbox').nth(4)).toBeDisabled();
+  await saved.getByRole('button', { name: 'Review My copper case', exact: true }).click();
+  await saved.getByLabel('Show selected stress scenarios only', { exact: true }).check();
+  await expect(links).toHaveCount(4);
+  await query.fill('XOM'); await expect(links).toHaveCount(0);
+  const comparison = saved.getByRole('region', { name: 'Saved stress scenario comparison', exact: true });
+  const snapshot = saved.getByRole('region', { name: 'Saved snapshot My copper case', exact: true });
+  await expect(comparison).toBeVisible(); await expect(snapshot).toBeVisible();
+  await expect(saved).toContainText('0 of 5 saved stress scenarios shown · 4 selected for comparison');
+  current = cases.filter(item => item.id !== 'c');
+  await saved.getByRole('button', { name: 'Reload saved stress scenarios', exact: true }).click();
+  await expect(saved).toContainText('0 of 4 saved stress scenarios shown · 3 selected for comparison');
+  await expect(query).toHaveValue('XOM'); await expect(sort).toHaveValue('newest');
+  await expect(saved.getByLabel('Show selected stress scenarios only', { exact: true })).toBeChecked();
+  await expect(snapshot).toHaveCount(0); await expect(comparison).toBeVisible();
+  await saved.getByRole('button', { name: 'Clear stress comparison', exact: true }).click();
+  await expect(comparison).toHaveCount(0);
+  await expect(query).toHaveValue('XOM'); await expect(links).toHaveCount(0);
+  await saved.getByRole('button', { name: 'Reset stress list filters', exact: true }).click();
+  await expect(links).toHaveCount(4);
+  await expect(list.getByRole('checkbox', { checked: true })).toHaveCount(0);
+  expect(writes).toBe(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
