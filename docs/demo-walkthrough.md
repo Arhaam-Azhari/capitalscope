@@ -11,7 +11,7 @@ bash scripts/build.sh
 java -jar backend/target/capitalscope-0.1.0.jar
 ```
 
-I open http://localhost:8080. I need no live credentials for the fictional workspace. I keep `./data` if I want to retain saved work between launches. I provide Docker as an alternative, but my verified release demo uses the jar; [my release notes](portfolio-release.md) record the container and provider checks I have not performed.
+I open http://localhost:8080. I need no live credentials for the fictional workspace. I keep `./data` if I want to retain saved work between launches. I use the jar for my local demo and verify Docker/Compose in CI; [my release notes](portfolio-release.md) describe the verified routes and remaining live-provider checks.
 
 ## My short presentation route
 
