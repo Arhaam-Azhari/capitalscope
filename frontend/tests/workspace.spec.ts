@@ -889,6 +889,8 @@ test('I preview historical research before replacing my draft and keep my origin
     return route.fulfill({ status: 409, json: { error: 'Research changed elsewhere. Reload before saving.' } });
   });
   await page.getByRole('button', { name: 'Watchlist', exact: true }).click();
+  // I wait for the saved entry before replacing its text with my draft.
+  await expect(page.getByLabel('My investment thesis', { exact: true })).toHaveValue('My current saved thesis');
   await page.getByLabel('My investment thesis', { exact: true }).fill('My existing unsaved draft');
   const history = page.getByRole('region', { name: 'Research revision history · DEMO', exact: true });
   await history.getByRole('button', { name: 'Load research history', exact: true }).click();
