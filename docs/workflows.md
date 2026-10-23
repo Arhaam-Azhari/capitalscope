@@ -127,6 +127,8 @@ I keep exact decimal money and share values and express rates as decimal fractio
 
 ## How I compare stress scenarios
 
+I can download the selected comparison as `saved-stress-comparison.csv`. I include each case’s saved metadata, totals, decimal assumptions, explicit or inherited overrides, and complete holding price evidence, including unchanged rows hidden by screen filters. I repeat the chosen reference and baseline comparability on each row, leave unavailable reference differences blank with a reason, and protect text cells while keeping signed numbers numeric. I use the same reference-difference check on screen and in the export. Downloading reads saved snapshots without recalculating, importing prices, or writing ledger entries.
+
 I can search saved stress scenarios by name, ID, model version, holding ticker, or sector; sort by newest, oldest, or name; and show only selected cases. I keep at most four cases in a comparison. List filters leave hidden selections and my open snapshot available below, and each CSV retains the complete saved snapshot. I can clear the comparison separately from resetting list filters. Reloading preserves my list filters while reconciling removed cases.
 
 I can reload saved stress scenarios after a failed read or a change elsewhere in the shared workspace. I keep my current preview, price assumptions, and scenario-name draft. I hide saved lists, comparisons, snapshots, and CSV links while a reload is pending or unavailable, and pause saving until a matching list loads. I reject records whose scenario or baseline belongs to another portfolio. After a successful reload, I remove missing cases from my review selection.
