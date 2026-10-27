@@ -13,15 +13,17 @@ java -jar backend/target/capitalscope-0.1.0.jar
 
 I open http://localhost:8080. I need no live credentials for the fictional workspace. I keep `./data` if I want to retain saved work between launches. I use the jar for my local demo and verify Docker/Compose in CI; [my release notes](portfolio-release.md) describe the verified routes and remaining live-provider checks.
 
-## My short presentation route
+## My five-minute presentation route
 
-1. I show the example label, annual figures, and dated input evidence in Financials.
-2. I open Valuation and calculate the $90-per-share case below, then change an assumption to clear the previous result.
-3. I open the fictional peer comparison, switch the chart measure, and review the companies' fiscal periods.
-4. I show a saved watchlist thesis and its research summary, then download research-evidence JSON or use Print. I explain that sections retain different source dates.
-5. I open a prepared fictional practice portfolio and distinguish recorded fills, available cash, and dated holdings marks. I show Prices as a raw-price analysis view.
+| Time | What I show | What I explain |
+| --- | --- | --- |
+| 0:00–0:45 | I open the fictional Financials workspace and its exact annual evidence. | I keep reported facts, source dates, and missing values visible. These demo figures are invented. |
+| 0:45–2:00 | I calculate the $90 valuation below and inspect its sensitivity range. I select a sensitivity cell, then explicitly recalculate. | I can trace an estimate back to my assumptions. Changing inputs clears the earlier result; a model estimate is not a market forecast. |
+| 2:00–2:45 | I open prepared research notes, a saved thesis, and revision history. | I separate browser-only drafts from shared saved records and retain conflicts rather than silently replacing newer work. |
+| 2:45–4:15 | I compare prepared downside/upside stress snapshots, filter their assumptions, and download the selected comparison CSV. | I preserve each saved baseline, keep cash fixed, and export complete evidence even when screen filters hide rows. |
+| 4:15–5:00 | I point to the repository architecture and passing PR checks. | I connect React/TypeScript, Java APIs, JDBC/Flyway persistence, and PostgreSQL/container checks. I explain the shared-workspace and live-provider limits. |
 
-I prepare the saved thesis, valuation case, and example portfolio before presenting if I want to keep the live walkthrough to about five minutes. I use the detailed flows below for a longer discussion.
+I prepare the valuation, thesis, and practice portfolio before presenting. I use the detailed flows below for questions about prices, allocations, data sources, or recovery. I keep the main route focused on evidence, assumptions, persistence, and a reproducible export.
 
 ## I inspect financial evidence
 
@@ -44,7 +46,9 @@ I open **Valuation** and enter this small calculation:
 
 I keep the five-year projection horizon and click **Calculate valuation**. I expect a modeled value of **$90 per share** with these inputs. This case is also covered by the packaged integration test.
 
-I inspect the sensitivity table, save a named case, reload it, and change an assumption. I show that changing inputs clears results that belong to the previous calculation. I explain that the calculator reflects my assumptions; it does not produce an analyst forecast.
+I inspect the sensitivity range and table, save a named case, and reload it. I can select a valid sensitivity cell to copy its WACC and terminal-growth assumptions into the form; I explicitly calculate again before saving a new result. I show that changing inputs clears results that belong to the previous calculation. I explain that the calculator reflects my assumptions; it does not produce an analyst forecast.
+
+I keep a [captured valuation screen](valuation-review.png) for a quick visual reference.
 
 ## I build a practice portfolio
 
@@ -55,6 +59,16 @@ With the current invented close of $21.60, I expect $800 cash, $216 in marked ho
 I enter target allocations of **40% Cash / 60% DEMO**, calculate the dollar changes, and save that mix. I calculate and save **100% Cash / 0% DEMO** as a second proposal. I select both saved mixes to compare them at one current valuation.
 
 I apply an explicit price shock, inspect each mix's own fixed cash reserve, and download the comparison evidence. I show that calculating or loading targets records no trades. I treat share estimates as optional and check their basis before using them.
+
+## I compare saved price-shock cases
+
+I use the $1,000 practice portfolio above, with 10 DEMO shares bought at $20 and no fee. At the invented $21.60 mark, I have $800 cash and $216 in holdings. I run **−20%** and save **My downside**, then run **+20%** and save **My upside**, without entering any trades between those saves.
+
+I expect saved totals of **$972.80** and **$1,059.20**. With the downside as my reference, the upside differs by **$86.40**. I explain that both use the same saved holdings and price evidence. If I change holdings or price evidence before saving a later case, I expect reference differences to become unavailable rather than treating different baselines as comparable performance.
+
+I select both cases, use **Show differing shock assumptions only**, and download **stress comparison CSV**. I show that the export retains unchanged assumptions, both saved baselines, original holding evidence, and the chosen reference. Missing differences stay blank with a reason. I can search the saved-case list or show selected cases without losing hidden comparison selections. Reloading preserves my filters and name draft while reconciling deleted cases.
+
+I keep a [captured saved stress comparison](stress-comparison.png) for this part of the demo. These are hypothetical price shocks, not return forecasts, probabilities, or broker orders.
 
 ## I inspect price declines
 
@@ -86,3 +100,17 @@ I cannot guarantee that every catalog company has usable filings or overlapping 
 | Delivery | Feature PRs, focused local checks, frontend CI, PostgreSQL checks, and packaged integration tests |
 
 I describe the app as a shared research and simulation workspace. I have not implemented private user accounts or broker execution. I keep financial facts separate from user assumptions and treat restated SEC history as unsuitable for point-in-time backtesting. I can explain these boundaries without claiming that the app is a trading platform.
+
+## I recapture the demo screens
+
+I build a fresh jar first with the launch instructions above. With the matching Playwright browser installed, I run:
+
+```bash
+npm run demo:capture --prefix frontend
+```
+
+I install the browser, if needed, from `frontend` with `npx playwright install --only-shell chromium`. On a minimal Linux host I use Playwright’s ordinary `--with-deps` installation; the GitHub Actions dependency script is intentionally CI-only.
+
+I start the packaged app on an available local port with an isolated in-memory H2 database and both live providers disabled. I use actual app APIs and UI interactions, without stubbing financial responses. I check the $90 valuation, the $86.40 saved-case difference, mobile page width, and comparison download before finishing. I close the browser and server afterward.
+
+I overwrite four documentation images: [desktop financials](research-dashboard.png), [mobile financials](research-dashboard-mobile.png), [valuation review](valuation-review.png), and [stress comparison](stress-comparison.png). I do not write to an existing local database or need provider credentials for this capture. These screenshots verify the fictional demo flow, not live SEC or market-data coverage.
