@@ -39,9 +39,15 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: bash scripts/build.sh
       - run: bash scripts/smoke-test.sh
-      - run: npx playwright install --with-deps --only-shell chromium
+      - name: Install browser system dependencies
+        run: bash scripts/install-browser-deps.sh
         timeout-minutes: 5
+      - name: Install Chromium headless shell
+        run: npx --no-install playwright install --only-shell chromium
+        timeout-minutes: 3
         working-directory: frontend
+        env:
+          PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT: '30000'
       - run: npm run test:integration
         working-directory: frontend
   container:

@@ -48,3 +48,11 @@ I distinguish a successful example demo and synthetic/provider-contract tests fr
 I use [my demo walkthrough](demo-walkthrough.md) for the key-free flow and a separate optional live-data extension. I keep API credentials and contact details out of screenshots and commits.
 
 I have reached the portfolio release finish line. I treat accounts/private workspaces, public hosting, verified adjustments, historical returns, and specialized sector models as later product work, rather than extending this release indefinitely.
+
+## How I keep browser CI setup bounded
+
+I run [my browser dependency setup](../scripts/install-browser-deps.sh) only on Linux GitHub Actions runners. I create a temporary APT configuration with two retries and 30-second HTTP/HTTPS connection and data timeouts, then remove that file when setup exits. I preserve the runner’s existing configuration files. I give system dependency installation five minutes and the separate Chromium headless-shell download three minutes, with a 30-second browser download socket timeout. These bounds help identify setup failures separately from test failures; they do not guarantee that an unavailable package mirror will recover.
+
+I use the installed, locked Playwright package for both setup steps. I run the full frontend and packaged-app integration suites after setup succeeds, and keep failed setup or tests as merge blockers. I do not retry or suppress failed tests in this setup script. I keep the container/persistence job separate. For local setup, I still use the ordinary Playwright install command above.
+
+I follow the documented [APT transport timeout behavior](https://manpages.debian.org/bookworm/apt/apt-transport-http.1.en.html), [APT retry setting](https://manpages.ubuntu.com/manpages/jammy/man5/apt.conf.5.html), and [Playwright browser installation options](https://playwright.dev/docs/browsers).
