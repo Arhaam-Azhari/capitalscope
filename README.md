@@ -8,7 +8,7 @@ I gave CapitalScope a warm ivory and copper identity, with serif company titles,
 
 ![My company research workspace with explicitly labeled example figures](docs/research-dashboard.png)
 
-I also keep a [mobile screenshot](docs/research-dashboard-mobile.png) of the same example workspace.
+I also keep a [mobile screenshot](docs/research-dashboard-mobile.png), a [valuation review](docs/valuation-review.png), and a [saved stress comparison](docs/stress-comparison.png), captured from the packaged app with labeled fictional data.
 
 I use this [short demo walkthrough](docs/demo-walkthrough.md) to show the research, valuation, portfolio, and price-analysis flows. It includes a key-free route, a small calculation I can check, and the limits I explain when presenting the project.
 
