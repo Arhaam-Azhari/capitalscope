@@ -19,6 +19,9 @@ jobs:
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
+      - name: Check provider evidence report contracts
+        run: npm run test:provider-check
+        working-directory: frontend
       - name: Install browser system dependencies
         run: bash scripts/install-browser-deps.sh
         timeout-minutes: 5

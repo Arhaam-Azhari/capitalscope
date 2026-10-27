@@ -64,6 +64,7 @@ I haven't verified live data coverage for all 50 companies. Recently listed comp
 | Inspect research behavior and export scope | [Workflow guide](docs/workflows.md) |
 | Read API, model, and storage details | [Technical reference](docs/technical-reference.md) |
 | Check verified release scope and remaining limits | [Portfolio release](docs/portfolio-release.md) |
+| Check configured provider evidence for one company | [Provider evidence check](docs/provider-evidence-check.md) |
 | Review the fixed company catalog | [Company universe](docs/company-universe.md) |
 | Verify container persistence or restore saved work | [Container checks](docs/container-check.md) and [backup/restore](docs/backup-restore.md) |
 
