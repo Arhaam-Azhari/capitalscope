@@ -80,7 +80,7 @@ I call these raw-price declines, not total returns: splits and dividends are una
 
 ## I extend the demo with configured market data
 
-I set `SEC_USER_AGENT` to an app name and a real contact address to enable SEC requests. I set `ALPHA_VANTAGE_API_KEY` to enable market-price imports, then restart the app. These services have separate configuration and can fail independently.
+I set `SEC_USER_AGENT` to an app name and a real contact address to enable SEC requests. I set `ALPHA_VANTAGE_API_KEY` to enable market-price imports, then restart the app. These services have separate configuration and can fail independently. I use [my provider evidence check](provider-evidence-check.md) for one company/provider at a time, keeping configured setup, available cached/imported evidence, and fresh upstream access separate.
 
 I choose a catalog company and inspect filing dates, accounting tags, and source links. I show missing data as missing. I do not substitute invented figures when an upstream request fails.
 
