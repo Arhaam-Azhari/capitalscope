@@ -15,7 +15,8 @@ const port = probe.address().port;
 await new Promise(done => probe.close(done));
 const baseURL = `http://127.0.0.1:${port}`;
 // I capture an isolated fictional workspace, without touching a saved local database or live providers.
-const server = spawn('java', ['-jar', jar], { cwd: root, env: { ...process.env, PORT: String(port),
+const server = spawn('java', ['-jar', jar, `--server.port=${port}`, '--spring.datasource.url=jdbc:h2:mem:demo_capture',
+  '--spring.datasource.username=sa', '--spring.datasource.password=', '--sec.user-agent=', '--prices.api-key='], { cwd: root, env: { ...process.env, PORT: String(port),
   DATABASE_URL: 'jdbc:h2:mem:demo_capture', DATABASE_USER: 'sa', DATABASE_PASSWORD: '', SEC_USER_AGENT: '', ALPHA_VANTAGE_API_KEY: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
 let log = '', browser, api;
 server.stdout.on('data', data => { log = (log + data).slice(-16000); });

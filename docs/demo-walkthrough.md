@@ -111,6 +111,6 @@ npm run demo:capture --prefix frontend
 
 I install the browser, if needed, from `frontend` with `npx playwright install --only-shell chromium`. On a minimal Linux host I use Playwright’s ordinary `--with-deps` installation; the GitHub Actions dependency script is intentionally CI-only.
 
-I start the packaged app on an available local port with an isolated in-memory H2 database and both live providers disabled. I use actual app APIs and UI interactions, without stubbing financial responses. I check the $90 valuation, the $86.40 saved-case difference, mobile page width, and comparison download before finishing. I close the browser and server afterward.
+I start the packaged app on an available local port with an isolated in-memory H2 database and both live providers disabled. I pass database and provider settings as launch arguments so ordinary Spring environment overrides cannot redirect the capture. I use actual app APIs and UI interactions, without stubbing financial responses. I check the $90 valuation, the $86.40 saved-case difference, mobile page width, and comparison download before finishing. I close the browser and server afterward.
 
 I overwrite four documentation images: [desktop financials](research-dashboard.png), [mobile financials](research-dashboard-mobile.png), [valuation review](valuation-review.png), and [stress comparison](stress-comparison.png). I do not write to an existing local database or need provider credentials for this capture. These screenshots verify the fictional demo flow, not live SEC or market-data coverage.
